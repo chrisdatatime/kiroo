@@ -92,7 +92,7 @@ function Damas({ rival }) {
 
   return (
     <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-      <div role="grid" aria-label="Tabuleiro de damas" style={{ display: 'grid', gridTemplateColumns: 'repeat(8,44px)', border: '3px solid #17234B', borderRadius: 8, overflow: 'hidden' }}>
+      <div role="grid" aria-label="Tabuleiro de damas" style={{ display: 'grid', gridTemplateColumns: 'repeat(8,44px)', border: '1px solid #D4DAE4', borderRadius: 8, overflow: 'hidden' }}>
         {b.map((p, i) => {
           const [r, c] = rc(i), dark = (r + c) % 2 === 1;
           const isTarget = targets.some((m) => m.to === i);
@@ -103,8 +103,8 @@ function Damas({ rival }) {
               style={{ width: 44, height: 44, border: 0, padding: 0, display: 'grid', placeItems: 'center', cursor: dark ? 'pointer' : 'default',
                 background: !dark ? '#F3E3C7' : sel === i ? '#D5F45B' : isTarget ? '#9DD86A' : isLast ? '#8D6E50' : '#7A5A3E',
                 outline: fromSet.has(i) && sel !== i ? '2px dashed #D5F45B' : 'none', outlineOffset: -4 }}>
-              {p && <span aria-hidden="true" style={{ width: 32, height: 32, borderRadius: '50%', border: '2.5px solid #17234B', display: 'grid', placeItems: 'center',
-                background: sideOf(p) === 'w' ? '#FFF8EC' : '#E46F5A', boxShadow: '0 3px 0 #17234B', font: '900 14px/1 Nunito Sans,sans-serif', color: '#17234B' }}>{isKing(p) ? 'D' : ''}</span>}
+              {p && <span aria-hidden="true" style={{ width: 32, height: 32, borderRadius: '50%', border: '1px solid #D4DAE4', display: 'grid', placeItems: 'center',
+                background: sideOf(p) === 'w' ? '#F7F8FA' : '#E46F5A', boxShadow: '0 1px 2px rgba(31, 36, 48, .08)', font: '900 14px/1 Nunito Sans,sans-serif', color: '#17234B' }}>{isKing(p) ? 'D' : ''}</span>}
             </button>
           );
         })}
@@ -126,7 +126,7 @@ export default function GamesWindow({ v }) {
   return (
     <section role="dialog" aria-labelledby="games-h" className="g-panel pop" style={{ ...center, width: 'min(700px,calc(100vw - 24px))', maxHeight: 'calc(100vh - 32px)', overflow: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <span style={{ width: 44, height: 44, borderRadius: 12, background: g.rival.look.shirt, border: '2px solid #17234B', display: 'grid', placeItems: 'end center', overflow: 'hidden', flex: 'none' }}><Boneco look={g.rival.look} crop size={40} /></span>
+        <span style={{ width: 44, height: 44, borderRadius: 12, background: g.rival.look.shirt, border: '1px solid #D4DAE4', display: 'grid', placeItems: 'end center', overflow: 'hidden', flex: 'none' }}><Boneco look={g.rival.look} crop size={40} /></span>
         <div style={{ flex: 1 }}>
           <h2 id="games-h" className="fred" style={{ margin: 0, fontSize: 22, fontWeight: 600 }}>Mesa de jogos</h2>
           <span className="g-muted" style={{ fontSize: 13 }}>Adversário: {g.rival.name} ({g.rival.role}), que está livre agora.</span>
@@ -134,7 +134,7 @@ export default function GamesWindow({ v }) {
         <CloseButton onClick={v.closeWin} label="Fechar mesa de jogos" />
       </div>
       {g.needYou && (
-        <div role="alert" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', padding: '10px 12px', borderRadius: 12, background: '#F2FBD9', border: '2px solid #17234B' }}>
+        <div role="alert" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', padding: '10px 12px', borderRadius: 12, background: '#F2FBD9', border: '1px solid #D4DAE4' }}>
           <strong style={{ flex: 1, fontSize: 14 }}>{g.needYou.text}</strong>
           <button className="g-btn g-lime g-sm" onClick={g.needYou.go}>{g.needYou.label}</button>
         </div>

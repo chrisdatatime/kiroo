@@ -1,0 +1,130 @@
+/* Acesso ao Pivoo (ui/Auth.jsx). Escopo .au. Continua a home pública: papel creme, tinta marinho, Geist;
+   lima só como acento pequeno. Componentes shadcn (Button/Input/Label) recebem os tokens abaixo via classes. */
+
+.au {
+  --au-ink: #17234B; --au-ink-2: #3A4570; --au-mute: #646C86;
+  --au-paper: #FBF7EE; --au-line: #E7E1D2; --au-line-2: #D9D2C0; --au-lime: #D5F45B;
+  --au-ease: cubic-bezier(.2, .7, .2, 1);
+  position: fixed; inset: 0; overflow-y: auto; overflow-x: hidden;
+  display: grid; grid-template-columns: minmax(0, 1fr);
+  background: var(--au-paper); color: var(--au-ink);
+  font: 400 15px/1.5 'Geist Variable', system-ui, sans-serif; -webkit-font-smoothing: antialiased;
+}
+@media (min-width: 1024px) { .au { grid-template-columns: minmax(480px, 1fr) minmax(0, 1.08fr); } }
+.au *, .au *::before, .au *::after { box-sizing: border-box; }
+
+/* ------------------------------------------------------------ coluna do formulário */
+.au-main { min-height: 100dvh; display: flex; flex-direction: column; padding: 16px 16px 20px; }
+@media (min-width: 640px) { .au-main { padding: 24px 32px 24px; } }
+.au-top { display: flex; align-items: center; justify-content: space-between; min-height: 48px; }
+.au-brand { display: inline-flex; align-items: center; min-height: 44px; padding: 0 4px; border: 0; background: none; border-radius: 10px; cursor: pointer; }
+span.au-brand { cursor: default; }
+.au-brand img { display: block; height: auto; }
+.au-center { flex: 1; display: grid; place-items: center; padding: 28px 0 32px; }
+.au-panel { width: min(400px, 100%); display: flex; flex-direction: column; animation: au-in .32s var(--au-ease) both; }
+@keyframes au-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+.au-crew { display: flex; align-items: flex-end; gap: 0; height: 52px; margin: 0 0 18px -6px; }
+.au-badge { width: 44px; height: 44px; margin: 0 0 20px; border-radius: 12px; display: grid; place-items: center;
+  background: #fff; border: 1px solid var(--au-line); color: var(--au-ink); box-shadow: 0 1px 2px rgba(23, 35, 75, .06), inset 0 -2px 0 var(--au-lime); }
+.au-title { margin: 0; font: 800 30px/1.08 'Nunito Sans', system-ui, sans-serif; letter-spacing: -.035em; color: var(--au-ink); text-wrap: balance; outline: none; }
+@media (min-width: 640px) { .au-title { font-size: 34px; } }
+.au-sub { margin: 10px 0 0; color: var(--au-mute); font-size: 15px; line-height: 1.5; text-wrap: pretty; }
+
+/* alternância Entrar / Criar conta */
+.au-seg { position: relative; display: grid; grid-template-columns: 1fr 1fr; margin: 26px 0 0; padding: 4px; border-radius: 13px; background: #F1ECE0; border: 1px solid var(--au-line); }
+.au-seg button { position: relative; z-index: 1; min-height: 40px; border: 0; background: none; border-radius: 9px; cursor: pointer;
+  font: 600 14px/1 'Geist Variable', system-ui, sans-serif; color: var(--au-mute); transition: color .2s var(--au-ease); }
+.au-seg button[aria-pressed="true"] { color: var(--au-ink); }
+.au-seg button:focus-visible { outline: 2px solid var(--au-ink); outline-offset: -2px; }
+.au-seg-thumb { position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc(50% - 4px); border-radius: 9px; background: #fff;
+  box-shadow: 0 1px 2px rgba(23, 35, 75, .1), 0 0 0 1px rgba(23, 35, 75, .05); transition: transform .28s var(--au-ease); }
+.au-seg-thumb[data-pos="r"] { transform: translateX(100%); }
+
+.au-seg + .au-google, .au-seg + .au-form { margin-top: 20px; }
+.au-sub + .au-google, .au-sub + .au-form, .au-title + .au-form { margin-top: 26px; }
+.au-google { margin-top: 20px; border-color: var(--au-line-2) !important; background: #fff !important; color: var(--au-ink) !important; gap: 10px !important; }
+.au-google:hover { border-color: var(--au-ink) !important; }
+.au-or { display: flex; align-items: center; gap: 12px; margin: 18px 0 2px; color: var(--au-mute); font-size: 12.5px; }
+.au-or::before, .au-or::after { content: ''; flex: 1; height: 1px; background: var(--au-line-2); }
+.au-or + .au-form { margin-top: 16px; }
+
+.au-form { display: flex; flex-direction: column; gap: 16px; }
+.au-field { display: flex; flex-direction: column; gap: 8px; }
+.au-hint { font-size: 12.5px; color: var(--au-mute); }
+.au-dot { width: 6px; height: 6px; margin: 0 4px; border-radius: 50%; background: var(--au-line-2); display: inline-block; }
+
+/* botão principal: tinta marinho; a seta anda um pouco no hover */
+.au-primary { background: var(--au-ink) !important; color: #fff !important; margin-top: 4px; gap: 8px !important;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .12) inset, 0 1px 2px rgba(23, 35, 75, .2), 0 6px 16px -6px rgba(23, 35, 75, .45); }
+.au-primary:hover { background: #22305F !important; }
+.au-primary:disabled { background: #B9BCCB !important; box-shadow: none; opacity: 1 !important; }
+.au-primary .au-arrow { transition: transform .2s var(--au-ease); }
+.au-primary:hover .au-arrow { transform: translateX(2px); }
+.au-primary:focus-visible, .au-google:focus-visible { outline: 2px solid var(--au-ink); outline-offset: 2px; }
+
+.au-eye { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 40px; height: 40px; border: 0; border-radius: 9px; background: none;
+  display: grid; place-items: center; color: var(--au-mute); cursor: pointer; }
+.au-eye:hover { color: var(--au-ink); background: rgba(23, 35, 75, .05); }
+.au-eye:focus-visible { outline: 2px solid var(--au-ink); outline-offset: -2px; }
+
+.au-link { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 2px; border: 0; background: none; cursor: pointer;
+  font: 600 14px/1 'Geist Variable', system-ui, sans-serif; color: var(--au-ink); text-decoration: underline; text-decoration-color: rgba(23, 35, 75, .25);
+  text-underline-offset: 3px; transition: text-decoration-color .15s; border-radius: 6px; }
+.au-link:hover { text-decoration-color: var(--au-ink); }
+.au-link:focus-visible { outline: 2px solid var(--au-ink); outline-offset: 2px; }
+.au-link:disabled { color: var(--au-mute); text-decoration: none; cursor: default; }
+.au-link-quiet { color: var(--au-mute); font-weight: 500; }
+/* alvo de toque de 44 px sem aumentar o texto */
+@media (pointer: coarse) { .au-link { min-height: 44px; } }
+
+.au-notice { display: flex; align-items: flex-start; gap: 10px; padding: 11px 13px; border-radius: 12px; font-size: 14px; line-height: 1.4;
+  animation: au-in .22s var(--au-ease) both; }
+.au-notice svg { margin-top: 1px; }
+.au-notice[data-tone="error"] { background: #FDECEA; color: #8A2318; border: 1px solid #F3C6BF; }
+.au-notice[data-tone="ok"] { background: #EAF6E4; color: #1D5E2E; border: 1px solid #C5E5BA; }
+
+.au-fine { margin: 22px 0 0; font-size: 13px; line-height: 1.5; color: var(--au-mute); text-wrap: pretty; }
+
+/* código de 6 dígitos */
+.au-code { position: relative; display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; cursor: text; }
+.au-code-input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; border: 0; padding: 0; font-size: 16px; caret-color: transparent; cursor: text; z-index: 1; }
+.au-code-box { height: 56px; border-radius: 12px; border: 1px solid var(--au-line-2); background: #fff; display: grid; place-items: center;
+  font: 650 24px/1 'Geist Variable', system-ui, sans-serif; font-variant-numeric: tabular-nums; color: var(--au-ink);
+  transition: border-color .15s, box-shadow .15s, transform .15s var(--au-ease); }
+.au-code-box[data-filled] { border-color: #B8B0A0; }
+.au-code-box[data-active] { border-color: var(--au-ink); box-shadow: 0 0 0 3px rgba(23, 35, 75, .12); }
+.au-code-box[data-active]:not([data-filled])::after { content: ''; width: 2px; height: 24px; background: var(--au-ink); animation: au-caret 1s steps(1) infinite; }
+.au-code[data-invalid] .au-code-box { border-color: #E2A59B; }
+@keyframes au-caret { 50% { opacity: 0; } }
+@media (max-width: 360px) { .au-code { gap: 6px; } .au-code-box { height: 50px; font-size: 21px; } }
+
+.au-foot { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.au-about { width: min(560px, 100%); padding: 16px; border-radius: 14px; background: #fff; border: 1px solid var(--au-line); font-size: 13px; }
+
+/* ------------------------------------------------------------ vitrine (só em telas largas) */
+.au-show { display: none; }
+@media (min-width: 1024px) {
+  .au-show { display: block; position: sticky; top: 0; height: 100dvh; padding: 12px 12px 12px 0; }
+}
+.au-show-frame { position: relative; height: 100%; border-radius: 24px; overflow: hidden; background: #1C2A55; isolation: isolate; }
+.au-show-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 40%; image-rendering: pixelated;
+  transform: scale(1.04); animation: au-drift 40s ease-in-out infinite alternate; }
+@keyframes au-drift { to { transform: scale(1.1) translate(-1.5%, 1%); } }
+.au-show-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 8px; padding-bottom: 120px;
+  background-color: #1C2A55; background-image: radial-gradient(rgba(255, 255, 255, .07) 1.4px, transparent 1.4px); background-size: 26px 26px; }
+.au-show-shade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(23, 35, 75, 0) 45%, rgba(23, 35, 75, .72) 100%); }
+.au-show-card { position: absolute; left: 24px; right: 24px; bottom: 24px; max-width: 460px; padding: 22px 22px 20px; border-radius: 18px;
+  background: rgba(251, 247, 238, .94); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, .6);
+  box-shadow: 0 18px 48px rgba(10, 16, 40, .35); color: var(--au-ink); }
+.au-show-faces { display: flex; margin: 0 0 14px; }
+.au-show-faces:empty { display: none; }
+.au-show-faces img { width: 36px; height: 36px; border-radius: 50%; background: #fff; border: 2px solid var(--au-paper); margin-left: -8px; image-rendering: pixelated; object-fit: cover; }
+.au-show-faces img:first-child { margin-left: 0; }
+.au-show-title { margin: 0; font: 800 22px/1.15 'Nunito Sans', system-ui, sans-serif; letter-spacing: -.025em; }
+.au-show-text { margin: 8px 0 0; font-size: 14.5px; line-height: 1.5; color: var(--au-ink-2); }
+
+@media (prefers-reduced-motion: reduce) {
+  .au-panel, .au-notice, .au-show-img, .au-code-box[data-active]::after { animation: none; }
+  .au-seg-thumb, .au-primary .au-arrow, .au-code-box { transition: none; }
+}

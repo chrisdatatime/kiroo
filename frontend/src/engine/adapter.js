@@ -10,7 +10,12 @@ const VID = { generating_video: 'gerando', awaiting_video_approval: 'pronta', vi
 export function sceneView(sc, goAhead) {
   let img = IMG[sc.status] || 'none';
   let vid = VID[sc.status] || 'none';
-  if (sc.status === 'blocked') { if (sc.approved_image) { img = 'aprovada'; vid = 'pronta'; } else img = 'pronta'; }
+  // Bloqueada só é "pronta" se a tentativa atual saiu; sem material (falhou/esgotou) não há o que aprovar.
+  const ok = (a) => !!(a && a.status === 'succeeded' && a.url);
+  if (sc.status === 'blocked') {
+    if (sc.approved_image) { img = 'aprovada'; vid = ok(sc.video) ? 'pronta' : 'falhou'; }
+    else img = ok(sc.image) ? 'pronta' : 'falhou';
+  }
   if (img === 'none' && (goAhead === 'images' || goAhead === 'videos' || goAhead === 'all')) img = 'fila';
   if (vid === 'none' && img === 'aprovada' && (goAhead === 'videos' || goAhead === 'all')) vid = 'fila';
   return {
@@ -33,8 +38,8 @@ export function deriveStage(P) {
   if (P.gate === 'videos') return 'gerar_vid';
   const sc = P.scenes.map((x) => sceneView(x, P.go_ahead));
   const imgsDone = sc.length && sc.every((x) => x.img === 'aprovada');
-  if (!imgsDone) return sc.some((x) => x.img === 'pronta') ? 'img_revisao' : (P.go_ahead === 'none' ? 'gerar_img' : 'img_gerando');
-  if (sc.some((x) => x.vid === 'pronta')) return 'vid_revisao';
+  if (!imgsDone) return sc.some((x) => (x.img === 'pronta' || x.img === 'falhou')) ? 'img_revisao' : (P.go_ahead === 'none' ? 'gerar_img' : 'img_gerando');
+  if (sc.some((x) => (x.vid === 'pronta' || x.vid === 'falhou'))) return 'vid_revisao';
   if (sc.every((x) => x.vid === 'aprovada')) return 'montando';
   return 'vid_gerando';
 }

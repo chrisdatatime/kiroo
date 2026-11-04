@@ -1,23 +1,42 @@
 import React from 'react';
 import { GRID, AGENTS, TABS, STAGES, STAGE_LABELS, BLOCKED, SPOTS, ROOMS, CHAIRS, FURNITURE, INTERACT, SPAWN, tilesOf, WORLD } from './game/data.js';
 import { bfs, screenToTile, facing } from './game/geometry.js';
+import { initialAgent, stepSeated } from './game/agentLife.js';
+import { lazyChunk } from './lib/lazyChunk.jsx';
 import SectorsWindow from './ui/Sectors.jsx';
 import TrainingWindow, { LearnPanel } from './ui/Training.jsx';
 import MusicWindow from './ui/Music.jsx';
 import World from './ui/World.jsx';
 // Phaser (~1 MB) só carrega com a flag ligada e depois do login: chunk separado (SPEC-VIS-001, Fase 2)
-const WorldPhaser = React.lazy(() => import('./ui/WorldPhaser.jsx'));
+const WorldPhaser = lazyChunk(() => import('./ui/WorldPhaser.jsx'));
 import Hud from './ui/Hud.jsx';
 import { Tutorial, DialogWindow, BoardWindow, CustomWindow } from './ui/Windows.jsx';
 import ProdWindow from './ui/ProdWindow.jsx';
 import GamesWindow from './ui/Games.jsx';
-import PilotWindow, { PILOT } from './ui/Pilot.jsx';
+import { PILOT } from './ui/Pilot.jsx';
 import { me, auth, setLoggedOutHandler, AuthRequired, getJSON, post, readFile } from './engine/api.js';
-import AuthScreen from './ui/Auth.jsx';
-import AccountWindow from './ui/Account.jsx';
-import CreditsWindow from './ui/Credits.jsx';
-import AboutWindow from './ui/About.jsx';
+import AuthScreen, { SIGNUP_OPEN } from './ui/Auth.jsx';
+const Landing = lazyChunk(() => import('./landing/Landing.jsx'));
+// Conta, Piloto, Créditos e Sobre vivem no modal de Preferências (carregado ao abrir)
+const Preferences = lazyChunk(() => import('./ui/Preferences.jsx'));
+// Conversa com os agentes (Fase 6, mundo Phaser): chunk próprio, carrega no primeiro clique num agente
+const AgentChat = lazyChunk(() => import('./ui/world/AgentChat.jsx'));
+const PREF_WINS = ['prefs', 'account', 'pilot', 'credits', 'about'];
+// Kit de onboarding (Fase 5): chunk próprio, só carrega quando o tour abre (onboarding_done_at nulo ou "Rever tutorial")
+const Onboarding = lazyChunk(() => import('./onboarding/Onboarding.jsx'));
+// se o tour falhar, ele some (e o passo fica salvo); o estúdio continua funcionando
+class TourBoundary extends React.Component {
+  constructor(p) { super(p); this.state = { failed: false }; }
+  static getDerivedStateFromError() { return { failed: true }; }
+  componentDidCatch(e) { console.error('Tutorial falhou:', e); this.props.onFail(); }
+  render() { return this.state.failed ? null : this.props.children; }
+}
 import { deriveStage, sceneView, toCredits, creditsToUsd } from './engine/adapter.js';
+import Shell, { VIEWS } from './shell/Shell.jsx';
+import Central from './shell/Central.jsx';
+import MissionView from './shell/MissionView.jsx';
+import TeamView from './shell/TeamView.jsx';
+import { buildPipeline, attention } from './shell/pipeline.js';
 
 // Pivoo — escritório-jogo sobre o motor REAL (servidor Python).
 // O estado da produção vem de /api/state; as ações chamam a API. O jogo (mundo, movimento, personalização)
@@ -26,6 +45,7 @@ import { deriveStage, sceneView, toCredits, creditsToUsd } from './engine/adapte
 const AGM = {}; AGENTS.forEach((a) => { AGM[a.id] = a; });
 const blocked = {}; BLOCKED.forEach((t) => { blocked[t[0] + ',' + t[1]] = true; });
 const WALK_SPOTS = SPOTS;
+const PHASER = WORLD === 'phaser';
 const T = GRID.T;
 const SC = T / 16;          // escala do personagem: 1 no mapa antigo (16 px), 2 no .tmj (32 px)
 const placedRoom = (r) => !!r && r.placed !== false;
@@ -52,21 +72,36 @@ export default class App extends React.Component {
     this.timers = []; this.t = 0; this.lastStage = null;
     // o escritório só monta depois do login: mede ao montar, não só no componentDidMount
     this.setRoot = (el) => { this.rootEl = el; if (el && this.measure) this.measure(); };
+    // o mundo ocupa só a área útil ao lado da navegação: é ela que define vw/vh (zoom e câmera)
+    this.setStage = (el) => { this.stageEl = el; if (el && this.measure) this.measure(); };
     this.onKey = (e) => this.handleKey(e);
     this.held = [];          // teclas de direção ainda pressionadas (a última manda)
     this.onKeyUp = (e) => { const k = (e.key || '').toLowerCase(); this.held = this.held.filter((h) => h !== k); };
     this.onBlur = () => { this.held = []; };
     this.onWorldClick = (e) => this.handleWorldClick(e);
+    // callbacks estáveis para o tour (não dependem do viewModel recriado a cada tick)
+    this.tourApi = {
+      save: (p) => this.saveTour(p),
+      setView: (id) => { if (this.state.ui.win) this.closeWin(); if (this.state.view !== id) this.setState({ view: id }); },
+      newMission: () => { this.setState({ view: 'missao' }); this.newProduction(); },
+    };
+    this.tourDone = (how) => this.tourClosed(how);
     const agents = {};
     // agente sem sala no mapa (seat null, mapa novo da Fase 2) fica fora do mundo: i/j = -1
-    AGENTS.forEach((a) => { agents[a.id] = { i: a.seat ? a.seat[0] : -1, j: a.seat ? a.seat[1] : -1, path: [], dir: 'up', rest: 4 + Math.floor(Math.random() * 8), moving: false }; });
+    // mundo Phaser (Fase 6): agentes fixos na cadeira da própria sala; o canvas antigo mantém o passeio
+    AGENTS.forEach((a) => { agents[a.id] = PHASER ? initialAgent(a.seat) : { i: a.seat ? a.seat[0] : -1, j: a.seat ? a.seat[1] : -1, path: [], dir: 'up', rest: 4 + Math.floor(Math.random() * 8), moving: false }; });
     const pid = LS.get('bc.pid', null);
+    const view0 = LS.get('bc.view', 'central');
     this.state = {
+      view: VIEWS.some((x) => x.id === view0) ? view0 : 'central',
       vw: window.innerWidth, vh: window.innerHeight,
       player: { i: SPAWN[0], j: SPAWN[1], path: [], dir: 'down', moving: false, seat: null }, pending: null, dest: null, agents,
       // motor real
-      S: null, pid, draftMode: !pid, conn: 'carregando', busy: null, err: null, authState: 'checking', account: null,
+      onb: null,  // { start, key } enquanto o tour está aberto
+      S: null, pid, draftMode: false, conn: 'carregando', busy: null, err: null, authState: 'checking', account: null,
       resetToken: new URLSearchParams(window.location.search).get('reset'),
+      // sem sessão: home pública (null) ou tela de acesso ('login' | 'signup'); ?entrar abre direto o login
+      entry: new URLSearchParams(window.location.search).has('entrar') ? 'login' : null,
       draft: Object.assign({}, EMPTY_DRAFT, LS.get('bc.draft', {})), files: [],
       opts: null, creative: null, preview: null, reqText: '', caption: null, pilot: LS.get('bc.autonomy', 'assistido'),
       ui: { win: null, who: null, tab: 'produto', dirSub: 'dir', ctab: 'personagem', revSel: 1, revView: 'scene', adjust: false, issues: [], adjText: '', toast: null, tut: !LS.get('bc.tutDone', false), playing: false, budgetHit: false },
@@ -77,12 +112,13 @@ export default class App extends React.Component {
 
   // ---------- ciclo de vida ----------
   componentDidMount() {
-    this.measure = () => { const el = this.rootEl; if (!el) return; const w = el.clientWidth, h = el.clientHeight; if (w !== this.state.vw || h !== this.state.vh) this.setState({ vw: w, vh: h }); };
+    this.measure = () => { const el = this.stageEl || this.rootEl; if (!el) return; const w = el.clientWidth, h = el.clientHeight; if (w !== this.state.vw || h !== this.state.vh) this.setState({ vw: w, vh: h }); };
     this.measure();
     window.addEventListener('resize', this.measure);
     this.iv = setInterval(() => this.tick(), TICK);
     this.poll = setInterval(() => { if (this.state.authState === 'in') this.refresh(); }, 1500);
-    setLoggedOutHandler(() => this.setState({ authState: 'out', account: null }));
+    // sessão expirou com o estúdio aberto: volta direto ao login (no primeiro /api/me sem sessão, fica a home)
+    setLoggedOutHandler(() => this.setState((s) => ({ authState: 'out', account: null, entry: s.authState === 'in' ? 'login' : s.entry })));
     this.checkSession();
     this.later(() => this.rootEl && this.rootEl.focus({ preventScroll: true }), 80);
   }
@@ -92,6 +128,7 @@ export default class App extends React.Component {
     if (prev.setup !== this.state.setup) LS.set('bc.setup', this.state.setup);
     if (prev.draft !== this.state.draft) LS.set('bc.draft', this.state.draft);
     if (prev.pid !== this.state.pid) LS.set('bc.pid', this.state.pid);
+    if (prev.view !== this.state.view) { LS.set('bc.view', this.state.view); this.measure && this.measure(); }
   }
   later(fn, ms) { this.timers.push(setTimeout(fn, ms)); }
 
@@ -102,16 +139,42 @@ export default class App extends React.Component {
       const account = await me();
       if (LS.get('bc.ws', null) !== account.workspace.id) {  // outro estúdio neste navegador: não reaproveita a produção aberta
         LS.set('bc.ws', account.workspace.id);
-        this.setState({ pid: null, draftMode: true });
+        this.setState({ pid: null, draftMode: false });
       }
       this.setState({ authState: 'in', account }, () => this.refresh());
+      this.maybeStartTour(account);
     } catch (e) {
       this.setState({ authState: 'out', conn: e instanceof AuthRequired ? 'ok' : 'erro', err: e instanceof AuthRequired ? null : e.message });
     }
   }
+  // ---------- kit de onboarding ----------
+  // O estado fica no usuário (servidor: users.onboarding_done_at / onboarding_step, POST /api/onboarding), então vale em
+  // qualquer dispositivo. Se o servidor não tiver o campo ou o POST falhar, guarda em localStorage (bc.onb) como reserva.
+  maybeStartTour(account) {
+    const srv = account && account.user && account.user.onboarding;
+    this.onbLocal = !srv;
+    const ob = srv || LS.get('bc.onb', { done_at: null, step: 0 });
+    if (!ob.done_at) this.setState({ onb: { start: ob.step || 0, key: Date.now() } });
+  }
+  openTour() {
+    this.dismissTut();
+    this.setUI({ win: null });
+    this.setState({ onb: { start: 0, key: Date.now() } });
+  }
+  saveTour(p) {
+    const local = () => LS.set('bc.onb', { ...LS.get('bc.onb', { done_at: null, step: 0 }), step: p.step ?? 0, ...(p.done ? { done_at: new Date().toISOString() } : {}) });
+    if (this.onbLocal) { local(); return; }
+    post('/api/onboarding', p).catch(() => { this.onbLocal = true; local(); });
+  }
+  tourClosed(how) {
+    if (how === 'done') this.dismissTut();  // a dica antiga do escritório fica redundante
+    this.setState({ onb: null });
+    if (this.rootEl) this.rootEl.focus({ preventScroll: true });
+  }
+
   async logout() {
     try { await auth('logout'); } catch { /* sessão já encerrada */ }
-    this.setState({ authState: 'out', account: null, S: null, pid: null, draftMode: true, files: [] });
+    this.setState({ authState: 'out', account: null, S: null, pid: null, draftMode: true, files: [], onb: null });
     this.setUI({ win: null });
   }
 
@@ -142,10 +205,10 @@ export default class App extends React.Component {
     this.lastStage = st;
   }
   async act(label, fn, ok) {
-    if (this.state.busy) return;
+    if (this.state.busy) return false;
     this.setState({ busy: label });
-    try { await fn(); if (ok) this.toast(ok); await this.refresh(); }
-    catch (e) { this.toast('Não deu certo: ' + e.message); }
+    try { await fn(); if (ok) this.toast(ok); await this.refresh(); return true; }
+    catch (e) { this.toast('Não deu certo: ' + e.message); return false; }
     finally { this.setState({ busy: null }); }
   }
 
@@ -162,7 +225,7 @@ export default class App extends React.Component {
     if (id === 'nina') return this.state.busy === 'produto' ? 'work' : (st === 'produto' ? 'need' : 'idle');
     if (id === 'theo') return st === 'direcao' ? (P && P.creative && P.running ? 'work' : 'need') : 'idle';
     if (id === 'iris') return st === 'gerar_img' ? 'need' : (imgGen && P && P.running ? 'work' : 'idle');
-    if (id === 'rui') return sc.some((x) => (st.startsWith('img') && x.img === 'pronta') || (st.startsWith('vid') && x.vid === 'pronta')) ? 'need' : 'idle';
+    if (id === 'rui') return sc.some((x) => (st.startsWith('img') && (x.img === 'pronta' || x.img === 'falhou')) || (st.startsWith('vid') && (x.vid === 'pronta' || x.vid === 'falhou'))) ? 'need' : 'idle';
     if (id === 'lia') return st === 'gerar_vid' ? 'need' : (vidGen && P && P.running ? 'work' : 'idle');
     if (id === 'beto') return st === 'montando' ? 'work' : (st === 'entrega' ? 'need' : 'idle');
     return 'idle';
@@ -171,6 +234,7 @@ export default class App extends React.Component {
   // ---------- IA de movimento dos agentes ----------
   stepAgent(a, st) {
     if (!a.seat) return st;
+    if (PHASER) return stepSeated(a.seat, st, this.state.ui.win === 'chat' && this.state.ui.who === a.id ? 'talk' : this.statusOf(a.id));
     let { i, j, path, dir, rest } = st;
     if (path.length) {
       const n = path[0];
@@ -257,7 +321,7 @@ export default class App extends React.Component {
       this.setState({ player: { ...p, path, seat: null }, pending: { type: 'sit', id: c.id }, dest: [c.x, c.y], ui: { ...this.state.ui, win: null } });
       return;
     }
-    if (this.isAdjacent(t)) { this.doAction(t); return; }
+    if (this.isAdjacent(t) || (PHASER && t.type === 'agent')) { this.doAction(t); return; }  // conversa a 1 clique, sem andar
     const tiles = this.targetTiles(t);
     const path = bfs([p.i, p.j], (u, v) => this.passP(u, v) && tiles.some((x) => Math.max(Math.abs(x[0] - u), Math.abs(x[1] - v)) <= 1), (u, v) => this.passP(u, v));
     if (!path) { this.toast('Não dá para chegar lá agora.'); return; }
@@ -282,7 +346,8 @@ export default class App extends React.Component {
   }
   doAction(t) {
     this.dismissTut();
-    if (t.type === 'agent') this.setUI({ win: 'dialog', who: t.id, dlgTalk: false });
+    // mundo Phaser (Fase 6): agente abre direto o painel de conversa; o canvas antigo mantém o diálogo roteirizado
+    if (t.type === 'agent') this.setUI(PHASER ? { win: 'chat', who: t.id } : { win: 'dialog', who: t.id, dlgTalk: false });
     else if (t.type === 'monitor') this.openRoomWork(t.room);
     else if (t.type === 'sit') this.sit(t.id);
     else if (t.type === 'chair') this.goInteract(t);
@@ -326,12 +391,29 @@ export default class App extends React.Component {
     if (t.type === 'chair') { const c = CHAIR_BY_ID[t.id]; return { x: c.x, y: c.y, w: 1, h: 1, oh: 6 * SC }; }
     return HOT_FURNITURE[t.type] || null;
   }
+  // Hover do mapa (mundo Phaser): o que o clique neste tile faz. floor = dá para andar até aqui; target = cadeira/monitor/objeto
+  // (retângulo em tiles + rótulo da ação). Agente fica de fora: ele já tem o hover card.
+  hoverAt(i, j) {
+    if (!this.inB(i, j)) return null;
+    const t = this.targetAtTile(i, j);
+    if (t) {
+      if (t.type === 'agent') return null;
+      const h = this.highlightOf(t); if (!h || h.char) return null;
+      if (t.type === 'chair') {
+        const c = CHAIR_BY_ID[t.id], back = SC > 1 ? (c.back || 0) : 0;
+        return { kind: 'target', x: c.x, y: c.y - back, w: 1, h: 1 + back, label: this.state.player.seat === c.id ? 'Levantar' : 'Sentar aqui' };
+      }
+      return { kind: 'target', x: h.x, y: h.y, w: h.w, h: h.h, oh: h.oh || 0, label: this.labelFor(t) };
+    }
+    return this.passP(i, j) ? { kind: 'floor', x: i, y: j, w: 1, h: 1 } : null;
+  }
 
   // ---------- entrada: teclado e clique ----------
   handleKey(e) {
     const tag = ((e.target && e.target.tagName) || '').toLowerCase();
     const k = (e.key || '').toLowerCase();
     if (k === 'escape') { if (this.state.ui.win) { e.preventDefault(); this.closeWin(); } return; }
+    if (this.state.view !== 'escritorio') return;  // andar e interagir só valem no Escritório
     // digitando em um campo: os atalhos do jogo ficam suspensos
     if (tag === 'input' || tag === 'textarea' || tag === 'select' || (e.target && e.target.isContentEditable)) return;
     if (this.state.ui.win && this.state.ui.win !== 'custom') return;
@@ -418,7 +500,7 @@ export default class App extends React.Component {
 
   openProd(tab) {
     const sc = this.scenes(); const kind = this.revKind();
-    const first = sc.find((x) => x[kind] === 'pronta');
+    const first = sc.find((x) => x[kind] === 'pronta' || x[kind] === 'falhou');
     this.setUI({ win: 'prod', tab, adjust: false, issues: [], adjText: '', revSel: first ? first.idx : this.state.ui.revSel, revView: 'scene' });
     if (tab === 'direcao') this.loadOptions();
   }
@@ -530,25 +612,35 @@ export default class App extends React.Component {
     this.act('videos', () => post(`/api/productions/${P.id}/go_ahead`, { stage: 'videos' }), 'A Lia está animando as cenas aprovadas.');
     this.setUI({ win: 'prod', tab: 'videos' });
   }
-  approveScene(idx) {
-    const P = this.prodP(); const kind = this.revKind();
-    this.act('aprovar', () => post(`/api/productions/${P.id}/approve`, { scene: idx, stage: kind === 'img' ? 'image' : 'video' }), 'Cena ' + idx + ' aprovada.');
-    this.setUI({ adjust: false, issues: [], adjText: '', learn: { agent: kind === 'img' ? 'iris' : 'lia', name: kind === 'img' ? 'a Iris' : 'a Lia', decision: 'approve', note: '', pid: P.id } });
+  // O painel "deve aprender?" só abre depois que o servidor aceitou a decisão.
+  async approveScene(idx) {
+    const P = this.prodP(); const kind = this.revKind(); if (!P) return;
+    const ok = await this.act('aprovar', () => post(`/api/productions/${P.id}/approve`, { scene: idx, stage: kind === 'img' ? 'image' : 'video' }), 'Cena ' + idx + ' aprovada.');
+    this.setUI({ adjust: false, issues: [], adjText: '', learn: ok ? { agent: kind === 'img' ? 'iris' : 'lia', name: kind === 'img' ? 'a Iris' : 'a Lia', decision: 'approve', note: '', pid: P.id } : null });
   }
-  sendAdjust() {
+  async sendAdjust() {
     const P = this.prodP(); const kind = this.revKind(); const idx = this.state.ui.revSel; const ui = this.state.ui;
     const est = kind === 'img' ? P.estimates.redo_image.credits : P.estimates.redo_video.credits;
     if (!this.fits(est)) { this.setUI({ budgetHit: true }); return; }
     const note = ui.issues.concat((ui.adjText || '').trim() ? [ui.adjText.trim()] : []).join('; ');
-    this.act('ajuste', () => post(`/api/productions/${P.id}/reject`, { scene: idx, stage: kind === 'img' ? 'image' : 'video', note }),
+    const ok = await this.act('ajuste', () => post(`/api/productions/${P.id}/reject`, { scene: idx, stage: kind === 'img' ? 'image' : 'video', note }),
       (kind === 'img' ? 'A Iris' : 'A Lia') + ' está refazendo só a cena ' + idx + '.');
-    this.setUI({ adjust: false, issues: [], adjText: '', learn: { agent: kind === 'img' ? 'iris' : 'lia', name: kind === 'img' ? 'a Iris' : 'a Lia', decision: 'reject', note, pid: P.id } });
+    this.setUI({ adjust: false, issues: [], adjText: '', learn: ok ? { agent: kind === 'img' ? 'iris' : 'lia', name: kind === 'img' ? 'a Iris' : 'a Lia', decision: 'reject', note, pid: P.id } : null });
+  }
+  // Cena bloqueada sem material: concede +1 tentativa e o motor gera de novo (só esta cena).
+  retryScene(idx) {
+    const P = this.prodP(); const kind = this.revKind(); if (!P) return;
+    const est = kind === 'img' ? P.estimates.redo_image.credits : P.estimates.redo_video.credits;
+    if (!this.fits(est)) { this.setUI({ budgetHit: true }); return; }
+    this.act('retry', () => post(`/api/productions/${P.id}/retry`, { scene: idx, stage: kind === 'img' ? 'image' : 'video' }),
+      (kind === 'img' ? 'A Iris' : 'A Lia') + ' vai tentar a cena ' + idx + ' de novo.');
   }
   // Por que a produção pausou? Cada motivo tem uma saída diferente (o teto do mês não sobe com o limite da produção).
   pauseInfo() {
     const P = this.prodP(), S = this.state.S, pol = this.pol();
     const reason = P && P.status === 'paused' ? (P.reason || '') : '';
-    const kind = /teto mensal/i.test(reason) ? 'mensal' : /saldo de créditos/i.test(reason) ? 'saldo'
+    const kind = /provedor de IA sem saldo/i.test(reason) ? 'provedor'
+      : /teto mensal/i.test(reason) ? 'mensal' : /saldo de créditos/i.test(reason) ? 'saldo'
       : (!reason || /orçamento/i.test(reason)) ? 'producao' : 'outro';
     const m = /estimado US\$([\d.]+)/.exec(reason);
     const nextUsd = m ? +m[1] : 0;
@@ -574,6 +666,13 @@ export default class App extends React.Component {
     const P = this.prodP(); if (!P) return;
     this.act('retomar', () => post(`/api/productions/${P.id}/resume`), 'Produção retomada.');
     this.setUI({ budgetHit: false });
+  }
+  // Encerrar de vez (confirmação dentro do jogo: o navegador embutido bloqueia window.confirm).
+  cancelProd() {
+    const P = this.prodP(); if (!P) return;
+    if (!this.state.ui.confirmCancel) { this.setUI({ confirmCancel: true }); return; }
+    this.setUI({ confirmCancel: false, budgetHit: false });
+    this.act('cancelar', () => post(`/api/productions/${P.id}/cancel`), 'Produção encerrada. O que já foi gerado continua no histórico.');
   }
   raiseLimit(credits) {
     const P = this.prodP(); if (!P) return;
@@ -665,9 +764,10 @@ export default class App extends React.Component {
       const room = ROOMS.find((r) => r.agent === a.id);
       return {
         // sentado trabalhando: de costas, olhando o monitor; precisando de você ou livre: vira para a tela
-        id: a.id, i: ast.i, j: ast.j, walking: !!ast.moving, seated, face: seated ? (status === 'work' ? 'up' : 'down') : null,
+        id: a.id, i: ast.i, j: ast.j, walking: !!ast.moving, seated, face: seated ? (PHASER ? ast.dir : (status === 'work' ? 'up' : 'down')) : null,
         l: (ast.i + 0.5) * T - 8 * SC, t: (ast.j + 1) * T - (seated ? 28 : 24) * SC, z: 10 + ast.j, w: 16 * SC, h: 22 * SC,
         look: a.look, anim, need: status === 'need', work: status === 'work', near: !!isNear, status: this.roomStatus(room),
+        name: a.name, role: a.role, room: room ? room.id : null,
         tagText: isNear ? a.name + ' · ' + a.role : a.name,
         aria: 'Falar com ' + a.name + ', ' + a.role + (status === 'need' ? ', precisa de você' : status === 'work' ? ', trabalhando' : ''),
         click: (e) => { e.stopPropagation(); this.goInteract({ type: 'agent', id: a.id }); },
@@ -712,6 +812,20 @@ export default class App extends React.Component {
       ];
       const d = ui.dlgTalk ? talk : { line: room.hint + '. Agora: ' + this.roomStatus(room) + '.', opts: menu };
       dlg = { name: a.name, role: a.role, look: a.look, line: d.line, opts: d.opts, bg: a.look.shirt, anim: statuses[a.id] === 'need' ? 'wave' : 'idle' };
+    }
+
+    let chat = null;
+    if (ui.win === 'chat' && ui.who && AGM[ui.who]) {
+      const a = AGM[ui.who]; const room = ROOMS.find((r) => r.agent === a.id);
+      chat = { agentId: a.id, name: a.name, role: a.role, intro: this.dialogFor(a.id).line, stage: st, status: statuses[a.id],
+        statusText: room ? this.roomStatus(room) : '', pid: P ? s.pid : null,
+        needs: AGENTS.filter((b) => statuses[b.id] === 'need').map((b) => b.id).join(','),
+        actions: [
+          ...(room ? [{ label: 'Ver trabalho', act: () => this.openRoomWork(room.id) }] : []),
+          { label: 'Treinar', act: () => this.setUI({ win: 'training', trainAgent: a.id }) },
+          ...(a.id === 'lia' || a.id === 'beto' ? [{ label: 'Trilhas', act: () => this.setUI({ win: 'music' }) }] : []),
+        ],
+        onClose: () => this.closeWin() };
     }
 
     const doneAt = { produto: 1, direcao: 2, imagens: 4, revisao: 8, videos: 7, entrega: 10 };
@@ -773,7 +887,7 @@ export default class App extends React.Component {
     dir.approve = () => this.approveDirection(); dir.load = () => this.loadOptions();
 
     // --- imagens / vídeos / revisão ---
-    const stLabel = { none: ['Aguardando', '#E7E1D6'], fila: ['Na fila', '#E7E1D6'], gerando: ['Criando…', '#8ED8F8'], pronta: ['Para revisar', '#D5F45B'], aprovada: ['Aprovada', '#BDE5B0'] };
+    const stLabel = { none: ['Aguardando', '#E7E1D6'], fila: ['Na fila', '#E7E1D6'], gerando: ['Criando…', '#8ED8F8'], pronta: ['Para revisar', '#D5F45B'], aprovada: ['Aprovada', '#BDE5B0'], falhou: ['Não saiu', '#FFE1DC'] };
     const slot = (key) => sc.map((x) => {
       const lb = stLabel[x[key]]; const att = key === 'img' ? x.image : x.video;
       const waitScene1 = key === 'img' && x.img === 'fila' && x.idx > 1;
@@ -800,7 +914,9 @@ export default class App extends React.Component {
       const view = ui.revView;
       rev = {
         n: sel.idx, title: (kind === 'img' ? 'Imagem' : 'Take') + ' da cena ' + sel.idx + ': ' + sel.title, sub: sel.motion,
-        canAct: sel[kind] === 'pronta' && !(P && P.running), limitHit: tries >= maxT, nextTry: tries + 1, maxTries: maxT, tries,
+        canAct: sel[kind] === 'pronta' && !!(att && att.url) && !(P && P.running),
+        failed: sel[kind] === 'falhou', failBilling: /error code: 402|prepayment credits|credits are depleted/i.test((att && att.error) || ''), failText: (att && att.error) || 'A geração não terminou e as tentativas desta cena acabaram.',
+        canRetry: sel[kind] === 'falhou' && !(P && P.running), limitHit: tries >= maxT, nextTry: tries + 1, maxTries: maxT, tries,
         cost: est ? (kind === 'img' ? est.redo_image.credits : est.redo_video.credits) : 0, who: kind === 'img' ? 'a Iris' : 'a Lia', what: kind === 'img' ? 'imagem' : 'animação',
         chk, criteria: sel.criteria,
         media: { view, refUrl: ref && ref.url, imgUrl: sel.image && sel.image.url, vidUrl: sel.video && sel.video.url,
@@ -842,10 +958,24 @@ export default class App extends React.Component {
       working: workA ? workA.name + ' está trabalhando; o aviso aparece aqui quando precisarem de você.' : '' };
     const productions = s.S ? s.S.productions.map((x) => ({ ...x, current: !s.draftMode && x.id === s.pid, open: () => this.pickProduction(x.id) })) : [];
 
+    // --- shell: fluxo da missão e fila de decisões (derivados do mesmo estado real) ---
+    const rsOf = (id) => { const r = ROOMS.find((x) => x.agent === id); return r ? this.roomStatus(r) : ''; };
+    const paused = !!(P && P.status === 'paused');
+    const pipeline = buildPipeline({ idx, statuses, hasProd: !!P, paused, detail: {
+      objetivo: P ? P.product.name : '', orquestrador: paused ? 'Pausada: ' + (P.reason || '') : P ? STAGE_LABELS[st] : '',
+      roteiro: rsOf(idx < 1 ? 'nina' : 'theo'), criativo: rsOf('iris'), video: rsOf('lia'), revisao: rsOf('rui'), entrega: rsOf('beto') } });
+    const attn = P ? attention({ paused, pauseReason: P.reason, rooms: ROOMS.filter((r) => r.agent && statuses[r.agent] === 'need').map((r) => ({ id: r.id, name: r.name, who: AGM[r.agent].name,
+      status: this.roomStatus(r), need: true, look: AGM[r.agent].look, work: () => this.openRoomWork(r.id) })) }) : [];
+
     return {
+      // shell
+      view: s.view, setView: (id) => { if (s.ui.win === 'dialog') this.closeWin(); this.setState({ view: id }); }, shell: true,
+      pipeline, attn, statuses: P ? statuses : { ...statuses, nina: 'idle' }, hasProd: !!P, openStep: (tab) => this.openProd(tab),
       // mundo
       scale, zoom, camX, camY, vw: s.vw, vh: s.vh, setup: su, desks, highlight, dest, world: WORLD,
+      openTour: () => this.openTour(), tourOpen: !!s.onb,
       openAbout: () => { this.dismissTut(); this.setUI({ win: 'about' }); },
+      openPrefs: (tab) => { this.dismissTut(); this.setUI({ win: tab || 'prefs' }); },
       nearAlt: ch && near && near.type !== 'stand' ? { label: 'Levantar', go: () => this.standUp() } : null,
       openSectors: () => { this.dismissTut(); this.setUI({ win: 'sectors' }); },
       openMusic: () => this.setUI({ win: 'music' }), trainAgent: ui.trainAgent, team: AGENTS, openTraining: (id) => this.setUI({ win: 'training', trainAgent: id, learn: null }),
@@ -855,7 +985,7 @@ export default class App extends React.Component {
         const a = r.agent ? AGM[r.agent] : null;
         const status = this.roomStatus(r);
         const placed = placedRoom(r);
-        return { id: r.id, name: r.name, hint: r.hint, who: a ? a.name : '', look: a ? a.look : s.look, status, need: a ? statuses[a.id] === 'need' : false, placed,
+        return { id: r.id, name: r.name, hint: r.hint, agent: r.agent || null, who: a ? a.name : '', role: a ? a.role : '', look: a ? a.look : s.look, status, need: a ? statuses[a.id] === 'need' : false, placed,
           x: placed ? ((r.x0 + r.x1 + 1) / 2) * T : 0, y: placed ? r.y0 * T + 1 : 0,
           click: (e) => { e.stopPropagation(); this.goRoom(r.id); },
           go: () => { if (!this.goRoom(r.id) && !placed) this.toast(r.name + ' ainda não está no mapa novo. Use o botão Abrir.'); this.closeWin(); },
@@ -872,6 +1002,7 @@ export default class App extends React.Component {
       ].filter(Boolean),
       chars, pl, look: s.look, agentDur: AGENT_EVERY * TICK / 1000,
       onWorldClick: this.onWorldClick,
+      hoverAt: (i, j) => this.hoverAt(i, j),
       goBoard: (e) => { e.stopPropagation(); this.goInteract({ type: 'board' }); },
       goCoffee: (e) => { e.stopPropagation(); this.goInteract({ type: 'coffee' }); },
       goMine: (e) => { e.stopPropagation(); this.goInteract({ type: 'mine' }); },
@@ -894,7 +1025,7 @@ export default class App extends React.Component {
       win: ui.win, showTut: ui.tut,
       tutGo: () => { this.dismissTut(); this.openProd(needTab ? needTab.id : 'produto'); },
       tutClose: () => { this.dismissTut(); if (this.rootEl) this.rootEl.focus({ preventScroll: true }); },
-      closeWin: () => this.closeWin(), dlg,
+      closeWin: () => this.closeWin(), dlg, chat,
       boardOpenProd: () => this.openProd(needTab ? needTab.id : 'produto'), productions,
       newProd: () => this.newProduction(), newProdHint: 'Cada produção guarda fotos, cenas, versões e gastos separados.',
       ctabs, cgroups, tabs, tab: ui.tab, idx, stage: st, P,
@@ -906,12 +1037,13 @@ export default class App extends React.Component {
       revLocked: !sc.some((x) => x.img !== 'none' && x.img !== 'fila'), revKindLabel: kind === 'img' ? 'Imagens' : 'Takes', revScenes, rev, ruiLook: AGM.rui.look,
       adjusting: ui.adjust, issues, adjText: ui.adjText, onAdjText: (e) => this.setUI({ adjText: e.target.value }), noIssue: ui.issues.length === 0 && !(ui.adjText || '').trim(),
       openAdjust: () => this.setUI({ adjust: true }), closeAdjust: () => this.setUI({ adjust: false, issues: [], adjText: '' }),
-      approveCur: () => rev && this.approveScene(rev.n), sendAdjust: () => this.sendAdjust(),
+      approveCur: () => rev && this.approveScene(rev.n), retryCur: () => rev && this.retryScene(rev.n),sendAdjust: () => this.sendAdjust(),
       budgetHit: ui.budgetHit || (P && P.status === 'paused' && ui.budgetDismissed !== P.reason), pauseReason: P && P.status === 'paused' ? P.reason : '',
       raiseOptions: [credits.budget + 40, credits.budget + 80], raiseLimit: (n) => this.raiseLimit(n),
       dismissBudget: () => this.setUI({ budgetHit: false, confirmCap: null, budgetDismissed: P && P.status === 'paused' ? P.reason : null }),
       confirmCap: ui.confirmCap || null, confirmCapUsd: ui.confirmCapUsd || 0, cancelCap: () => this.setUI({ confirmCap: null }),
       pause: this.pauseInfo(), raiseMonthly: (n) => this.raiseMonthly(n), resumeOnly: () => this.resumeOnly(),
+      cancelProd: () => this.cancelProd(), confirmCancel: !!ui.confirmCancel, keepProd: () => this.setUI({ confirmCancel: false }),
       // entrega
       entLocked: idx < 8, entBuilding: st === 'montando', delivery: P ? P.delivery : {},
       edit: P ? P.edit : null, editOptions: s.S ? s.S.settings.edit_styles : null,
@@ -923,17 +1055,25 @@ export default class App extends React.Component {
   render() {
     if (this.state.authState === 'checking') return <div className="dotsbg" style={{ position: 'fixed', inset: 0 }} aria-busy="true" />;
     if (this.state.authState !== 'in') {
-      return <AuthScreen resetToken={this.state.resetToken} onDone={() => this.setState({ resetToken: null }, () => this.checkSession())} />;
+      if (!this.state.resetToken && !this.state.entry) {
+        return <React.Suspense fallback={<div style={{ position: 'fixed', inset: 0, background: '#FBF7EE' }} />}><Landing signupOpen={SIGNUP_OPEN} onEnter={(entry) => this.setState({ entry })} /></React.Suspense>;
+      }
+      return <AuthScreen key={this.state.entry} resetToken={this.state.resetToken} initialMode={this.state.entry} onBack={() => this.setState({ entry: null })}
+        onDone={() => this.setState({ resetToken: null, entry: null }, () => this.checkSession())} />;
     }
     const v = this.viewModel();
     return (
-      <div ref={this.setRoot} tabIndex={0} onKeyDown={this.onKey} onKeyUp={this.onKeyUp} onBlur={this.onBlur} className="dotsbg"
-        aria-label="Escritório da Pivoo. Use as setas ou WASD para andar e E para interagir."
-        style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden', outline: 'none', fontFamily: 'Nunito Sans, system-ui, sans-serif' }}>
-        {WORLD === 'phaser' ? <React.Suspense fallback={null}><WorldPhaser v={v} /></React.Suspense> : <World v={v} />}
-        <Hud v={v} />
-        {v.showTut && <Tutorial v={v} />}
+      <Shell v={v} rootRef={this.setRoot} stageRef={this.setStage} onKeyDown={this.onKey} onKeyUp={this.onKeyUp} onBlur={this.onBlur}>
+        {v.view === 'central' && <Central v={v} />}
+        {v.view === 'missao' && <MissionView v={v} />}
+        {v.view === 'equipe' && <TeamView v={v} />}
+        {v.view === 'escritorio' && (<>
+          {WORLD === 'phaser' ? <React.Suspense fallback={null}><WorldPhaser v={v} /></React.Suspense> : <World v={v} />}
+          <Hud v={v} />
+          {v.showTut && !v.tourOpen && <Tutorial v={v} />}
+        </>)}
         {v.win === 'dialog' && v.dlg && <DialogWindow v={v} />}
+        {v.win === 'chat' && v.chat && <React.Suspense fallback={null}><AgentChat {...v.chat} /></React.Suspense>}
         {v.win === 'board' && <BoardWindow v={v} />}
         {v.win === 'sectors' && <SectorsWindow v={v} />}
         {v.win === 'training' && <TrainingWindow key={v.trainAgent} v={v} />}
@@ -942,11 +1082,14 @@ export default class App extends React.Component {
         {v.win === 'custom' && <CustomWindow v={v} />}
         {v.win === 'prod' && <ProdWindow v={v} />}
         {v.win === 'games' && <GamesWindow v={v} />}
-        {v.win === 'pilot' && <PilotWindow v={v} />}
-        {v.win === 'account' && <AccountWindow v={v} />}
-        {v.win === 'credits' && <CreditsWindow v={v} />}
-        {v.win === 'about' && <AboutWindow v={v} />}
-      </div>
+        {PREF_WINS.includes(v.win) && <React.Suspense fallback={null}><Preferences v={v} /></React.Suspense>}
+        {this.state.onb && (
+          <TourBoundary key={this.state.onb.key} onFail={this.tourDone}><React.Suspense fallback={null}>
+            <Onboarding key={this.state.onb.key} start={this.state.onb.start} api={this.tourApi}
+              ctx={{ world: true, walletExempt: !!(v.wallet && v.wallet.exempt), pilotLabel: v.pilot.label }} onClosed={this.tourDone} />
+          </React.Suspense></TourBoundary>
+        )}
+      </Shell>
     );
   }
 }

@@ -4,9 +4,9 @@ import { Spinner, CloseButton } from './bits.jsx';
 
 // Janela da produção: uma aba por agente/etapa, com dados REAIS do motor.
 const Locked = ({ children }) => <div className="g-card" style={{ padding: 18, font: '700 15px/1.4 Nunito Sans,sans-serif' }}>{children}</div>;
-const Pill = ({ bg, children }) => <span style={{ font: '800 12px/1 Nunito Sans,sans-serif', padding: '4px 8px', borderRadius: 999, background: bg, border: '1.5px solid #17234B', alignSelf: 'flex-start' }}>{children}</span>;
+const Pill = ({ bg, children }) => <span style={{ font: '800 12px/1 Nunito Sans,sans-serif', padding: '4px 8px', borderRadius: 999, background: bg, border: '1px solid #D4DAE4', alignSelf: 'flex-start' }}>{children}</span>;
 const Check = () => <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 8.5l3 3 7-7" /></svg>;
-const Tag = ({ dark, children }) => <span style={{ position: 'absolute', top: 8, left: 8, font: '800 10.5px/1 Nunito Sans,sans-serif', padding: '4px 7px', borderRadius: 6, background: dark ? '#17234B' : '#FFF8EC', color: dark ? '#fff' : '#17234B', border: '1.5px solid #17234B' }}>{children}</span>;
+const Tag = ({ dark, children }) => <span style={{ position: 'absolute', top: 8, left: 8, font: '800 10.5px/1 Nunito Sans,sans-serif', padding: '4px 7px', borderRadius: 6, background: dark ? '#17234B' : '#F7F8FA', color: dark ? '#fff' : '#17234B', border: '1px solid #D4DAE4' }}>{children}</span>;
 const cr = (n) => `${n} crédito${n === 1 ? '' : 's'}`;
 
 function Gate({ title, credits, v, onGo, label, note }) {
@@ -27,7 +27,7 @@ function Gate({ title, credits, v, onGo, label, note }) {
 
 function Media({ url, video, label, dark, alt }) {
   return (
-    <div style={{ position: 'relative', width: 190, height: 338, borderRadius: 16, overflow: 'hidden', border: '3px solid #17234B', background: '#0F1730', flex: 'none' }}>
+    <div style={{ position: 'relative', width: 190, height: 338, borderRadius: 16, overflow: 'hidden', border: '1px solid #D4DAE4', background: '#0F1730', flex: 'none' }}>
       {url && !video && <img src={url} alt={alt} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
       {url && video && <video src={url} controls muted loop playsInline preload="metadata" aria-label={alt} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
       {!url && <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: '#fff', font: '700 13px/1.3 Nunito Sans,sans-serif', padding: 16, textAlign: 'center' }}>Ainda não existe</div>}
@@ -43,7 +43,7 @@ function TabProduto({ v }) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div className="g-card" style={{ padding: 14, display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center' }}>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {p.refs.map((r, k) => <a key={k} href={r.url} target="_blank" rel="noopener"><img src={r.url} alt={'Referência: ' + r.role} style={{ width: 70, height: 94, objectFit: 'cover', borderRadius: 10, border: '2px solid #17234B' }} /></a>)}
+            {p.refs.map((r, k) => <a key={k} href={r.url} target="_blank" rel="noopener"><img src={r.url} alt={'Referência: ' + r.role} style={{ width: 70, height: 94, objectFit: 'cover', borderRadius: 10, border: '1px solid #D4DAE4' }} /></a>)}
           </div>
           <div style={{ flex: 1, minWidth: 220, display: 'flex', flexDirection: 'column', gap: 4 }}>
             <strong className="fred" style={{ fontSize: 18, fontWeight: 600 }}>{p.name}</strong>
@@ -139,7 +139,7 @@ function TabDirecao({ v }) {
             <div role="group" aria-label="Formato" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', gap: 10 }}>
               {d.formats.map((f) => (
                 <button key={f.id} className="g-pick" aria-pressed={f.sel} onClick={f.pick} disabled={d.done || f.disabled} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <span style={{ height: 70, borderRadius: 10, background: '#F4E3CF', display: 'grid', placeItems: 'center', border: '2px solid #17234B' }}>
+                  <span style={{ height: 70, borderRadius: 10, background: '#F4E3CF', display: 'grid', placeItems: 'center', border: '1px solid #D4DAE4' }}>
                     <svg viewBox="0 0 80 60" width="80" height="60" aria-hidden="true">
                       {f.person && <g><circle cx="54" cy="18" r="9" fill="#F1C7A5" stroke="#17234B" strokeWidth="2" /><path d="M42 50 C42 34 47 29 54 29 C61 29 66 34 66 50 Z" fill="#F28C6B" stroke="#17234B" strokeWidth="2" /></g>}
                       <path d="M30 26 L32 50 Q32 53 36 53 L42 53 Q46 53 46 50 L48 26 Z" fill="#B9D8F2" stroke="#17234B" strokeWidth="2" />
@@ -180,7 +180,7 @@ function TabDirecao({ v }) {
           <div style={{ flex: '1 1 260px', minWidth: 0 }} className="g-card">
             <dl style={{ margin: 0, padding: '6px 14px' }}>
               {d.rows.map((dr) => (
-                <div key={dr.k} style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '9px 0', borderBottom: '2px dotted #E2D7C3' }}>
+                <div key={dr.k} style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '9px 0', borderBottom: '2px dotted #E3E7EE' }}>
                   <dt className="g-label">{dr.k}</dt><dd style={{ margin: 0, font: '700 14px/1.35 Nunito Sans,sans-serif' }}>{dr.v}</dd>
                 </div>
               ))}
@@ -203,7 +203,7 @@ function TabDirecao({ v }) {
           </ol>
           <details style={{ fontSize: 13 }}>
             <summary style={{ font: '800 13px/1 Nunito Sans,sans-serif', minHeight: 30, display: 'flex', alignItems: 'center' }}>Ver instruções de geração</summary>
-            {d.scenes.map((sp) => <pre key={sp.index} style={{ whiteSpace: 'pre-wrap', font: '12px/1.5 ui-monospace,monospace', background: '#fff', border: '2px solid #17234B', borderRadius: 10, padding: 10 }}>{sp.image_prompt}</pre>)}
+            {d.scenes.map((sp) => <pre key={sp.index} style={{ whiteSpace: 'pre-wrap', font: '12px/1.5 ui-monospace,monospace', background: '#fff', border: '1px solid #D4DAE4', borderRadius: 10, padding: 10 }}>{sp.image_prompt}</pre>)}
           </details>
           <span style={{ font: '800 14px/1 Nunito Sans,sans-serif' }}>Total planejado: ~15 s · Nada foi gasto até aqui.</span>
         </>
@@ -223,7 +223,7 @@ function Slots({ list }) {
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(min(200px,100%),1fr))', gap: 12 }}>
       {list.map((s) => (
         <div key={s.k} className="g-card" style={{ padding: 12, display: 'flex', gap: 12, alignItems: 'center' }}>
-          <div style={{ width: 62, height: 110, borderRadius: 9, border: '2px solid #17234B', background: '#0F1730', display: 'grid', placeItems: 'center', flex: 'none', overflow: 'hidden', opacity: s.status === 'fila' ? 0.5 : 1 }}>
+          <div style={{ width: 62, height: 110, borderRadius: 9, border: '1px solid #D4DAE4', background: '#0F1730', display: 'grid', placeItems: 'center', flex: 'none', overflow: 'hidden', opacity: s.status === 'fila' ? 0.5 : 1 }}>
             {s.url && !s.isVideo && <img src={s.url} alt={'Imagem gerada da cena ' + s.n} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
             {s.url && s.isVideo && <svg width="22" height="22" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="9" fill="#D5F45B" stroke="#17234B" strokeWidth="2" /><path d="M8 6.5l5 3.5-5 3.5z" fill="#17234B" /></svg>}
             {s.status === 'gerando' && <Spinner track="#ffffff33" color="#D5F45B" />}
@@ -256,12 +256,25 @@ function BudgetBox({ v }) {
   if (pz.kind === 'mensal') return box('Teto de gastos do mês atingido',
     `Neste mês já foram usados ${pz.monthSpent} de ${pz.monthCap} créditos e o próximo passo custaria cerca de ${pz.next} créditos. Subir o limite desta produção não resolve: o teto vale para todas as produções.`,
     v.confirmCap ? (
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', width: '100%', padding: 10, borderRadius: 10, background: '#fff', border: '2px solid #17234B' }}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', width: '100%', padding: 10, borderRadius: 10, background: '#fff', border: '1px solid #D4DAE4' }}>
         <span style={{ fontSize: 13.5, flex: '1 1 220px' }}>Confirmar teto de <strong>{v.confirmCap} créditos</strong> no mês (≈ US$ {v.confirmCapUsd.toFixed(2)} de custo real na sua conta Google, para todas as produções)?</span>
         <button className="g-btn g-sm g-lime" onClick={() => v.raiseMonthly(v.confirmCap)} disabled={!!v.busy}>{v.busy ? 'Aplicando…' : 'Confirmar'}</button>
         <button className="g-btn g-sm" onClick={v.cancelCap}>Cancelar</button>
       </div>
     ) : pz.capOptions.map((n) => <button key={n} className="g-btn g-sm g-lime" onClick={() => v.raiseMonthly(n)} disabled={!!v.busy}>Subir teto do mês para {n} créditos</button>));
+  if (pz.kind === 'provedor') return box('A conta da IA ficou sem saldo',
+    'A geração foi recusada porque os créditos pré-pagos da conta da API (Google AI Studio) acabaram. Não é um problema da cena e nenhuma tentativa foi gasta. Recarregue a conta e retome; ou encerre esta produção.',
+    v.confirmCancel ? (
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', width: '100%', padding: 10, borderRadius: 10, background: '#fff', border: '1px solid #D4DAE4' }}>
+        <span style={{ fontSize: 13.5, flex: '1 1 220px' }}>Encerrar esta produção? Ela sai da fila e não pode ser retomada; o que já foi gerado fica no histórico.</span>
+        <button className="g-btn g-sm" onClick={v.cancelProd} disabled={!!v.busy}>Sim, encerrar</button>
+        <button className="g-btn g-sm g-lime" onClick={v.keepProd}>Manter</button>
+      </div>
+    ) : <>
+      <a className="g-btn g-sm" href="https://aistudio.google.com/projects" target="_blank" rel="noreferrer">Abrir o AI Studio (cobrança)</a>
+      <button className="g-btn g-sm g-lime" onClick={v.resumeOnly} disabled={!!v.busy}>Já recarreguei: retomar</button>
+      <button className="g-btn g-sm" onClick={v.cancelProd} disabled={!!v.busy}>Encerrar produção</button>
+    </>);
   if (pz.kind === 'saldo') return box('Créditos insuficientes',
     `O saldo do estúdio é de ${pz.balance} créditos e o próximo passo custaria cerca de ${pz.next}. O estúdio pausou antes de gastar. A compra de créditos chega com os planos; por enquanto, peça créditos ao administrador e depois retome.`,
     <>
@@ -298,20 +311,32 @@ function TabRevisao({ v }) {
         </div>
       </div>
       <div style={{ flex: '1 1 280px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: 12, borderRadius: 14, border: '2px solid #17234B', background: cur.chk.bg }}>
-          <span style={{ width: 40, height: 40, borderRadius: 10, background: '#6BAA75', border: '2px solid #17234B', display: 'grid', placeItems: 'end center', overflow: 'hidden', flex: 'none' }}><Boneco look={v.ruiLook} crop size={36} /></span>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: 12, borderRadius: 14, border: '1px solid #D4DAE4', background: cur.chk.bg }}>
+          <span style={{ width: 40, height: 40, borderRadius: 10, background: '#6BAA75', border: '1px solid #D4DAE4', display: 'grid', placeItems: 'end center', overflow: 'hidden', flex: 'none' }}><Boneco look={v.ruiLook} crop size={36} /></span>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}><strong style={{ fontSize: 14 }}>{cur.chk.title}</strong><span style={{ fontSize: 13.5, lineHeight: 1.4 }}>{cur.chk.text}</span></div>
         </div>
         <div style={{ font: '700 13.5px/1.4 Nunito Sans,sans-serif' }}><strong>{cur.title}</strong><br /><span className="g-muted">{cur.sub}</span></div>
         <BudgetBox v={v} />
         {cur.limitHit && cur.canAct && <div style={{ padding: 12, borderRadius: 12, background: '#FFE1DC', border: '2px solid #9A2E22', fontSize: 13.5, lineHeight: 1.4 }}><strong style={{ color: '#7A2218' }}>{cur.maxTries} tentativas usadas nesta cena.</strong> Para não gastar sem controle, novas tentativas ficam bloqueadas. Aprove a melhor versão ou ajuste a direção com o Theo.</div>}
+        {cur.failed && (
+          <div role="alert" style={{ padding: 12, borderRadius: 12, background: '#FFE1DC', border: '2px solid #9A2E22', fontSize: 13.5, lineHeight: 1.4, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {cur.failBilling ? <>
+              <span><strong style={{ color: '#7A2218' }}>A {cur.what} da cena {cur.n} não saiu: a conta da IA (Google AI Studio) ficou sem créditos pré-pagos.</strong> A cena está certa; o problema é o saldo da conta.</span>
+              <span>Recarregue em <a href="https://aistudio.google.com/projects" target="_blank" rel="noreferrer">aistudio.google.com</a> e clique em Tentar de novo. Se a conta ainda estiver sem saldo, a produção pausa sem gastar tentativa.</span>
+            </> : <>
+              <span><strong style={{ color: '#7A2218' }}>A {cur.what} da cena {cur.n} não saiu.</strong> {cur.failText}</span>
+              <span>Nada a aprovar ainda. Tentar de novo refaz só esta cena (custo estimado: {cr(cur.cost)}).</span>
+            </>}
+            <div><button className="g-btn g-lime g-sm" onClick={v.retryCur} disabled={!cur.canRetry || !!v.busy}>{v.busy === 'retry' ? 'Enviando…' : 'Tentar de novo'}</button></div>
+          </div>
+        )}
         {cur.canAct && !v.adjusting && <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><button className="g-btn g-lime" onClick={v.approveCur} disabled={!!v.busy}>Aprovar cena {cur.n}</button><button className="g-btn" onClick={v.openAdjust} disabled={cur.limitHit}>Pedir ajuste</button></div>}
         {cur.canAct && v.adjusting && (
           <div className="g-card" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
             <span className="g-label">O que está errado?</span>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{v.issues.map((iss) => <button key={iss.label} className="g-chip" aria-pressed={iss.sel} onClick={iss.pick} style={{ minHeight: 34, fontSize: 12.5 }}>{iss.label}</button>)}</div>
             <input className="g-field" placeholder="Quer explicar melhor? (opcional)" value={v.adjText} onChange={v.onAdjText} aria-label="Detalhe do ajuste" />
-            <div style={{ fontSize: 13, lineHeight: 1.45, padding: '8px 10px', borderRadius: 10, background: '#F6EEDD' }}>
+            <div style={{ fontSize: 13, lineHeight: 1.45, padding: '8px 10px', borderRadius: 10, background: '#F7F8FA' }}>
               <strong>Refaz:</strong> só a {cur.what} da cena {cur.n} (tentativa {cur.nextTry} de {cur.maxTries}).<br />
               <strong>Preserva:</strong> as outras cenas, aprovações, direção e identidade.<br />
               <strong>Custo estimado:</strong> {cr(cur.cost)}.
@@ -399,7 +424,7 @@ function TabEntrega({ v }) {
       </div>
       <div style={{ flex: '1 1 320px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-          {d['cover.jpg'] && <img src={d['cover.jpg']} alt="Capa gerada" style={{ width: 60, height: 106, objectFit: 'cover', borderRadius: 8, border: '2px solid #17234B' }} />}
+          {d['cover.jpg'] && <img src={d['cover.jpg']} alt="Capa gerada" style={{ width: 60, height: 106, objectFit: 'cover', borderRadius: 8, border: '1px solid #D4DAE4' }} />}
           <span className="g-muted" style={{ fontSize: 13 }}>Capa tirada do fim do vídeo.</span>
         </div>
         <EditBox v={v} />
@@ -437,7 +462,7 @@ function TabEntrega({ v }) {
 export default function ProdWindow({ v }) {
   return (
     <section role="dialog" aria-labelledby="prod-h" className="g-panel pop" style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', zIndex: 20, width: 'min(1000px,calc(100vw - 24px))', height: 'min(680px,calc(100vh - 24px))', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <div style={{ padding: '12px 14px 0', background: '#F6EEDD', borderBottom: '2.5px solid #17234B', display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ padding: '12px 14px 0', background: '#F7F8FA', borderBottom: '1px solid #D4DAE4', display: 'flex', flexDirection: 'column', gap: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <h2 id="prod-h" className="fred" style={{ margin: 0, fontSize: 20, fontWeight: 600 }}>{v.prodName}</h2>
           <span style={{ font: '800 12px/1 Nunito Sans,sans-serif', padding: '5px 9px', borderRadius: 999, background: '#17234B', color: '#fff' }}>{v.stageLabel}</span>
@@ -449,9 +474,9 @@ export default function ProdWindow({ v }) {
         <div role="tablist" aria-label="Etapas" style={{ display: 'flex', gap: 2, overflowX: 'auto', paddingBottom: 8 }}>
           {v.tabs.map((tb) => (
             <button key={tb.id} role="tab" className="g-tab" aria-selected={tb.sel} onClick={tb.pick} aria-label={tb.aria}>
-              <span style={{ position: 'relative', width: 30, height: 30, borderRadius: 9, background: tb.bg, border: '2px solid #17234B', display: 'grid', placeItems: 'end center', overflow: 'hidden', flex: 'none' }}><Boneco look={tb.look} crop size={26} /></span>
+              <span style={{ position: 'relative', width: 30, height: 30, borderRadius: 9, background: tb.bg, border: '1px solid #D4DAE4', display: 'grid', placeItems: 'end center', overflow: 'hidden', flex: 'none' }}><Boneco look={tb.look} crop size={26} /></span>
               <span>{tb.label}</span>
-              <span aria-hidden="true" style={{ minWidth: 18, height: 18, borderRadius: 999, background: tb.dot, border: '2px solid #17234B', font: '900 10px/14px Nunito Sans,sans-serif', textAlign: 'center', color: tb.dotInk, padding: '0 3px' }}>{tb.sym}</span>
+              <span aria-hidden="true" style={{ minWidth: 18, height: 18, borderRadius: 999, background: tb.dot, border: '1px solid #D4DAE4', font: '900 10px/14px Nunito Sans,sans-serif', textAlign: 'center', color: tb.dotInk, padding: '0 3px' }}>{tb.sym}</span>
             </button>
           ))}
         </div>

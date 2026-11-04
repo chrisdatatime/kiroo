@@ -45,6 +45,13 @@ export async function auth(action, body = {}) {
   return d;
 }
 
+// O que a tela de acesso pode oferecer (cadastro aberto, Google, envio de e-mail). Pública.
+export async function authConfig() {
+  const r = await fetch('/api/auth/config', { credentials: 'same-origin' });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
 export function readFile(file) {
   return new Promise((resolve, reject) => {
     const fr = new FileReader();

@@ -63,7 +63,7 @@ export default function MusicWindow({ v }) {
 
   return (
     <section role="dialog" aria-labelledby="mu-h" className="g-panel" style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', zIndex: 24, width: 'min(920px,calc(100vw - 24px))', height: 'min(720px,calc(100vh - 24px))', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <header style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '2.5px solid #17234B', background: '#F6EEDD' }}>
+      <header style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid #D4DAE4', background: '#F7F8FA' }}>
         <h2 id="mu-h" className="fred" style={{ margin: 0, fontSize: 20, flex: 1 }}>Trilhas da Lia</h2>
         <CloseButton onClick={v.closeWin} label="Fechar trilhas" />
       </header>
@@ -89,7 +89,7 @@ export default function MusicWindow({ v }) {
               <button className="g-btn g-lime" disabled={busy} onClick={apply}>{video ? 'Aplicar e remontar (sem custo)' : 'Usar nesta produção'}</button>
               <span className="g-muted" style={{ fontSize: 12.5 }}>A escolha desta produção tem prioridade sobre sugestões automáticas.</span>
             </div>
-            {video && <video src={video} controls style={{ width: 200, maxWidth: '100%', borderRadius: 10, border: '2px solid #17234B' }} aria-label="Prévia do vídeo com a trilha" />}
+            {video && <video src={video} controls style={{ width: 200, maxWidth: '100%', borderRadius: 10, border: '1px solid #D4DAE4' }} aria-label="Prévia do vídeo com a trilha" />}
             <p className="g-muted" style={{ margin: 0, fontSize: 12.5 }}>O formato atual não tem narração, então a redução da música durante a fala ainda não tem efeito.</p>
           </div>
         ) : <p style={{ margin: 0 }}>Abra uma produção para aplicar uma trilha. Você já pode ouvir e organizar as músicas.</p>}

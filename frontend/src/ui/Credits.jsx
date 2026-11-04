@@ -1,5 +1,5 @@
 import React from 'react';
-import { CloseButton, Spinner } from './bits.jsx';
+import { Spinner } from './bits.jsx';
 import { getJSON } from '../engine/api.js';
 
 // Créditos do estúdio: saldo, consumo por produção/etapa e extrato (livro-razão do servidor).
@@ -8,18 +8,14 @@ const when = (iso) => {
   catch { return iso; }
 };
 
-export default function CreditsWindow({ v }) {
+export function CreditsContent({ v }) {
   const [d, setD] = React.useState(null);
   const [err, setErr] = React.useState(null);
   const [tab, setTab] = React.useState('uso');
   React.useEffect(() => { getJSON('/api/credits').then(setD).catch((e) => setErr(e.message)); }, []);
 
   return (
-    <section role="dialog" aria-labelledby="cr-h" className="g-panel pop" style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', zIndex: 22, width: 'min(560px,calc(100vw - 24px))', maxHeight: 'calc(100vh - 40px)', padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <h2 id="cr-h" className="fred" style={{ margin: 0, fontSize: 22, fontWeight: 600, flex: 1 }}>Créditos do estúdio</h2>
-        <CloseButton onClick={v.closeWin} label="Fechar créditos" />
-      </div>
+    <div className="pref-stack">
       {err && <div role="alert" style={{ color: '#7A2218' }}>{err}</div>}
       {!d && !err && <div style={{ display: 'grid', placeItems: 'center', padding: 30 }}><Spinner /></div>}
       {d && (
@@ -65,7 +61,7 @@ export default function CreditsWindow({ v }) {
               : (
                 <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
                   {d.statement.map((e) => (
-                    <li key={e.id} style={{ display: 'flex', gap: 10, padding: '8px 2px', borderBottom: '2px dotted #E2D7C3', fontSize: 13 }}>
+                    <li key={e.id} style={{ display: 'flex', gap: 10, padding: '8px 2px', borderBottom: '2px dotted #E3E7EE', fontSize: 13 }}>
                       <span className="g-muted" style={{ width: 82, flex: 'none' }}>{when(e.at)}</span>
                       <span style={{ flex: 1 }}>
                         <strong>{e.label}</strong>{e.stage ? ' · ' + e.stage : ''}
@@ -82,6 +78,6 @@ export default function CreditsWindow({ v }) {
           {!d.exempt && <p className="g-muted" style={{ margin: 0, fontSize: 12 }}>A compra de créditos chega com os planos. Por enquanto, os créditos são liberados pelo administrador.</p>}
         </>
       )}
-    </section>
+    </div>
   );
 }

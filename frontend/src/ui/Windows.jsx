@@ -8,7 +8,7 @@ export function Tutorial({ v }) {
   return (
     <section aria-labelledby="tut-h" className="g-panel pop" style={{ ...center, zIndex: 25, width: 'min(460px,calc(100vw - 32px))', padding: 22, display: 'flex', flexDirection: 'column', gap: 14 }}>
       <h2 id="tut-h" className="fred" style={{ margin: 0, fontSize: 24, fontWeight: 600 }}>Bem-vindo ao seu estúdio</h2>
-      <p style={{ margin: 0, fontSize: 15, lineHeight: 1.5 }}>Aqui seis agentes produzem vídeos de produto com você. Cada um cuida de uma etapa, e quem mostra o <strong style={{ background: '#D5F45B', border: '2px solid #17234B', borderRadius: 999, padding: '0 7px' }}>!</strong> precisa de você.</p>
+      <p style={{ margin: 0, fontSize: 15, lineHeight: 1.5 }}>Aqui seis agentes produzem vídeos de produto com você. Cada um cuida de uma etapa, e quem mostra o <strong style={{ background: '#D5F45B', border: '1px solid #D4DAE4', borderRadius: 999, padding: '0 7px' }}>!</strong> precisa de você.</p>
       <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 8, font: '700 14px/1.3 Nunito Sans,sans-serif' }}>
         <li style={{ display: 'flex', gap: 8, alignItems: 'center' }}><span className="kbd">W</span><span className="kbd">A</span><span className="kbd">S</span><span className="kbd">D</span> ou clique no chão para andar</li>
         <li style={{ display: 'flex', gap: 8, alignItems: 'center' }}><span className="kbd">E</span> perto de alguém para conversar</li>
@@ -27,7 +27,7 @@ export function DialogWindow({ v }) {
   const d = v.dlg;
   return (
     <section role="dialog" aria-labelledby="dlg-name" className="g-panel popb" style={{ position: 'absolute', left: '50%', bottom: 20, transform: 'translateX(-50%)', zIndex: 20, width: 'min(760px,calc(100vw - 24px))', padding: 16, display: 'flex', gap: 16, alignItems: 'flex-start' }}>
-      <div style={{ flex: 'none', width: 92, height: 92, borderRadius: 18, background: d.bg, border: '3px solid #17234B', display: 'grid', placeItems: 'end center', overflow: 'hidden' }}>
+      <div style={{ flex: 'none', width: 92, height: 92, borderRadius: 18, background: d.bg, border: '1px solid #D4DAE4', display: 'grid', placeItems: 'end center', overflow: 'hidden' }}>
         <Boneco look={d.look} anim={d.anim} crop size={84} />
       </div>
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -78,8 +78,8 @@ export function BoardWindow({ v }) {
 export function CustomWindow({ v }) {
   return (
     <section role="dialog" aria-labelledby="cus-h" className="g-panel" style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', zIndex: 20, width: 'min(420px,calc(100vw - 28px))', maxHeight: 'calc(100vh - 28px)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <div style={{ padding: '16px 16px 10px', display: 'flex', alignItems: 'center', gap: 12, borderBottom: '2.5px solid #17234B', background: '#F6EEDD' }}>
-        <div style={{ width: 58, height: 58, borderRadius: 14, background: '#fff', border: '2.5px solid #17234B', display: 'grid', placeItems: 'end center', overflow: 'hidden', flex: 'none' }}>
+      <div style={{ padding: '16px 16px 10px', display: 'flex', alignItems: 'center', gap: 12, borderBottom: '1px solid #D4DAE4', background: '#F7F8FA' }}>
+        <div style={{ width: 58, height: 58, borderRadius: 14, background: '#fff', border: '1px solid #D4DAE4', display: 'grid', placeItems: 'end center', overflow: 'hidden', flex: 'none' }}>
           <Boneco look={v.look} anim="happy" crop size={54} />
         </div>
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>

@@ -50,8 +50,8 @@ export default function TrainingWindow({ v }) {
 
   return (
     <section role="dialog" aria-labelledby="tr-h" className="g-panel" style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', zIndex: 24, width: 'min(920px,calc(100vw - 24px))', height: 'min(720px,calc(100vh - 24px))', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <header style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12, borderBottom: '2.5px solid #17234B', background: '#F6EEDD', flexWrap: 'wrap' }}>
-        {who && who.look && <span aria-hidden="true" style={{ width: 48, height: 48, borderRadius: 12, background: who.look.shirt, border: '2px solid #17234B', overflow: 'hidden', display: 'grid', placeItems: 'end center' }}><Boneco look={who.look} crop size={42} /></span>}
+      <header style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12, borderBottom: '1px solid #D4DAE4', background: '#F7F8FA', flexWrap: 'wrap' }}>
+        {who && who.look && <span aria-hidden="true" style={{ width: 48, height: 48, borderRadius: 12, background: who.look.shirt, border: '1px solid #D4DAE4', overflow: 'hidden', display: 'grid', placeItems: 'end center' }}><Boneco look={who.look} crop size={42} /></span>}
         <div style={{ flex: 1, minWidth: 180 }}>
           <h2 id="tr-h" className="fred" style={{ margin: 0, fontSize: 20 }}>{agent === '_marca' ? 'Base da marca' : 'Treinar ' + (who ? who.name : '')}</h2>
           <span className="g-muted" style={{ fontSize: 12.5, fontWeight: 700 }}>{d ? d.usage : ''}</span>
@@ -60,7 +60,7 @@ export default function TrainingWindow({ v }) {
         <button className="g-btn g-sm" onClick={() => setAgent(agent === '_marca' ? v.trainAgent : '_marca')}>{agent === '_marca' ? 'Voltar ao agente' : 'Regras da marca'}</button>
         <CloseButton onClick={v.closeWin} label="Fechar treinamento" />
       </header>
-      <div role="tablist" style={{ display: 'flex', gap: 4, padding: '8px 10px', flexWrap: 'wrap', borderBottom: '2px solid #E2D7C3' }}>
+      <div role="tablist" style={{ display: 'flex', gap: 4, padding: '8px 10px', flexWrap: 'wrap', borderBottom: '2px solid #E3E7EE' }}>
         {TABS.map(([id, label]) => <button key={id} role="tab" aria-selected={tab === id} className="g-tab" style={{ padding: '0 12px' }} onClick={() => setTab(id)}>{label}</button>)}
       </div>
       {(err || msg) && <div role={err ? 'alert' : 'status'} style={{ margin: '8px 14px 0', padding: '8px 12px', borderRadius: 10, fontSize: 13, fontWeight: 700, background: err ? '#FFE1DC' : '#E3F5DC' }}>{err || msg}</div>}

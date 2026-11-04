@@ -20,7 +20,7 @@ export function Cup({ fill, lid, width = 96, height = 112, sw = 3, hands = false
   );
 }
 
-export function Spinner({ size = 22, track = '#E2D7C3', color = '#17234B' }) {
+export function Spinner({ size = 22, track = '#E3E7EE', color = '#17234B' }) {
   return (
     <svg className="spin" width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <circle cx="12" cy="12" r="9" stroke={track} strokeWidth="3" />
