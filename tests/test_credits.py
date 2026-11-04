@@ -150,3 +150,49 @@ def test_credits_api(app):  # noqa: F811
     status, state = cliente.get("/api/state")
     assert state["credits"]["balance_cc"] == 2500
     assert json.dumps(state["credits"])  # serializável
+
+
+class BrokeProviderImages(FakeRealImages):
+    """Conta do provedor sem créditos pré-pagos (HTTP 402) até `funded` virar True."""
+    funded = False
+
+    def submit(self, req):
+        if not self.funded:
+            from studio.providers.base import ProviderBillingError
+            raise ProviderBillingError("APIStatusError: Error code: 402 - Your prepayment credits are depleted.")
+        return super().submit(req)
+
+
+def test_provider_out_of_credits_pauses_without_spending_attempts(settings, product, tmp_path):
+    from studio.orchestrator import PROVIDER_BILLING_REASON
+    from studio.states import SceneStatus as SS
+    db, wid = ws_db(settings)
+    led = Ledger(db)
+    led.add(wid, 10_000)
+    gen = BrokeProviderImages(settings.data_dir, settings.image_model)
+    orch = real_orch(settings, db, tmp_path, image_gen=gen)
+    pid = new_prod(orch, product, wid)
+    for _ in range(5):  # insistir não esgota as tentativas nem bloqueia a cena
+        assert orch.run(pid) == PS.PAUSED
+        assert db.production(pid)["status_reason"].startswith(PROVIDER_BILLING_REASON)
+        assert db.scene(pid, 1)["status"] == SS.GENERATING_IMAGE
+        assert db.count_generation_attempts(pid, 1, "image") == 0
+        orch.resume(pid)
+    assert led.balance(wid) == 10_000 and led.held(wid) == 0
+    gen.funded = True  # recarregou a conta: retomar gera normalmente
+    orch.run(pid)
+    assert db.scene(pid, 1)["status"] != SS.BLOCKED
+    assert db.count_generation_attempts(pid, 1, "image") >= 1
+
+
+def test_gemini_classifies_402_as_billing():
+    from studio.providers.base import ProviderBillingError
+    from studio.providers.gemini import _classify
+
+    class APIStatusError(Exception):
+        status_code = 402
+    assert isinstance(_classify(APIStatusError("Your prepayment credits are depleted")), ProviderBillingError)
+
+    class Other(Exception):
+        pass
+    assert isinstance(_classify(Other("Error code: 402 - RESOURCE_EXHAUSTED prepayment credits")), ProviderBillingError)

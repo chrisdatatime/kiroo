@@ -22,7 +22,8 @@ from pathlib import Path
 
 from .. import pricing
 from ..models import ReviewResult, SceneSpec, Script
-from .base import ImageRequest, OpResult, OpState, PermanentError, PlanningContext, TransientError, VideoRequest
+from .base import (ImageRequest, OpResult, OpState, PermanentError, PlanningContext, ProviderBillingError,
+                   TransientError, VideoRequest)
 
 PROVIDER = "gemini-api"
 
@@ -43,10 +44,16 @@ def _image_part(path: Path) -> dict:
     return {"type": "image", "data": base64.b64encode(path.read_bytes()).decode("ascii"), "mime_type": mime}
 
 
+_BILLING_RE = re.compile(r"error code: 402|prepayment credits|credits are depleted|billing (is )?not enabled|"
+                         r"insufficient (funds|credits|balance)", re.I)
+
+
 def _classify(exc: Exception) -> Exception:
     """Converte exceções do SDK/HTTP em TransientError ou PermanentError (sem vazar a chave)."""
     code = getattr(exc, "code", None) or getattr(exc, "status_code", None)
     msg = f"{type(exc).__name__}: {str(exc)[:500]}"
+    if code == 402 or _BILLING_RE.search(msg):
+        return ProviderBillingError(msg)
     if isinstance(code, int):
         if code == 429 or code >= 500:
             return TransientError(msg)

@@ -26,7 +26,10 @@ from .models import ProductInput, ProductSheet, ReviewDecision, ReviewResult, Sc
 from .pricing import UnknownPrice
 from .profiles import snapshot
 from .providers.base import (ImageGenerator, ImageRequest, OpState, PermanentError, Planner, PlanningContext,
-                             Reviewer, TransientError, VideoGenerator, VideoRequest)
+                             ProviderBillingError, Reviewer, TransientError, VideoGenerator, VideoRequest)
+
+# Prefixo fixo do motivo de pausa: a interface reconhece e mostra a saída certa (recarregar a conta do provedor).
+PROVIDER_BILLING_REASON = "provedor de IA sem saldo"
 from .reports import write_reports
 from .states import TERMINAL, ProductionStatus as PS, SceneStatus as SS
 from .storage import ProductionStorage, sha256_file
@@ -145,6 +148,8 @@ class Orchestrator:
             status = PS(self.db.production(pid)["status"])
             if status not in TERMINAL and status != PS.PAUSED:
                 self.db.set_production_status(pid, PS.PAUSED, f"erro de FFmpeg: {exc}")
+        except ProviderBillingError as exc:  # roteiro/revisão (chamadas de texto) também podem esbarrar no saldo
+            self._pause_billing(pid, exc)
         finally:
             self._settle(pid)
         write_reports(self.db, pid, self._storage(pid))
@@ -510,6 +515,8 @@ class Orchestrator:
             op_id = gen.submit(req)
         except TransientError as exc:
             return self._transient(pid, att, exc, "envio")
+        except ProviderBillingError as exc:
+            return self._provider_billing(pid, att, exc)
         except PermanentError as exc:
             self.db.update_attempt(att_id, status="failed", error=str(exc)[:1000], error_permanent=1,
                                    finished_at=now(), estimated_cost_usd=0.0,
@@ -525,6 +532,24 @@ class Orchestrator:
                           scene_idx=att["scene_idx"], data={"remote_op_id": op_id})
         log.info("[%s][cena %s] %s enviado (op %s)", pid, att["scene_idx"], att["kind"], op_id)
         return "progress"
+
+    def _provider_billing(self, pid: str, att, exc: Exception) -> str:
+        """Conta do provedor sem saldo: o pedido está certo, então a tentativa não conta (fica substituída),
+        nada é cobrado e a produção pausa; ao retomar, a cena gera de novo do zero."""
+        self.db.update_attempt(att["id"], status="failed", error=str(exc)[:1000], error_permanent=0, superseded=1,
+                               finished_at=now(), estimated_cost_usd=0.0)
+        self.db.add_event(pid, "attempt_failed", f"{att['kind']} #{att['attempt_no']}: {PROVIDER_BILLING_REASON}",
+                          scene_idx=att["scene_idx"])
+        kind = att["kind"]
+        self.db.set_scene_status(pid, att["scene_idx"], SS.GENERATING_IMAGE if kind == "image" else SS.GENERATING_VIDEO,
+                                 PROVIDER_BILLING_REASON, **{f"current_{kind}_attempt": None})
+        self._pause_billing(pid, exc)
+        return "paused"
+
+    def _pause_billing(self, pid: str, exc: Exception) -> None:
+        status = PS(self.db.production(pid)["status"])
+        if status not in TERMINAL and status != PS.PAUSED:
+            self.db.set_production_status(pid, PS.PAUSED, f"{PROVIDER_BILLING_REASON}: {str(exc)[:300]}")
 
     def _transient(self, pid: str, att, exc: Exception, stage: str) -> str:
         retries = att["transient_retries"] + 1
@@ -548,6 +573,8 @@ class Orchestrator:
             result = gen.poll(att["remote_op_id"])
         except TransientError as exc:
             return self._transient(pid, att, exc, "consulta")
+        except ProviderBillingError as exc:
+            return self._provider_billing(pid, att, exc)
         except PermanentError as exc:
             # Pedido recusado (ex.: geração síncrona em segundo plano): repetir igual não adianta.
             self.db.update_attempt(att_id, status="failed", error=str(exc)[:1000], error_permanent=1, finished_at=now(),

@@ -23,6 +23,11 @@ class PermanentError(Exception):
     """Falha definitiva (entrada inválida, bloqueio de segurança, 4xx): não repetir igual."""
 
 
+class ProviderBillingError(PermanentError):
+    """A conta do provedor ficou sem saldo/cobrança (ex.: HTTP 402). O pedido em si está certo:
+    não gasta tentativa da cena; a produção pausa até o operador recarregar a conta e retomar."""
+
+
 class OpState(StrEnum):
     RUNNING = "running"
     SUCCEEDED = "succeeded"
