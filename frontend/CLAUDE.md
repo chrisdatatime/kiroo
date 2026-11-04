@@ -16,12 +16,37 @@ npm run dev          # desenvolvimento: Vite em :5173 com proxy de /api e /media
 ```
 O servidor Python precisa estar no ar (`studio ui` na raiz do repositório). O painel administrativo antigo fica em `/painel`.
 
+## Shell (Fase 0 do plano em `../docs/VISAO_PRODUTO.md`)
+O produto abre na **Central**, não no mundo. `src/shell/`: `Shell.jsx` (lateral, barra superior, paleta Ctrl/⌘ K; `VIEWS`), `Central.jsx` (fila "precisa de você"),
+`MissionView.jsx` (fluxo objetivo → orquestrador → frentes → revisão → entrega com o estado real), `TeamView.jsx`, `pipeline.js` (derivação pura, `tests/pipeline.test.mjs`),
+`shell.css` (tokens `.pv`). O Escritório é a 4ª view e continua com o HUD de jogo. `App.state.view` (`bc.view`) escolhe a view; o mundo mede só a área útil (`stageEl`);
+WASD/E só valem na view `escritorio`. Estilo novo = classes `pv-*`; as `g-*` ficam no mundo e nas janelas antigas.
+Layout (Fase 4b, padrão de escritório virtual): trilho de ícones (menu do estúdio no logo, busca, views, Atividade em Popover, Preferências),
+painel colapsável (`bc.panel`: missão aberta, próxima ação, busca e equipe com estado, conta) e a área de trabalho num cartão. Conta, Piloto,
+Créditos e Sobre vivem no modal `ui/Preferences.jsx` (`v.openPrefs(tab)`; `win` = prefs | account | pilot | credits | about); as janelas
+antigas exportam só o conteúdo (`AccountContent`, `PilotContent`, `CreditsContent`, `AboutContent`).
+
+## Home pública (antes do login)
+Sem sessão, o App mostra `src/landing/Landing.jsx` (lazy, CSS `landing.css` com escopo `.lp`); "Entrar"/"Criar conta" abrem `AuthScreen`
+(`App.state.entry` = `login` | `signup`; "Voltar para o início" limpa). `?entrar` abre direto o login; `?reset=` vai para a nova senha;
+sessão que expira com o estúdio aberto volta direto ao login. Imagens da sede e retratos: `python tools/render_home.py` gera
+`src/assets/home/` (derivado da arte LimeZu, fora do git; sem eles a home mostra superfícies neutras). Nada de depoimentos, logos ou números inventados.
+
+## Pedaços sob demanda
+Todo `React.lazy` usa `lazyChunk` (`src/lib/lazyChunk.jsx`): se um chunk antigo sumiu depois de um build, a página recarrega uma vez;
+se falhar de novo, `AppBoundary` (em `main.jsx`) mostra "Algo travou por aqui" com Recarregar, em vez de tela vazia.
+
+## Kit de onboarding (Fase 5)
+`src/onboarding/`: `tour.js` (passos em `STEPS` + lógica pura, `tests/onboarding.test.mjs`), `Onboarding.jsx` (lazy; Dialog + spotlight) e `onboarding.css`.
+Estado no servidor (`user.onboarding` em `/api/me`, `POST /api/onboarding`); reserva em `bc.onb`. Alvos são `data-tour="..."` nos elementos reais;
+"Rever tutorial" chama `v.openTour()`. Detalhes e como adicionar passo: `../docs/HANDOFF.md`, seção Fase 5.
+
 ## Estrutura
 ```
 src/
   App.jsx            # estado do jogo + ações da produção (chamam a API) + viewModel()
   engine/api.js      # /api/me (guarda o CSRF), GET/POST com X-Studio-Token, auth() com X-Studio-Client, 401 → tela de login
-  ui/Auth.jsx        # entrar / criar conta / esqueci a senha / nova senha (?reset=token)
+  ui/Auth.jsx        # acesso: entrar, criar conta, confirmar e-mail (código de 6 dígitos), esqueci a senha, nova senha (?reset=token), Google; CSS em ui/auth.css (.au)
   ui/Account.jsx     # Minha conta (botão com o nome no HUD): dados, saldo, link do painel (admin) e Sair
   ui/Credits.jsx     # Créditos do estúdio: saldo, consumo por produção/etapa e extrato (GET /api/credits)
   engine/adapter.js  # estado REAL (/api/state) → etapas do jogo (STAGES) e créditos
@@ -36,6 +61,10 @@ src/
 - Sem sessão, `App` mostra `AuthScreen`; o escritório só monta depois do login (por isso `setRoot` mede a tela ao montar).
   Se o workspace mudar neste navegador (`bc.ws`), a produção aberta (`bc.pid`) é esquecida.
 - Fora de localhost/127.0.0.1, `Auth.jsx` esconde a aba Criar conta: em `studio publish` o servidor recusa cadastro (só convite).
+- Acesso (`ui/Auth.jsx`): componentes shadcn (Button/Input/Label) com os tokens da home; `GET /api/auth/config` diz se há cadastro, Google e envio de e-mail.
+  Depois do cadastro vem a etapa do código (`/api/auth/verify`, `/api/auth/resend`; pode confirmar depois: a conta já entra em DEMO; `user.email_verified` em `/api/me`).
+  Google é OAuth no servidor (`/api/auth/google/start` → `callback`), só com `STUDIO_GOOGLE_CLIENT_ID/SECRET`; erros voltam como `/?entrar&erro=<código>`.
+  Sem `STUDIO_SMTP_HOST`, código e link de nova senha vão para o log do servidor (`src/studio/mailer.py`). Não há Clerk: a sessão continua sendo a do servidor Python.
 - Duas coisas diferentes chamadas "créditos": `v.credits` é o medidor da produção (usado/limite) e `v.wallet` é o saldo
   do workspace (`S.credits`). Uma pausa com "saldo de créditos" vira o aviso `kind: 'saldo'` no BudgetBox.
 - `refresh()` consulta `/api/state` a cada 1,5 s; `deriveStage()` traduz status de produção/cenas para
@@ -69,7 +98,8 @@ A importação automática de fotos pelo link **não existe**: as fotos vêm do 
 - Acessibilidade: elementos interativos são `<button>`/`<a>`, foco visível, alvos ≥ 44 px, estados não dependem só de cor.
 
 ## Identidade visual
-Marca **Pivoo**, assinatura "Seu estúdio ganha vida." Marinho `#17234B`, lima `#D5F45B` (próxima ação, seleção, "!"), creme `#FFF8EC`,
+Interface (Fase 4b): tema claro, primário índigo `#3B44E6`, texto `#1F2430`, linha `#E3E7EE`, fonte Geist; lima fica só para "precisa de você" (!).
+As classes `g-*` foram redesenhadas com esses tokens. Marca **Pivoo**, assinatura "Seu estúdio ganha vida." Marinho `#17234B`, lima `#D5F45B` (próxima ação, seleção, "!"), creme `#FFF8EC`,
 preto `#111111`, azul-céu `#8ED8F8`. Fonte Nunito Sans. Os **olhos** são o centro da identidade e mudam com o humor do personagem.
 Logos e padrão ficam em `src/assets/` (PNG transparentes enviados pelo Chris; não são vetores). Apoio da pixel art: lavanda `#B8B4DE`. Sem emojis como ícones, sem gradientes roxos.
 

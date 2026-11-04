@@ -1,5 +1,25 @@
 # HANDOFF — migração visual do Pivoo (SPEC-VIS-001)
 
+> **2026-11-04 — reavaliação de produto:** diagnóstico, visão e plano em [VISAO_PRODUTO.md](VISAO_PRODUTO.md). Fase 0 entregue: shell com Central, Missão, Equipe e Escritório
+> (`frontend/src/shell/`). Pendente: validar no seu navegador; `tests/minigames.test.mjs` segue falhando (já falhava antes).
+
+## Arte licenciada fora do git: como chega ao deploy (2026-11-04)
+Três pastas **não estão no git** (licença LimeZu) e entram no **build**, não no servidor:
+`assets/characters/*.png` (folhas dos agentes e do jogador), `assets/tilesets/` (inclui `interiors_atlas.png`, gerado por `tools/build_map.py`) e
+`frontend/src/assets/home/` (gerado por `tools/render_home.py`).
+- As folhas entram no bundle por `import.meta.glob` (`ui/WorldPhaser.jsx`); os tilesets, pelo carregamento do `.tmj`. O servidor Python só serve
+  `frontend/dist` (`GAME_DIST` em `web/server.py`). Então **a máquina que roda `npm run build` precisa ter as três pastas**. O servidor não precisa delas.
+- Se faltarem, o build **não falha**: o mundo cai no feijão (`charSprite`) e a home fica sem imagens. Por isso o deploy tem de conferir antes do build.
+  A partir da 7.1, `tools/check_avatars.py` valida `assets/characters/manifest.json` e falha com erro claro.
+- Hoje não existe deploy (fase E do `ROADMAP_SAAS.md`). Regra para quando existir: as três pastas ficam num armazenamento privado (bucket ou
+  artefato da CI com acesso restrito), são copiadas para o contexto do build antes de `npm run build` e **nunca** entram numa imagem pública nem no
+  repositório. Hoje a única cópia está na máquina do Chris (origem: `Downloads\moderninteriors-win`), então vale ter um backup privado.
+
+## Folhas PIVOO dos agentes (2026-11-04, 512×1536)
+`assets/characters/{nina,theo,iris,rui,lia,beto}.png` = grade exata 16×48 de quadros 32×32 (corpo em y 3..29, pé em y=29). Carregadas como spritesheet normal (sem normalizador;
+`spriteLayout.js` removido). 8 direções horárias S,SW,W,NW,N,NE,E,SE; usadas só as 4 cardeais. Linhas 0-3 = espera (8 quadros/direção), 4-11 = caminhada (16/direção, 1 ciclo = 2 tiles),
+20 = prancheta de frente (usada como "trabalhando"). Mapeamento em `sprites.js` (`pivooFrame`). Não há guia oficial dessas folhas: o resto das linhas (corrida?, sono, "!", rindo, carregando) foi visto mas **não mapeado**; sentado de frente/costas e "precisa de você" ainda usam espera.
+
 ## Estado atual
 Fase 1 entregue (pipeline + sala de Edição só com tiles do LimeZu).
 **Fase 2 entregue (2026-11-04), aguardando validação do Chris:** o `office.tmj` roda no Phaser 3 dentro do Pivoo, atrás
@@ -259,3 +279,132 @@ Só `room_builder_office` (chão e parede) e `modern_office` (móveis); nenhum t
 ## Itens da antiga lista "Falta para a Fase 2"
 Todos resolvidos na Fase 2 (acima). Decisão sobre a câmera: **a câmera segue o personagem; a sede não encolhe para caber
 na tela.** Os personagens usam o sprite de `characters.js` em escala 2×.
+
+## Fase 3 — personagens humanos do LimeZu no mundo Phaser (2026-11-04)
+Só o renderer Phaser usa os sprites novos (`frontend/src/game/phaser/sprites.js`, `OfficeScene.drawHuman`). `characters.js`, `Boneco.jsx` e o
+renderer canvas seguem intactos (HUD, fichas, retratos, "Meu escritório"). As folhas ficam em `assets/characters/` (**fora do git**, licença;
+`/assets/characters/` no `.gitignore`); sem os PNGs o mundo cai no feijão (`charSprite`), então o clone limpo continua funcionando.
+- **Folha**: 1792×1312, quadro **32×64** (não 32×32), 56 colunas, grade começa em (0,0); os 32 px finais da altura são vazios.
+  Índices 0-based. Direções (idle/walk, 6 quadros cada): direita 0-5, cima 6-11, esquerda 12-17, baixo 18-23. Faixas: 1 idle, 2 walk,
+  4 sit, 5 sit2 (pernas escondidas), 6 phone (0-2 início, 3-8 loop, 9-11 fim). `assets/characters/contact-sheet.png` documenta tudo (theo.png).
+  O guia original está em `Downloads\moderninteriors-win\2_Characters\Character_Generator\Spritesheet_animations_GUIDE.png`.
+- **Pé**: última linha opaca y=63 andando/parado, y=61 sentado; topo da cabeça em y=16 → origem (0.5, 1), nome 48 px acima do pé.
+- **Ligação** agente → folha em `CHARACTER_SHEETS` (nina, theo, iris, rui, lia, beto); jogador → `voce`.
+- **Poses**: andando = walk, quadro em função da **distância percorrida** (agentes 1 ciclo por tile, jogador 1 ciclo a cada 2 tiles; sem
+  deslizar nem andar no lugar); parado = idle (4 fps); sentado/digitando = sit2 de lado (digitando anima, sentado fica no quadro 0);
+  pedindo atenção = phone (início + loop); feliz = idle de frente com pulinho de 3 px; acenar = **não existe no guia**, usa phone (só o
+  estado "need" chama acenar hoje). Origem nos pés, escala 1, NEAREST, depth = y do pé (sentado: `foot + 1`, na frente do móvel).
+- **Sentado** (o guia só tem sit de lado; o Chris reprovou o lado em tudo e escolheu A no sofá, B na mesa): `seatMode(kind, face)` em
+  `sprites.js`: assento `kind` agent/visitor (cadeira de mesa) = idle **de costas** rebaixado; os demais (sofá, puff, poltrona, cabine) =
+  idle **de frente** rebaixado; assento com `face` left/right = sit de lado. Rebaixado = corpo alinhado pela última linha opaca do tile
+  do assento (`rimOf`; o sofá tem ~8 px vazios embaixo), `SEAT.cut`=4 px de perna escondidos e a faixa de baixo do tile (`SEAT.cover`=8 px)
+  redesenhada por cima do personagem. Sem tile do assento em `furniture_sorted`, cai no sit de lado. `kind` vem dos objetos `seat` do `.tmj`.
+  Só validado a olho na cadeira (8,5) e no sofá (20,3) com um boneco de teste; puff, poltrona e cabine ainda não foram vistos neste modo.
+
+### Pendências da Fase 3
+1. O jogador no mundo usa `voce.png` fixo; "Meu escritório" ainda customiza só o feijão (look/cor). Ligar a escolha à folha fica para depois.
+2. Agente `need` sentado continua sentado (sem phone); o aviso é só o "!" do balão. Phone é só para quem está em pé.
+3. Sem animação de acenar; o guia tem outras poses (sleep, pick up, gift...) ainda não usadas.
+4. `tests/minigames.test.mjs` recebe o módulo por argumento (`node tests/minigames.test.mjs ../src/game/minigames.js`); sem ele dá `ERR_MODULE_NOT_FOUND`.
+5. 125%/150% de zoom conferidos por simulação do DPR (sem zoom real do navegador): zoom da câmera inteiro, sprite em escala 1,
+   posição arredondada, nome com escala dpr/zoom.
+
+## Fase 4 — UI clara do mundo Phaser (2026-11-04, sem commit)
+Só vale com `?world=phaser` e a camada HTML dele (`frontend/src/ui/WorldPhaser.jsx`, `ui/world/`). Mapa, `tools/`, flag e renderer canvas não mudaram
+(o canvas usa as mesmas classes `px-*`; o estilo novo é todo escopado em `.pw-root`).
+- **Tokens (só claro)**: `--pw-*` em `styles.css` sobre `.pw-root` (camada do mundo) e `.pw-theme` (conteúdo em portal: HoverCard, Dialog,
+  Tooltip). Fundo `#D7F3DC` (Phaser `backgroundColor` + câmera + container, sem faixa escura), superfície branca 94% + borda `#DCE3EE` +
+  sombra suave, raio 12–16, primário índigo `#3B44E6`, texto `#1F2430`, secundário `#6B7280`, "precisa de você" = lima da marca com texto
+  escuro e "!". `.pw-theme` também redefine `--primary`, `--ring`, `--popover`... para o shadcn usar o índigo. Espelho para o canvas do
+  Phaser em `game/phaser/theme.js` (pill do nome: branca, borda sutil, texto escuro; jogador/perto: índigo com texto branco).
+- **Zoom inteiro com tween** (`game/phaser/zoom.js`, `OfficeScene.zoomTo`): níveis 1x–4x em px CSS; o Phaser usa `floor(nível × DPR)`,
+  sempre inteiro em px do dispositivo. Cada passo anima 150 ms (fracionário só durante o tween), trava no inteiro e arredonda o scroll
+  (`snapScroll`). `prefers-reduced-motion` troca direto. Roda: `wheelAccumulator` (limiar 40 px, trava 200 ms por gesto) — um passo
+  por notch e uma rajada de trackpad não pula níveis; zoom ancorado no cursor (`anchorScroll`). Botões à direita (+, nível, −,
+  centralizar, automático) e teclas + / −. A escolha sobrescreve o `pickZoom` e fica em `localStorage` `bc.zoom` (try/catch;
+  "automático" apaga). `pickZoom` não mudou (é `deviceZoom(pickLevel(w))`), então o `tmj.test` segue igual; `tests/zoom.test.mjs` cobre
+  clamp, níveis inteiros em DPR 1/1,25/1,5/2, âncora, roda e armazenamento.
+- **Câmera**: segue o jogador; zoom pela roda (no cursor) ou arrastar (botão do meio em qualquer ponto do mundo, ou esquerdo no chão,
+  limiar 5 px; o clique que fecha o arraste não manda andar) soltam a câmera. "Centralizar" volta a seguir; se a câmera está solta e o
+  jogador anda para fora da vista, ela volta a seguir sozinha. +/− pelos botões zoomam no centro.
+- **Interação**: HoverCard (shadcn, 150 ms, fade+scale) nas placas de sala e nos agentes: nome, agente/função, estado, "Ir à sala" e
+  "Abrir" (a janela da etapa, `openRoomWork`). Clique na placa abre `RoomDialog` (Dialog shadcn, lazy) com o detalhe e "Ir à sala" /
+  "Abrir trabalho". Clique no agente continua sendo conversar. Placas levantam 2 px na tela com sombra no hover; "!" e balão de atenção
+  pulsam (o balão só no brilho: o transform dele é a posição). `.pw-root` tem `pointer-events: none`; só `.px-world` e `.pw-zoom` recebem.
+  Teclas dentro do card/dialog não chegam ao WASD do App (só Esc passa).
+- **Performance**: zoom/câmera mudam o React só via `onView` quando nível/auto/solto mudam; hover é do próprio Radix (sem setState por
+  movimento); a posição do card segue o gatilho com `updatePositionStrategy="always"` só enquanto aberto.
+- **shadcn**: Tailwind v4 + shadcn (radix-nova, JSX) já estavam no working tree; nesta fase entraram `components/ui/hover-card.jsx` e
+  `components/ui/dialog.jsx` (`npx shadcn add`; `package.json` não mudou, `radix-ui` já existia). Sem framer-motion (tw-animate-css basta).
+  Popover e Command não foram adicionados (ainda não usados).
+- `viewModel` ganhou `rooms[].agent/role` e `chars[].name/role/room` (só leitura, para os cards).
+
+### Pendências da Fase 4
+1. Painel lateral estilo Gather (pessoas online, busca, Ctrl+K "Ir à sala"): **aguardando aprovação**. O Shell já tem lateral e paleta Ctrl/⌘ K;
+   decidir se o painel do mundo substitui ou complementa.
+2. Hover é nas placas e nos agentes, não na área da sala (não há retângulo das salas no viewModel do Phaser).
+3. O Dialog substitui só o clique da placa; a janela da etapa (`ProdWindow`) continua a antiga.
+4. 125%/150% do Windows: o painel do navegador não emula DPR; coberto pelos testes de `zoom.js` (níveis inteiros e distintos por DPR).
+5. `tests/minigames.test.mjs` precisa do caminho do módulo: `node tests/minigames.test.mjs ../src/game/minigames.js` (não é falha).
+
+## Fase 4b — shell e modais modernizados (2026-11-04, sem commit)
+Pedido do Chris: o sistema todo no padrão de layout de escritório virtual (trilho, painel, modais), sem copiar marca.
+- **Shell** (`frontend/src/shell/Shell.jsx`, `shell.css`): saiu o `Sidebar` do shadcn. Trilho de ícones de 64 px (logo = menu escuro do estúdio com
+  "Nova missão", Preferências, Piloto, Créditos, Sobre, Painel do admin, Sair; busca Ctrl K; Central/Missões/Agentes/Escritório; sino de Atividade;
+  engrenagem), painel colapsável de 288 px (`bc.panel`; abaixo de 900 px vira sobreposto) com seletor de missão, card "Próxima ação", busca de
+  agentes, equipe com avatar e ponto de estado, e conta no rodapé; a área de trabalho é um cartão branco arredondado. A paleta Ctrl K ganhou "Ir à sala".
+- **Atividade**: Popover (`components/ui/popover.jsx`, novo) com `v.attn`; "lido" fica em `bc.seen` neste navegador (o item some só quando é resolvido).
+- **Preferências** (`ui/Preferences.jsx`, lazy): Dialog com navegação à esquerda: Geral (modo de cor, visual da sede canvas/Phaser), Piloto, Minha conta,
+  Créditos e extrato, Sobre. `openAccount/openPilot/openCredits/openAbout` continuam funcionando (abrem a aba certa); `v.openPrefs(tab)` é novo.
+  `Account/Pilot/Credits/About.jsx` exportam só o conteúdo; as janelas soltas foram removidas.
+- **Tokens**: shadcn `--primary` índigo `#3B44E6`, `--ring` índigo, texto `#1F2430`, bordas `#E3E7EE`. Classes `g-*` (HUD do jogo, janelas antigas)
+  redesenhadas: superfície branca, borda 1 px, sombra suave, raio 10–16, fonte Geist; `.g-lime` virou o botão primário índigo. Cores inline das
+  janelas antigas trocadas (bordas navy → `#D4DAE4`, creme/bege → `#F7F8FA`). Lima ficou só para "precisa de você".
+
+### Pendências da Fase 4b
+1. As janelas grandes (`ProdWindow`, Quadro, Setores, Treino, Trilhas, Jogos, diálogo com agente) ainda são `<section>` posicionadas, sem fundo
+   escurecido nem foco preso; o visual já é o novo, mas o próximo passo é migrá-las para Dialog/Sheet do shadcn, uma por vez.
+2. O mundo canvas (padrão) também pegou o HUD novo (`g-*`); o mapa em si não mudou.
+3. Modo escuro: não existe (Preferências mostra "Claro").
+
+## Hover do mapa Phaser (2026-11-04, sem commit)
+- Tile sob o cursor: quatro cantos em L discretos no chão (`OfficeScene.drawHover`, depth 1, abaixo dos móveis), só onde dá para andar.
+- Cadeira/assento livre, monitor da sala, Meu setup e objetos com interação: contorno branco de 2 px na tela + preenchimento branco 28% e
+  um rótulo em pill com a ação ("Sentar aqui", "Levantar", "Usar o monitor: Revisão"...). Agentes ficam de fora (já têm hover card).
+- `App.hoverAt(i, j)` decide (reaproveita `targetAtTile`, `highlightOf`, `labelFor`, `passP`); a cena guarda o ponteiro em px do canvas,
+  recalcula o tile por frame só com a câmera e só redesenha quando tile, resultado ou zoom mudam. Nenhum setState: o cursor (pointer em
+  alvo) é um `data-hover` no overlay. Placas escondem o destaque; o rótulo "Monitor" do DOM ficou oculto no Phaser (o Phaser mostra a ação).
+
+## Fase 5 — kit de onboarding (2026-11-04, sem commit)
+Tour guiado pós-login, igual nos dois renderizadores (canvas e `?world=phaser`). Mapa e `tools/` não mudaram.
+- **Onde o estado fica**: no usuário, no servidor. `users.onboarding_done_at` (nulo = ainda não concluiu/pulou) e `users.onboarding_step`
+  (índice em `STEPS`, para retomar), criados pela migração em `src/studio/accounts.py` (`Accounts.onboarding/set_onboarding`).
+  `GET /api/me` devolve `user.onboarding = {done_at, step}`; `POST /api/onboarding` aceita `{step}` (onde parou), `{step, done: true}`
+  (concluiu ou pulou) e `{done: false}` (reabre). Teste: `tests/test_accounts.py::test_onboarding_persists_per_user`.
+  Reserva: se o `/api/me` não trouxer o campo ou o POST falhar, o App grava em `localStorage` (`bc.onb`). Usuários antigos também veem o kit uma vez.
+- **Quando abre**: `App.maybeStartTour()` depois do login, se `done_at` é nulo (conta nova e conta DEMO inclusive), no passo salvo. O componente
+  (`frontend/src/onboarding/Onboarding.jsx`) é `React.lazy` (chunk próprio de ~12 kB) e fica dentro de um error boundary (`TourBoundary`):
+  se falhar, só o tour some. A dica antiga do escritório (`Tutorial` em `ui/Windows.jsx`) não aparece com o tour aberto e é dispensada quando ele termina.
+- **Como reabrir**: "Rever tutorial" em Preferências → Geral (seção Ajuda), Minha conta, Sobre e créditos, menu do estúdio (logo) e Ctrl K
+  (digite "rever"). Tudo chama `v.openTour()`, que recomeça do passo 1 sem mexer no `done_at`.
+- **Comportamento**: passo 1 e conclusão são Dialog do shadcn (fade + scale); os demais são spotlight: máscara SVG com recorte arredondado
+  (o Chromium não repinta máscara com x/y vindos de CSS, então o recorte anda por um tween curto em JS, `useCutTween`) e card com seta,
+  posicionado por `placeCard` (lado preferido → outros lados → por dentro, no canto superior direito, no caso do mundo). Voltar, Próximo,
+  Pular tutorial (com confirmação), "N de 8", Esc fecha e salva o passo, ← → navegam, foco preso no card, `aria-live` no título.
+  Quatro bloqueadores em volta do recorte impedem clique fora do alvo; o alvo continua usável. No passo do escritório as teclas sobem até o
+  Shell (dá para andar com WASD/setas com o tour aberto). Alvo ausente ou escondido (painel recolhido, tela estreita) → card centralizado.
+  `prefers-reduced-motion` desliga as transições. Posição recalculada por ResizeObserver + resize/scroll num rAF, mais uma checagem a cada 500 ms.
+- **Passo 6**: "Isento" é o botão de saldo do workspace (`credits_exempt`: consumo registrado, saldo não exigido; outros estúdios veem
+  "N créditos") e o botão ao lado é o Piloto (Manual/Assistido/Automático). O texto do passo muda com a conta.
+- **Como adicionar um passo**: inclua um objeto em `STEPS` (`frontend/src/onboarding/tour.js`; os campos estão documentados no topo do arquivo:
+  `id`, `kind`, `targets`, `view`, `side`, `interactive`, `skip`, `title`, `body`) e marque o elemento real com `data-tour="<alvo>"`.
+  Alvos atuais: `team`, `team-head`, `next-action`, `account` (painel), `new-mission`, `top-modes` (topo), `overview`, `needs-you` (Central),
+  `office` (área do mundo), `office-rail` (trilho). O passo salvo é o índice em `STEPS`: ao inserir no meio, quem parou depois dele retoma um passo antes.
+- **Testes**: `node frontend/tests/onboarding.test.mjs` (passo salvo/retomado, pular conclui, alvo ausente → centralizado, posição do card).
+  Navegador (conta nova, servidor local): fluxo 1→8 + conclusão, fechar no passo 4 e retomar, Rever tutorial (Ctrl K, Conta, Sobre),
+  `?world=phaser` e `?world=canvas`, celular 375 px.
+
+### Pendências da Fase 5
+1. Com 1024 px o botão do Piloto fica escondido (`pv-hide-md`); o passo 6 recorta só o saldo e o texto cita "no topo ou no menu do logo".
+2. No passo do escritório o card cobre parte do botão "Abrir ficha" do HUD em telas de ~1000 px de largura.
+3. "Pular" e "Concluir" usam a mesma marca (`done_at`); se um dia for preciso saber quem pulou, guardar o motivo numa coluna à parte.
