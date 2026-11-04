@@ -18,6 +18,10 @@ from .db import Database, new_id, now
 
 SESSION_DAYS = 30
 RESET_MINUTES = 30
+VERIFY_MINUTES = 30
+VERIFY_MAX_TRIES = 5
+VERIFY_RESEND_S = 45
+NO_PASSWORD = "!"  # conta criada pelo Google: login por senha só depois de definir uma (esqueci a senha)
 LOGIN_WINDOW_MIN = 15
 LOGIN_MAX_FAILS = 8
 EMAIL_RE = re.compile(r"^[^@\s]{1,64}@[^@\s]{1,190}\.[a-z]{2,24}$", re.I)
@@ -57,6 +61,13 @@ CREATE TABLE IF NOT EXISTS sessions (
 CREATE TABLE IF NOT EXISTS login_attempts (
     key TEXT NOT NULL,
     ts TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS email_codes (
+    user_id TEXT PRIMARY KEY REFERENCES users(id),
+    code_hash TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    sent_at TEXT NOT NULL,
+    tries INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS password_resets (
     token_hash TEXT PRIMARY KEY,
@@ -109,20 +120,34 @@ class Accounts:
             db.conn.execute("ALTER TABLE workspaces ADD COLUMN credits_exempt INTEGER NOT NULL DEFAULT 0")
             db.conn.execute("UPDATE workspaces SET credits_exempt=1 WHERE owner_id IN"
                             " (SELECT id FROM users WHERE is_platform_admin=1)")
+        user_cols = {r[1] for r in db.conn.execute("PRAGMA table_info(users)")}
+        if "onboarding_done_at" not in user_cols:  # kit de onboarding (Fase 5): concluído/pulado vale em qualquer dispositivo
+            db.conn.execute("ALTER TABLE users ADD COLUMN onboarding_done_at TEXT")
+        if "onboarding_step" not in user_cols:
+            db.conn.execute("ALTER TABLE users ADD COLUMN onboarding_step INTEGER NOT NULL DEFAULT 0")
+        if "email_verified_at" not in user_cols:  # verificação de e-mail: quem já tinha conta continua entrando sem nada a fazer
+            db.conn.execute("ALTER TABLE users ADD COLUMN email_verified_at TEXT")
+            db.conn.execute("UPDATE users SET email_verified_at=created_at")
+        if "google_sub" not in user_cols:  # login com Google (id estável da conta Google)
+            db.conn.execute("ALTER TABLE users ADD COLUMN google_sub TEXT")
 
     # ----------------------------------------------------------- usuários
-    def create_user(self, email: str, password: str, name: str = "", *, admin: bool = False,
-                    workspace_name: str | None = None) -> tuple[str, str]:
+    def create_user(self, email: str, password: str | None, name: str = "", *, admin: bool = False,
+                    workspace_name: str | None = None, verified: bool = False,
+                    google_sub: str | None = None) -> tuple[str, str]:
         email = (email or "").strip().lower()
         if not EMAIL_RE.match(email):
             raise AuthError("e-mail inválido")
-        validate_password(password)
+        if google_sub is None or password:
+            validate_password(password or "")
         if self.db.conn.execute("SELECT 1 FROM users WHERE email=?", (email,)).fetchone():
             raise AuthError("já existe uma conta com este e-mail")
         uid, wid = new_id("usr"), new_id("ws")
         name = (name or email.split("@")[0]).strip()[:80]
-        self.db.conn.execute("INSERT INTO users(id, email, name, pw_hash, is_platform_admin, created_at) VALUES (?,?,?,?,?,?)",
-                             (uid, email, name, hash_password(password), int(admin), now()))
+        self.db.conn.execute("INSERT INTO users(id, email, name, pw_hash, is_platform_admin, created_at, email_verified_at, google_sub)"
+                             " VALUES (?,?,?,?,?,?,?,?)",
+                             (uid, email, name, hash_password(password) if password else NO_PASSWORD, int(admin), now(),
+                              now() if verified else None, google_sub))
         self.db.conn.execute("INSERT INTO workspaces(id, name, owner_id, created_at) VALUES (?,?,?,?)",
                              (wid, (workspace_name or f"Estúdio de {name}")[:80], uid, now()))
         self.db.conn.execute("INSERT INTO memberships(user_id, workspace_id, role) VALUES (?,?,'owner')", (uid, wid))
@@ -149,6 +174,23 @@ class Accounts:
         if fields:
             cols = ", ".join(f"{k}=?" for k in fields)
             self.db.conn.execute(f"UPDATE workspaces SET {cols} WHERE id=?", (*fields.values(), wid))
+
+    def onboarding(self, uid: str) -> dict:
+        row = self.db.conn.execute("SELECT onboarding_done_at, onboarding_step FROM users WHERE id=?", (uid,)).fetchone()
+        return {"done_at": row["onboarding_done_at"], "step": int(row["onboarding_step"] or 0)} if row else {"done_at": None, "step": 0}
+
+    def set_onboarding(self, uid: str, *, step: int | None = None, done: bool | None = None) -> dict:
+        """Passo atual do tour (para retomar) e conclusão. done=True marca concluído/pulado; done=False reabre."""
+        if step is not None:
+            step = int(step)
+            if not 0 <= step <= 50:
+                raise AuthError("passo inválido")
+            self.db.conn.execute("UPDATE users SET onboarding_step=? WHERE id=?", (step, uid))
+        if done is True:
+            self.db.conn.execute("UPDATE users SET onboarding_done_at=COALESCE(onboarding_done_at, ?) WHERE id=?", (now(), uid))
+        elif done is False:
+            self.db.conn.execute("UPDATE users SET onboarding_done_at=NULL WHERE id=?", (uid,))
+        return self.onboarding(uid)
 
     # ----------------------------------------------------------- login
     def _throttled(self, key: str) -> bool:
@@ -183,7 +225,7 @@ class Accounts:
         if not token:
             return None
         row = self.db.conn.execute(
-            "SELECT s.*, u.email, u.name, u.is_platform_admin FROM sessions s JOIN users u ON u.id=s.user_id WHERE token_hash=?",
+            "SELECT s.*, u.email, u.name, u.is_platform_admin, u.onboarding_done_at, u.onboarding_step, u.email_verified_at FROM sessions s JOIN users u ON u.id=s.user_id WHERE token_hash=?",
             (_sha(token),)).fetchone()
         if not row or row["expires_at"] < now():
             return None
@@ -200,6 +242,56 @@ class Accounts:
             raise AuthError("workspace não encontrado")
         self.db.conn.execute("UPDATE sessions SET workspace_id=? WHERE token_hash=?", (wid, _sha(token)))
 
+    # ----------------------------------------------------------- verificação de e-mail
+    def start_verification(self, uid: str) -> str:
+        """Gera um código de 6 dígitos (vale 30 min, substitui o anterior). Reenvio no máximo a cada 45 s."""
+        u = self.user(uid)
+        if not u:
+            raise AuthError("conta não encontrada")
+        if u["email_verified_at"]:
+            raise AuthError("este e-mail já está confirmado")
+        row = self.db.conn.execute("SELECT sent_at FROM email_codes WHERE user_id=?", (uid,)).fetchone()
+        if row:
+            age = (datetime.now(timezone.utc) - datetime.fromisoformat(row["sent_at"])).total_seconds()
+            if age < VERIFY_RESEND_S:
+                raise AuthError(f"aguarde {int(VERIFY_RESEND_S - age) + 1} s para pedir outro código")
+        code = f"{secrets.randbelow(10 ** 6):06d}"
+        exp = (datetime.now(timezone.utc) + timedelta(minutes=VERIFY_MINUTES)).isoformat(timespec="seconds")
+        self.db.conn.execute("INSERT OR REPLACE INTO email_codes(user_id, code_hash, expires_at, sent_at, tries) VALUES (?,?,?,?,0)",
+                             (uid, _sha(f"{uid}:{code}"), exp, now()))
+        return code
+
+    def verify_email(self, uid: str, code: str) -> None:
+        row = self.db.conn.execute("SELECT * FROM email_codes WHERE user_id=?", (uid,)).fetchone()
+        code = re.sub(r"\D", "", code or "")
+        if not row or row["expires_at"] < now() or row["tries"] >= VERIFY_MAX_TRIES:
+            raise AuthError("código expirado: peça um novo")
+        if not hmac.compare_digest(row["code_hash"], _sha(f"{uid}:{code}")):
+            self.db.conn.execute("UPDATE email_codes SET tries=tries+1 WHERE user_id=?", (uid,))
+            left = VERIFY_MAX_TRIES - row["tries"] - 1
+            raise AuthError(f"código incorreto ({left} de {VERIFY_MAX_TRIES} tentativas restantes)" if left else "código incorreto; peça um novo")
+        self.db.conn.execute("UPDATE users SET email_verified_at=? WHERE id=?", (now(), uid))
+        self.db.conn.execute("DELETE FROM email_codes WHERE user_id=?", (uid,))
+
+    # ----------------------------------------------------------- Google
+    def google_user(self, sub: str, email: str, name: str, email_verified: bool, *, allow_create: bool) -> tuple[str, bool]:
+        """Conta ligada ao Google: pelo id da conta Google; senão, liga à conta com o mesmo e-mail (só se o Google
+        confirmou o e-mail); senão cria (quando o cadastro está aberto). Devolve (user_id, criada_agora)."""
+        row = self.db.conn.execute("SELECT id FROM users WHERE google_sub=?", (sub,)).fetchone()
+        if row:
+            return row["id"], False
+        if not email_verified:
+            raise AuthError("o Google não confirmou este e-mail; entre com e-mail e senha")
+        u = self.user_by_email(email)
+        if u:
+            self.db.conn.execute("UPDATE users SET google_sub=?, email_verified_at=COALESCE(email_verified_at, ?) WHERE id=?",
+                                 (sub, now(), u["id"]))
+            return u["id"], False
+        if not allow_create:
+            raise AuthError("Não há conta com este e-mail. O acesso é por convite: peça sua conta ao administrador.")
+        uid, _ = self.create_user(email, None, name, verified=True, google_sub=sub)
+        return uid, True
+
     # ----------------------------------------------------------- senha
     def start_reset(self, email: str) -> str | None:
         u = self.user_by_email(email)
@@ -215,7 +307,9 @@ class Accounts:
         row = self.db.conn.execute("SELECT * FROM password_resets WHERE token_hash=?", (_sha(token or ""),)).fetchone()
         if not row or row["used_at"] or row["expires_at"] < now():
             raise AuthError("link de redefinição inválido ou expirado")
-        self.db.conn.execute("UPDATE users SET pw_hash=? WHERE id=?", (hash_password(new_password), row["user_id"]))
+        # o link chegou pelo e-mail: vale também como confirmação dele
+        self.db.conn.execute("UPDATE users SET pw_hash=?, email_verified_at=COALESCE(email_verified_at, ?) WHERE id=?",
+                             (hash_password(new_password), now(), row["user_id"]))
         self.db.conn.execute("UPDATE password_resets SET used_at=? WHERE token_hash=?", (now(), row["token_hash"]))
         self.db.conn.execute("DELETE FROM sessions WHERE user_id=?", (row["user_id"],))  # derruba sessões antigas
 

@@ -11,7 +11,11 @@ Proteções:
 from __future__ import annotations
 
 import dataclasses
+import hmac
 import json
+import secrets
+import urllib.error
+import urllib.request
 import logging
 import mimetypes
 import os
@@ -24,9 +28,10 @@ import webbrowser
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlencode, urlparse
 
-from .. import agent_config, creative_options
+from .. import agent_config, creative_options, mailer
+from ..agent_chat import AgentChat
 from ..accounts import Accounts, AuthError
 from ..config import load_settings
 from ..credits import Ledger
@@ -47,7 +52,7 @@ STATIC = Path(__file__).parent / "static"
 PID_RE = re.compile(r"^prod_[0-9a-f]{10}$")
 MEDIA_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".mp4", ".txt", ".md", ".json"}
 ACTIONS = {"run", "approve", "reject", "final", "pause", "resume", "cancel", "budget", "references", "validate",
-           "direction", "go_ahead", "autonomy", "edit", "music"}
+           "direction", "go_ahead", "autonomy", "edit", "music", "retry"}
 GAME_DIST = Path(__file__).resolve().parents[3] / "frontend" / "dist"   # build do jogo (npm run build)
 MAX_BODY = 150 * 1024 * 1024  # uploads em base64
 MAX_AUTH_BODY = 64 * 1024  # rotas sem sessão não recebem envio grande
@@ -55,6 +60,18 @@ SECURITY_HEADERS = {"X-Content-Type-Options": "nosniff", "X-Frame-Options": "DEN
 FORM_DEFAULTS = {"name": "x", "variant": "x", "affiliate_link": "https://shopee.com.br/x"}
 COOKIE = "studio_session"
 CLIENT_HEADER = "X-Studio-Client"   # obrigatório em cadastro/login (não é enviável por formulário de outro site)
+OAUTH_COOKIE = "studio_oauth"       # estado do login com Google (anti-CSRF do OAuth), vive 10 min
+GOOGLE_AUTH = "https://accounts.google.com/o/oauth2/v2/auth"
+GOOGLE_TOKEN = "https://oauth2.googleapis.com/token"
+GOOGLE_USERINFO = "https://openidconnect.googleapis.com/v1/userinfo"
+
+
+def _google_http(url: str, data: dict | None = None, headers: dict | None = None) -> dict:
+    """POST (form) quando há data, senão GET. Respostas do Google são JSON."""
+    body = urlencode(data).encode() if data is not None else None
+    req = urllib.request.Request(url, data=body, headers=headers or {}, method="POST" if body is not None else "GET")
+    with urllib.request.urlopen(req, timeout=15) as r:  # noqa: S310 (URLs fixas do Google)
+        return json.loads(r.read().decode("utf-8"))
 
 
 @dataclass
@@ -70,11 +87,11 @@ def _json(status: int, data, headers: dict | None = None) -> Response:
     return Response(status, body=json.dumps(data, ensure_ascii=False, default=str).encode("utf-8"), headers=headers or {})
 
 
-def _cookie(headers: dict) -> str | None:
+def _cookie(headers: dict, name: str = COOKIE) -> str | None:
     raw = headers.get("Cookie") or headers.get("cookie") or ""
     for part in raw.split(";"):
         k, _, v = part.strip().partition("=")
-        if k == COOKIE and v:
+        if k == name and v:
             return v
     return None
 
@@ -96,6 +113,16 @@ class App:
         self.runs: dict[str, threading.Thread] = {}
         self.errors: dict[str, str] = {}
         self.lock = threading.Lock()
+        self.chat = AgentChat()  # conversa com os agentes (Fase 6); testes trocam o caller por um mock
+        # Login com Google: só aparece com as duas variáveis definidas. Testes trocam google_http por um mock.
+        try:  # carrega o .env antes de ler as variáveis do Google e do SMTP
+            self.load_settings()
+        except Exception:  # noqa: BLE001
+            pass
+        self.google_client_id = os.environ.get("STUDIO_GOOGLE_CLIENT_ID") or None
+        self.google_client_secret = os.environ.get("STUDIO_GOOGLE_CLIENT_SECRET") or None
+        self.google_http = _google_http
+        self.send_mail = mailer.send
 
     # ------------------------------------------------------------ contexto
     def settings(self):
@@ -184,6 +211,80 @@ class App:
             flags += "; Secure"
         return {"Set-Cookie": flags}
 
+    def _origin(self, headers: dict) -> str:
+        """Endereço de quem chamou (para links em e-mails e o retorno do Google). Host já foi conferido na lista."""
+        scheme = "https" if (self._is_public(headers) or self.secure_cookie) else "http"
+        return f"{scheme}://{headers.get('Host', '')}"
+
+    @property
+    def google_enabled(self) -> bool:
+        return bool(self.google_client_id and self.google_client_secret)
+
+    def _send_verification(self, acc: Accounts, uid: str, email: str) -> bool:
+        code = acc.start_verification(uid)
+        return self.send_mail(email, f"Pivoo: seu código é {code}",
+                              f"Seu código de confirmação do Pivoo é {code}.\n\nEle vale por 30 minutos. "
+                              "Se você não criou uma conta no Pivoo, ignore este e-mail.")
+
+    def _first_account(self, acc: Accounts, s, uid: str, wid: str) -> None:
+        """Primeira conta = administrador: recebe as produções existentes e o modo/teto atuais."""
+        acc.db.conn.execute("UPDATE users SET is_platform_admin=1 WHERE id=?", (uid,))
+        acc.assign_orphans(wid)
+        acc.set_workspace(wid, allow_real=1, mode=s.mode, monthly_cap_usd=s.monthly_cap_usd, credits_exempt=1)
+
+    # --- login com Google (OAuth 2.0, código no servidor; o segredo nunca vai ao navegador)
+    def _google(self, path: str, url, headers: dict) -> Response:
+        secure = self._is_public(headers) or self.secure_cookie
+        clear_state = f"{OAUTH_COOKIE}=; Path=/api/auth/google; HttpOnly; SameSite=Lax; Max-Age=0" + ("; Secure" if secure else "")
+
+        def back(err: str | None = None, cookies: list | None = None) -> Response:
+            loc = "/" if not err else "/?" + urlencode({"entrar": "", "erro": err})
+            return Response(302, "text/plain", b"", headers={"Location": loc, "Set-Cookie": [clear_state, *(cookies or [])]})
+
+        if not self.google_enabled:
+            return back("google_off")
+        redirect_uri = self._origin(headers) + "/api/auth/google/callback"
+        if path == "/api/auth/google/start":
+            state = secrets.token_urlsafe(24)
+            q = urlencode({"client_id": self.google_client_id, "redirect_uri": redirect_uri, "response_type": "code",
+                           "scope": "openid email profile", "state": state, "prompt": "select_account"})
+            flags = f"{OAUTH_COOKIE}={state}; Path=/api/auth/google; HttpOnly; SameSite=Lax; Max-Age=600" + ("; Secure" if secure else "")
+            return Response(302, "text/plain", b"", headers={"Location": f"{GOOGLE_AUTH}?{q}", "Set-Cookie": flags})
+        if path != "/api/auth/google/callback":
+            return _json(404, {"error": "não encontrado"})
+        q = parse_qs(url.query)
+        state, code = q.get("state", [""])[0], q.get("code", [""])[0]
+        expected = _cookie(headers, OAUTH_COOKIE) or ""
+        if q.get("error"):
+            return back("google_cancel")
+        if not expected or not state or not hmac.compare_digest(state, expected) or not code:
+            return back("google_state")
+        try:
+            tok = self.google_http(GOOGLE_TOKEN, {"code": code, "client_id": self.google_client_id,
+                                                  "client_secret": self.google_client_secret,
+                                                  "redirect_uri": redirect_uri, "grant_type": "authorization_code"})
+            info = self.google_http(GOOGLE_USERINFO, None, {"Authorization": f"Bearer {tok['access_token']}"})
+        except (urllib.error.URLError, OSError, KeyError, ValueError) as exc:
+            log.warning("Login com Google falhou: %s", exc)
+            return back("google_failed")
+        if not info.get("sub") or not info.get("email"):
+            return back("google_failed")
+        s, db, acc = self._db()
+        try:
+            first = db.conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
+            try:
+                uid, created = acc.google_user(str(info["sub"]), info["email"], info.get("name") or "",
+                                               bool(info.get("email_verified")), allow_create=not self.public_host)
+            except AuthError as exc:
+                return back("convite" if "convite" in str(exc) else "google_unverified")
+            wid = acc.workspaces_of(uid)[0]["id"]
+            if created and first:
+                self._first_account(acc, s, uid, wid)
+            token, _ = acc.create_session(uid, wid)
+        finally:
+            db.close()
+        return back(None, [self._set_cookie(token, 30 * 86400, secure=secure)["Set-Cookie"]])
+
     # ----------------------------------------------------------------- rotas
     def handle(self, method: str, raw_path: str, headers: dict, body: bytes) -> Response:
         if headers.get("Host", "") not in self.allowed_hosts:
@@ -202,6 +303,11 @@ class App:
                 return Response(200, "text/javascript; charset=utf-8" if f.suffix == ".js" else ctype, file=f)
             if method == "POST" and path.startswith("/api/auth/"):
                 return self._auth(path, headers, json.loads(body or b"{}"))
+            if method == "GET" and path == "/api/auth/config":  # o que a tela de acesso pode oferecer
+                return _json(200, {"signup": not self.public_host, "google": self.google_enabled,
+                                   "email": mailer.configured()})
+            if method == "GET" and path.startswith("/api/auth/google/"):
+                return self._google(path, url, headers)
 
             # --- daqui em diante: só com sessão
             token = _cookie(headers)
@@ -245,11 +351,13 @@ class App:
                 first = db.conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
                 uid, wid = acc.create_user(p.get("email", ""), p.get("password", ""), p.get("name", ""), admin=first,
                                            workspace_name=p.get("workspace") or None)
-                if first:  # primeira conta = administrador: recebe as produções existentes e o modo/teto atuais
-                    acc.assign_orphans(wid)
-                    acc.set_workspace(wid, allow_real=1, mode=s.mode, monthly_cap_usd=s.monthly_cap_usd, credits_exempt=1)
+                if first:
+                    self._first_account(acc, s, uid, wid)
                 token, info = acc.create_session(uid, wid)
-                return _json(200, {"ok": True, "admin": first}, self._set_cookie(token, 30 * 86400, secure=secure))
+                # a conta já entra (modo DEMO); o código de confirmação vai para o e-mail
+                sent = self._send_verification(acc, uid, acc.user(uid)["email"])
+                return _json(200, {"ok": True, "admin": first, "verify": True, "sent": sent},
+                             self._set_cookie(token, 30 * 86400, secure=secure))
             if path == "/api/auth/login":
                 token, info = acc.login(p.get("email", ""), p.get("password", ""), ip)
                 return _json(200, {"ok": True}, self._set_cookie(token, 30 * 86400, secure=secure))
@@ -258,10 +366,24 @@ class App:
                 return _json(200, {"ok": True}, self._set_cookie("", 0, secure=secure))
             if path == "/api/auth/forgot":
                 tok = acc.start_reset(p.get("email", ""))
-                if tok:  # ainda sem provedor de e-mail: o link vai para o log do servidor (só o operador vê)
-                    log.warning("Link de redefinição de senha (válido 30 min): /?reset=%s", tok)
-                return _json(200, {"ok": True, "message": "Se houver conta com este e-mail, o link de redefinição foi gerado. "
-                                                          "Envio por e-mail ainda não está configurado: peça o link ao administrador."})
+                if tok:  # sem SMTP, o e-mail (com o link) vai para o log do servidor: só o operador vê
+                    link = f"{self._origin(headers)}/?reset={tok}"
+                    self.send_mail(acc.user_by_email(p.get("email", ""))["email"], "Pivoo: redefinir sua senha",
+                                   f"Para criar uma nova senha no Pivoo, abra o link abaixo (vale por 30 minutos):\n\n{link}\n\n"
+                                   "Se você não pediu isso, ignore este e-mail: sua senha continua a mesma.")
+                if mailer.configured():
+                    return _json(200, {"ok": True, "sent": True, "message": "Se houver uma conta com este e-mail, enviamos um link "
+                                                                             "para criar uma nova senha. Ele vale por 30 minutos."})
+                return _json(200, {"ok": True, "sent": False, "message": "Se houver uma conta com este e-mail, o link foi gerado. "
+                                                                          "O envio por e-mail ainda não está ativo: peça o link ao administrador."})
+            if path in ("/api/auth/verify", "/api/auth/resend"):  # confirmação de e-mail: exige a sessão recém-criada
+                sess = acc.session(_cookie(headers))
+                if not sess:
+                    return _json(401, {"error": "entre na sua conta"})
+                if path == "/api/auth/resend":
+                    return _json(200, {"ok": True, "sent": self._send_verification(acc, sess["user_id"], sess["email"])})
+                acc.verify_email(sess["user_id"], str(p.get("code", "")))
+                return _json(200, {"ok": True})
             if path == "/api/auth/reset":
                 acc.finish_reset(p.get("token", ""), p.get("password", ""))
                 return _json(200, {"ok": True})
@@ -291,7 +413,10 @@ class App:
             finally:
                 db.close()
             return _json(200, {"csrf": ctx["sess"]["csrf"], "admin": ctx["admin"],
-                               "user": {"email": ctx["sess"]["email"], "name": ctx["sess"]["name"]},
+                               "user": {"email": ctx["sess"]["email"], "name": ctx["sess"]["name"],
+                                        "email_verified": bool(ctx["sess"]["email_verified_at"]),
+                                        "onboarding": {"done_at": ctx["sess"]["onboarding_done_at"],
+                                                       "step": int(ctx["sess"]["onboarding_step"] or 0)}},
                                "workspace": {"id": ws["id"], "name": ws["name"], "mode": s.mode, "allow_real": bool(ws["allow_real"]),
                                              "credits": credits},
                                "workspaces": [{"id": w["id"], "name": w["name"], "role": w["role"]} for w in ctx["workspaces"]]})
@@ -321,6 +446,16 @@ class App:
             has_bia = (s.assets_dir / "bia" / "PERFIL BIA.jpg").is_file()
             return _json(200, {**creative_options.catalogue(),
                                **creative_options.ideas(q.get("name", [""])[0], q.get("category", [""])[0], has_bia)})
+        if path in ("/api/chat/quota", "/api/chat/spend"):
+            db = Database(s.db_path)
+            try:
+                if path == "/api/chat/spend":
+                    if not ctx["admin"]:
+                        return _json(403, {"error": "restrito ao administrador"})
+                    return _json(200, {"rows": self.chat.spend(db.conn)})
+                return _json(200, self.chat.quota(db.conn, ctx["sess"]["user_id"]))
+            finally:
+                db.close()
         if path == "/api/spend":
             db = Database(s.db_path)
             try:
@@ -351,6 +486,15 @@ class App:
             return _json(200, {"ok": True})
         if path == "/api/runtime":
             return self._runtime(payload, ctx)
+        if path == "/api/onboarding":  # kit de onboarding: {step} salva onde parou; {done: true} conclui/pula
+            done = payload.get("done")
+            s0, db, acc = self._db()
+            try:
+                ob = acc.set_onboarding(ctx["sess"]["user_id"], step=payload.get("step"),
+                                        done=done if isinstance(done, bool) else None)
+            finally:
+                db.close()
+            return _json(200, {"ok": True, "onboarding": ob})
         if path == "/api/workspace/switch":
             s0, db, acc = self._db()
             try:
@@ -361,6 +505,8 @@ class App:
         if path.startswith("/api/training/") or path.startswith("/api/music"):
             from .agents_api import post_agents
             return post_agents(self, path, payload, ctx)
+        if path == "/api/chat":
+            return self._chat(payload, ctx)
         if path == "/api/productions":
             return self._create(payload, ctx)
         if path == "/api/creative/preview":
@@ -387,6 +533,28 @@ class App:
                 return _json(404, {"error": "produção não encontrada"})
             return self._action(m.group(1), m.group(2), payload, s)
         return _json(404, {"error": "não encontrado"})
+
+    def _chat(self, payload: dict, ctx) -> Response:
+        """Conversa com um agente. Só texto: nada aqui executa ação, aprova ou mexe em créditos."""
+        s, wid = ctx["s"], ctx["wid"]
+        db = Database(s.db_path)
+        try:
+            mission = None
+            pid = payload.get("pid")
+            # o nome da missão vem do banco (e só se a produção for deste workspace), não do navegador
+            if isinstance(pid, str) and PID_RE.match(pid) and Accounts(db).owns(wid, pid):
+                try:
+                    mission = json.loads(db.production(pid)["product_json"]).get("name")
+                except (KeyError, ValueError, TypeError):
+                    mission = None
+            needs = payload.get("needs")
+            res = self.chat.reply(db.conn, user_id=ctx["sess"]["user_id"], workspace_id=wid, agent=str(payload.get("agent")),
+                                  text=str(payload.get("text") or "")[:2000],
+                                  ctx={"mission": mission, "stage": payload.get("stage"), "status": payload.get("status"),
+                                       "needs": needs if isinstance(needs, list) else []})
+        finally:
+            db.close()
+        return _json(200, res)
 
     def _runtime(self, payload: dict, ctx) -> Response:
         ws, base = ctx["ws"], self.settings()
@@ -535,7 +703,7 @@ class App:
                 orch.db.close()
             self.start_run(pid)
             return _json(200, {"ok": True, "added": len(files)})
-        if self.is_running(pid) and action in {"approve", "reject", "final", "budget"}:
+        if self.is_running(pid) and action in {"approve", "reject", "final", "budget", "retry"}:
             return _json(409, {"error": "a produção está em execução; aguarde terminar a etapa atual"})
         orch = self.orch_for(pid)
         try:
@@ -544,6 +712,14 @@ class App:
                 orch.approve(pid, int(payload["scene"]), payload["stage"], payload.get("note", ""))
             elif action == "reject":
                 orch.reject(pid, int(payload["scene"]), payload["stage"], payload.get("note", ""), redo_image=bool(payload.get("redo_image")))
+            elif action == "retry":
+                stage = payload.get("stage")
+                if stage not in {"image", "video"}:
+                    return _json(400, {"error": "stage deve ser image ou video"})
+                idx = int(payload["scene"])
+                if orch.db.scene(pid, idx)["status"] != "blocked":
+                    return _json(409, {"error": f"a cena {idx} não está bloqueada"})
+                orch.grant_attempts(pid, idx, stage, 1)
             elif action == "final":
                 approve = payload.get("decision") == "approve"
                 orch.final_decision(pid, approve, payload.get("note", ""))
@@ -577,7 +753,8 @@ def make_handler(app: App):
                 self.send_header("Content-Length", str(len(resp.body)))
                 self.send_header("Cache-Control", "no-store")
                 for k, v in {**SECURITY_HEADERS, **resp.headers}.items():
-                    self.send_header(k, v)
+                    for item in (v if isinstance(v, list) else [v]):  # vários Set-Cookie na mesma resposta
+                        self.send_header(k, item)
                 self.end_headers()
                 self.wfile.write(resp.body)
                 return
