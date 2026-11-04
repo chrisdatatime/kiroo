@@ -30,7 +30,7 @@ export function buildWorld(tmj, meta) {
 
   const CHAIRS = ofType('seat').map((o) => {
     const [x, y] = cell(o);
-    return { id: `c${x}_${y}`, x, y, face: o.p.face || 'down', kind: o.p.kind || 'free', room: o.p.room, ...(o.p.agent ? { agent: o.p.agent } : {}), monitor: !!o.p.monitor };
+    return { id: `c${x}_${y}`, x, y, face: o.p.face || 'down', kind: o.p.kind || 'free', room: o.p.room, ...(o.p.agent ? { agent: o.p.agent } : {}), monitor: !!o.p.monitor, back: o.p.back == null ? 1 : o.p.back };
   });
   CHAIRS.forEach((c) => blocked.add(c.x + ',' + c.y)); // cadeira é destino, não passagem
 
@@ -65,7 +65,7 @@ export function buildWorld(tmj, meta) {
 }
 
 // Tilesets realmente usados pelo mapa (camadas de tile e tile-objects). O Interiors_32x32.png tem 34.048 px de
-// altura e passa do limite de textura WebGL: só pode ser carregado se algum GID dele for usado (Fase 2b: atlas).
+// altura e passa do limite de textura WebGL; por isso o .tmj usa o atlas interiors_atlas (só os tiles usados).
 export function usedTilesets(tmj) {
   const gids = new Set();
   tmj.layers.forEach((l) => {

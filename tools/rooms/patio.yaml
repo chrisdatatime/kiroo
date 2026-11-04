@@ -1,0 +1,47 @@
+# Pátio — 12x9, aberto (sem paredes), piso de madeira clara. Copa/café embaixo à esquerda, mesa redonda, sofás e plantas nas bordas.
+# NÃO bloquear: a cabine de vidro "Meu escritório" (x 2-9, y 2-5 da sala; fachada de vidro nas linhas 3-5) e o anel de trilha
+# fora do pátio. A linha 2 (logo acima da cabine) fica livre de ponta a ponta: é por ela que se chega à cabine (a fachada só fecha o lado sul).
+id: patio
+nome: Pátio
+size: [12, 9]
+floor: madeira
+
+# Cabine "Meu escritório": cadeira na ponta esquerda, atrás do vidro; o assento é da sala `meu` (kind mine = personalizar o setup).
+seats:
+  - { at: [2, 4], face: right, kind: mine, room: meu }
+entry: [9, 6]
+spots: [[1, 1], [10, 1], [8, 6], [10, 6]]
+
+grid: |
+  ............
+  ............
+  ............
+  ............
+  ............
+  ............
+  ............
+  ............
+  ............
+
+objects:
+  # cabine de vidro 8x3: 2 divisórias de 4x3 na frente
+  - { use: glass_divider,   at: [2, 3] }
+  - { use: glass_divider,   at: [6, 3] }
+  - { use: chair_swivel,    at: [2, 3] }      # cadeira da cabine (assento em [2, 4])
+  # copa/café (embaixo à esquerda): balcão com cafeteira, geladeira, bebedouro
+  - { use: desk_light,      at: [0, 6] }
+  - { use: coffee_maker,    at: [1, 7] }
+  - { use: fridge,          at: [3, 6] }
+  - { use: water_cooler,    at: [4, 6] }
+  # mesa redonda e sofá embaixo
+  - { use: table_round_light, at: [5, 6] }
+  - { use: sofa_gray,       at: [8, 7] }
+  # bordas: plantas nos cantos de cima e embaixo à direita, namoradeiras nas laterais
+  - { use: plant,           at: [0, 0] }
+  - { use: plant,           at: [11, 0] }
+  - { use: plant,           at: [11, 6] }
+  - { use: plant_small,     at: [3, 0] }
+  - { use: plant_small,     at: [6, 0] }
+  - { use: plant_small,     at: [9, 0] }
+  - { use: sofa_brown,      at: [0, 3] }
+  - { use: sofa_lilac,      at: [10, 3] }

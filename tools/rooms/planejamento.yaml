@@ -1,0 +1,45 @@
+# Sala de Planejamento (Nina) — 10x8, só Room_Builder_Office + Modern_Office. Identidade: LAVANDA, mesa de reunião e quadros brancos.
+# Piso útil 8x4 (colunas 1-8, linhas 2-5). Mesa da Nina à esquerda (mesa 3x3 sobre a base da parede, linha 1,
+# cadeira 1x2 nas linhas 4-5); mesa de reunião 5x3 à direita (linhas 2-4), com quadros brancos por cima.
+# Porta ao sul (colunas 4-5): a fileira 5 é o corredor interno e leva às duas cadeiras.
+id: planejamento
+nome: Planejamento
+agent: nina
+tab: produto
+size: [10, 8]
+floor: sala_verde
+
+seats:
+  - { at: [2, 5], face: down, kind: agent, monitor: true }     # estação: Nina
+  - { at: [8, 5], face: down, kind: visitor }                  # ponta da mesa de reunião
+monitor: [1, 2, 3, 2]
+entry: [4, 5]
+spots: [[3, 5], [5, 5], [7, 5]]
+
+grid: |
+  FFFFFFFFFF
+  BBBBBBBBBB
+  L........R
+  L........R
+  L........R
+  L........R
+  FFFF..FFFF
+  BBBB..BBBB
+
+objects:
+  # estação da Nina
+  - { use: desk_lav,        at: [1, 1] }
+  - { use: phone,           at: [1, 2] }
+  - { use: monitor_modern,  at: [2, 2] }
+  - { use: desk_lamp,       at: [3, 2] }
+  - { use: keyboard,        at: [2, 3] }
+  - { use: chair_swivel,    at: [2, 4] }
+  - { use: plant_small,     at: [1, 4] }
+  # mesa de reunião + cadeira na ponta
+  - { use: table_lav_long,  at: [4, 2] }
+  - { use: chair_swivel,    at: [8, 4] }
+  # parede norte: quadros brancos sobre a mesa de reunião, quadrinhos sobre a estação
+  - { use: whiteboard_chart, at: [5, 0] }
+  - { use: whiteboard,       at: [7, 0] }
+  - { use: frame_mini,       at: [1, 0] }
+  - { use: frame_face_a,     at: [3, 0] }

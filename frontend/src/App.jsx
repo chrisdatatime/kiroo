@@ -29,7 +29,8 @@ const WALK_SPOTS = SPOTS;
 const T = GRID.T;
 const SC = T / 16;          // escala do personagem: 1 no mapa antigo (16 px), 2 no .tmj (32 px)
 const placedRoom = (r) => !!r && r.placed !== false;
-const TICK = 130;            // ms por passo do jogador; o desenho interpola exatamente esse tempo
+const TICK = 200;            // ms por passo do jogador; o desenho interpola exatamente esse tempo (constante única)
+const AGENT_EVERY = 5;       // agentes andam 1 tile a cada AGENT_EVERY ticks; o desenho deles dura AGENT_EVERY * TICK
 const MOVE = { arrowup: [0, -1], w: [0, -1], arrowdown: [0, 1], s: [0, 1], arrowleft: [-1, 0], a: [-1, 0], arrowright: [1, 0], d: [1, 0] };
 const CHAIR_BY_ID = {}; CHAIRS.forEach((c) => { CHAIR_BY_ID[c.id] = c; });
 const furn = (kind, oh) => { const f = FURNITURE.find((x) => x.kind === kind); return f ? { x: f.x, y: f.y, w: f.w, h: f.h, oh } : null; };
@@ -217,7 +218,7 @@ export default class App extends React.Component {
       const nx = this.heldStep(np);
       if (nx) { patch.player = { ...np, path: [nx], moving: true }; patch.dest = null; arrived = false; }
     }
-    if (this.t % 5 === 0) { const ag = {}; AGENTS.forEach((a) => { ag[a.id] = this.stepAgent(a, s.agents[a.id]); }); patch.agents = ag; }
+    if (this.t % AGENT_EVERY === 0) { const ag = {}; AGENTS.forEach((a) => { ag[a.id] = this.stepAgent(a, s.agents[a.id]); }); patch.agents = ag; }
     if (Object.keys(patch).length) this.setState(patch, () => {
       if (arrived && this.state.pending) { const act = this.state.pending; this.setState({ pending: null }); this.doAction(act); }
     });
@@ -237,7 +238,7 @@ export default class App extends React.Component {
     for (const a of AGENTS) { const st = this.state.agents[a.id]; if (st.i === i && st.j === j) return { type: 'agent', id: a.id }; }
     for (const r of ROOMS) if (r.desk && placedRoom(r) && tilesOf(r.desk).some((d) => d[0] === i && d[1] === j)) return r.agent ? { type: 'monitor', room: r.id } : { type: 'mine' };
     // no mapa novo a cadeira tem 2 tiles de altura (encosto em cima): clicar no encosto também é a cadeira
-    const c = CHAIRS.find((x) => x.x === i && x.y === j) || (SC > 1 ? CHAIRS.find((x) => x.x === i && x.y - 1 === j) : null);
+    const c = CHAIRS.find((x) => x.x === i && x.y === j) || (SC > 1 ? CHAIRS.find((x) => x.x === i && x.back > 0 && j < x.y && j >= x.y - x.back) : null);
     if (c) return c.kind === 'agent' ? { type: 'agent', id: c.agent } : { type: 'chair', id: c.id };
     for (const k of Object.keys(INTERACT)) if (INTERACT[k].some((d) => d[0] === i && d[1] === j)) return { type: k };
     return null;
@@ -664,7 +665,7 @@ export default class App extends React.Component {
       const room = ROOMS.find((r) => r.agent === a.id);
       return {
         // sentado trabalhando: de costas, olhando o monitor; precisando de você ou livre: vira para a tela
-        id: a.id, i: ast.i, j: ast.j, seated, face: seated ? (status === 'work' ? 'up' : 'down') : null,
+        id: a.id, i: ast.i, j: ast.j, walking: !!ast.moving, seated, face: seated ? (status === 'work' ? 'up' : 'down') : null,
         l: (ast.i + 0.5) * T - 8 * SC, t: (ast.j + 1) * T - (seated ? 28 : 24) * SC, z: 10 + ast.j, w: 16 * SC, h: 22 * SC,
         look: a.look, anim, need: status === 'need', work: status === 'work', near: !!isNear, status: this.roomStatus(room),
         tagText: isNear ? a.name + ' · ' + a.role : a.name,
@@ -869,7 +870,7 @@ export default class App extends React.Component {
         hot('games', HOT_FURNITURE.games, 4, 'Jogos', 'Mesa de jogos: jogo da velha e damas'),
         hot('music', HOT_FURNITURE.music, 20, 'Trilhas', 'Trilhas da Lia: biblioteca musical'),
       ].filter(Boolean),
-      chars, pl, look: s.look,
+      chars, pl, look: s.look, agentDur: AGENT_EVERY * TICK / 1000,
       onWorldClick: this.onWorldClick,
       goBoard: (e) => { e.stopPropagation(); this.goInteract({ type: 'board' }); },
       goCoffee: (e) => { e.stopPropagation(); this.goInteract({ type: 'coffee' }); },

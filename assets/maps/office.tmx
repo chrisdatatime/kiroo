@@ -1,10 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<map version="1.10" tiledversion="1.10.2" orientation="orthogonal" renderorder="right-down" width="30" height="20" tilewidth="32" tileheight="32" infinite="0" nextlayerid="8" nextobjectid="74">
+<map version="1.10" tiledversion="1.10.2" orientation="orthogonal" renderorder="right-down" width="38" height="32" tilewidth="32" tileheight="32" infinite="0" nextlayerid="8" nextobjectid="502">
  <tileset firstgid="1" name="Room_Builder_32x32" tilewidth="32" tileheight="32" tilecount="8588" columns="76">
   <image source="../tilesets/Room_Builder_32x32.png" width="2432" height="3616"/>
- </tileset>
- <tileset firstgid="8589" name="Interiors_32x32" tilewidth="32" tileheight="32" tilecount="17024" columns="16">
-  <image source="../tilesets/Interiors_32x32.png" width="512" height="34048"/>
  </tileset>
  <tileset firstgid="25613" name="Modern_Office_32x32" tilewidth="32" tileheight="32" tilecount="848" columns="16">
   <image source="../tilesets/Modern_Office_32x32.png" width="512" height="1696"/>
@@ -12,367 +9,2066 @@
  <tileset firstgid="26461" name="Room_Builder_Office_32x32" tilewidth="32" tileheight="32" tilecount="224" columns="16">
   <image source="../tilesets/Room_Builder_Office_32x32.png" width="512" height="448"/>
  </tileset>
- <layer id="1" name="floor" width="30" height="20">
+ <tileset firstgid="26685" name="interiors_atlas" tilewidth="32" tileheight="32" tilecount="64" columns="16">
+  <image source="../tilesets/interiors_atlas.png" width="512" height="128"/>
+ </tileset>
+ <layer id="1" name="floor" width="38" height="32">
   <data encoding="csv">
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,26584,26584,26584,26584,26584,26584,26584,26584,26584,26584,26584,26584,26584,26584,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,26584,26584,26584,26584,26584,26584,26584,26584,26584,26584,26584,26584,26584,26584,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,26584,26584,26584,26584,26584,26584,26584,26584,26584,26584,26584,26584,26584,26584,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,26584,26584,26584,26584,26584,26584,26584,26584,26584,26584,26584,26584,26584,26584,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,26584,26584,26584,26584,26584,26584,26584,26584,26584,26584,26584,26584,26584,26584,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,26584,26584,26584,26584,26584,26584,26584,26584,26584,26584,26584,26584,26584,26584,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,26584,26584,26584,26584,26584,26584,26584,26584,26584,26584,26584,26584,26584,26584,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,26584,26584,26584,26584,26584,26584,26584,26584,26584,26584,26584,26584,26584,26584,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+2384,2384,2384,2384,2384,2384,2384,2384,2384,2384,2818,2818,2818,3144,3144,3144,3144,3144,3144,3144,3144,3144,3144,3144,3144,2818,2818,2818,2232,2232,2232,2232,2232,2232,2232,2232,2232,2232,
+2384,2384,2384,2384,2384,2384,2384,2384,2384,2384,2818,2818,2818,3144,3144,3144,3144,3144,3144,3144,3144,3144,3144,3144,3144,2818,2818,2818,2232,2232,2232,2232,2232,2232,2232,2232,2232,2232,
+2384,2384,2384,2384,2384,2384,2384,2384,2384,2384,2818,2818,2818,3144,3144,3144,3144,3144,3144,3144,3144,3144,3144,3144,3144,2818,2818,2818,2232,2232,2232,2232,2232,2232,2232,2232,2232,2232,
+2384,2384,2384,2384,2384,2384,2384,2384,2384,2384,2818,2818,2818,3144,3144,3144,3144,3144,3144,3144,3144,3144,3144,3144,3144,2818,2818,2818,2232,2232,2232,2232,2232,2232,2232,2232,2232,2232,
+2384,2384,2384,2384,2384,2384,2384,2384,2384,2384,2818,2818,2818,3144,3144,3144,3144,3144,3144,3144,3144,3144,3144,3144,3144,2818,2818,2818,2232,2232,2232,2232,2232,2232,2232,2232,2232,2232,
+2384,2384,2384,2384,2384,2384,2384,2384,2384,2384,2818,2818,2818,3144,3144,3144,3144,3144,3144,3144,3144,3144,3144,3144,3144,2818,2818,2818,2232,2232,2232,2232,2232,2232,2232,2232,2232,2232,
+2384,2384,2384,2384,2384,2384,2384,2384,2384,2384,2818,2818,2818,3144,3144,3144,3144,3144,3144,3144,3144,3144,3144,3144,3144,2818,2818,2818,2232,2232,2232,2232,2232,2232,2232,2232,2232,2232,
+2384,2384,2384,2384,2384,2384,2384,2384,2384,2384,2818,2818,2818,3144,3144,3144,3144,3144,3144,3144,3144,3144,3144,3144,3144,2818,2818,2818,2232,2232,2232,2232,2232,2232,2232,2232,2232,2232,
+2818,2818,2818,2818,2818,2818,2818,2818,2818,2818,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2818,2818,2818,2818,2818,2818,2818,2818,2818,2818,
+2818,2818,2818,2818,2818,2818,2818,2818,2818,2818,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2818,2818,2818,2818,2818,2818,2818,2818,2818,2818,
+2818,2818,2818,2818,2818,2818,2818,2818,2818,2818,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2818,2818,2818,2818,2818,2818,2818,2818,2818,2818,
+2992,2992,2992,2992,2992,2992,2992,2992,2992,2992,2210,2210,2210,2818,2818,2818,2818,2818,2818,2818,2818,2818,2818,2818,2818,2210,2210,2210,2677,2677,2677,2677,2677,2677,2677,2677,2677,2677,
+2992,2992,2992,2992,2992,2992,2992,2992,2992,2992,2210,2210,2210,2818,2818,2818,2818,2818,2818,2818,2818,2818,2818,2818,2818,2210,2210,2210,2677,2677,2677,2677,2677,2677,2677,2677,2677,2677,
+2992,2992,2992,2992,2992,2992,2992,2992,2992,2992,2210,2210,2210,2818,2818,2818,2818,2818,2818,2818,2818,2818,2818,2818,2818,2210,2210,2210,2677,2677,2677,2677,2677,2677,2677,2677,2677,2677,
+2992,2992,2992,2992,2992,2992,2992,2992,2992,2992,2210,2210,2210,2818,2818,2818,2818,2818,2818,2818,2818,2818,2818,2818,2818,2210,2210,2210,2677,2677,2677,2677,2677,2677,2677,2677,2677,2677,
+2992,2992,2992,2992,2992,2992,2992,2992,2992,2992,2210,2210,2210,2818,2818,2818,2818,2818,2818,2818,2818,2818,2818,2818,2818,2210,2210,2210,2677,2677,2677,2677,2677,2677,2677,2677,2677,2677,
+2992,2992,2992,2992,2992,2992,2992,2992,2992,2992,2210,2210,2210,2818,2818,2818,2818,2818,2818,2818,2818,2818,2818,2818,2818,2210,2210,2210,2677,2677,2677,2677,2677,2677,2677,2677,2677,2677,
+2992,2992,2992,2992,2992,2992,2992,2992,2992,2992,2210,2210,2210,2818,2818,2818,2818,2818,2818,2818,2818,2818,2818,2818,2818,2210,2210,2210,2677,2677,2677,2677,2677,2677,2677,2677,2677,2677,
+2992,2992,2992,2992,2992,2992,2992,2992,2992,2992,2210,2210,2210,2818,2818,2818,2818,2818,2818,2818,2818,2818,2818,2818,2818,2210,2210,2210,2677,2677,2677,2677,2677,2677,2677,2677,2677,2677,
+2992,2992,2992,2992,2992,2992,2992,2992,2992,2992,2210,2210,2210,2818,2818,2818,2818,2818,2818,2818,2818,2818,2818,2818,2818,2210,2210,2210,2677,2677,2677,2677,2677,2677,2677,2677,2677,2677,
+2818,2818,2818,2818,2818,2818,2818,2818,2818,2818,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2818,2818,2818,2818,2818,2818,2818,2818,2818,2818,
+2818,2818,2818,2818,2818,2818,2818,2818,2818,2818,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2818,2818,2818,2818,2818,2818,2818,2818,2818,2818,
+2818,2818,2818,2818,2818,2818,2818,2818,2818,2818,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2210,2818,2818,2818,2818,2818,2818,2818,2818,2818,2818,
+2970,2970,2970,2970,2970,2970,2970,2970,2970,2970,2818,2818,2818,2525,2525,2525,2525,2525,2525,2525,2525,2525,2525,2525,2525,2818,2818,2818,2514,2514,2514,2514,2514,2514,2514,2514,2514,2514,
+2970,2970,2970,2970,2970,2970,2970,2970,2970,2970,2818,2818,2818,2525,2525,2525,2525,2525,2525,2525,2525,2525,2525,2525,2525,2818,2818,2818,2514,2514,2514,2514,2514,2514,2514,2514,2514,2514,
+2970,2970,2970,2970,2970,2970,2970,2970,2970,2970,2818,2818,2818,2525,2525,2525,2525,2525,2525,2525,2525,2525,2525,2525,2525,2818,2818,2818,2514,2514,2514,2514,2514,2514,2514,2514,2514,2514,
+2970,2970,2970,2970,2970,2970,2970,2970,2970,2970,2818,2818,2818,2525,2525,2525,2525,2525,2525,2525,2525,2525,2525,2525,2525,2818,2818,2818,2514,2514,2514,2514,2514,2514,2514,2514,2514,2514,
+2970,2970,2970,2970,2970,2970,2970,2970,2970,2970,2818,2818,2818,2525,2525,2525,2525,2525,2525,2525,2525,2525,2525,2525,2525,2818,2818,2818,2514,2514,2514,2514,2514,2514,2514,2514,2514,2514,
+2970,2970,2970,2970,2970,2970,2970,2970,2970,2970,2818,2818,2818,2525,2525,2525,2525,2525,2525,2525,2525,2525,2525,2525,2525,2818,2818,2818,2514,2514,2514,2514,2514,2514,2514,2514,2514,2514,
+2970,2970,2970,2970,2970,2970,2970,2970,2970,2970,2818,2818,2818,2525,2525,2525,2525,2525,2525,2525,2525,2525,2525,2525,2525,2818,2818,2818,2514,2514,2514,2514,2514,2514,2514,2514,2514,2514,
+2970,2970,2970,2970,2970,2970,2970,2970,2970,2970,2818,2818,2818,2525,2525,2525,2525,2525,2525,2525,2525,2525,2525,2525,2525,2818,2818,2818,2514,2514,2514,2514,2514,2514,2514,2514,2514,2514,
+2970,2970,2970,2970,2970,2970,2970,2970,2970,2970,2818,2818,2818,2525,2525,2525,2525,2525,2525,2525,2525,2525,2525,2525,2525,2818,2818,2818,2514,2514,2514,2514,2514,2514,2514,2514,2514,2514
   </data>
  </layer>
- <layer id="2" name="walls" width="30" height="20">
+ <layer id="2" name="walls" width="38" height="32">
   <data encoding="csv">
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,26541,26542,26542,26542,26542,26542,26542,26542,26542,26542,26542,26542,26542,26543,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,26557,26558,26558,26558,26558,26558,26558,26558,26558,26558,26558,26558,26558,26560,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,26500,0,0,0,0,0,0,0,0,0,0,0,0,26502,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,26500,0,0,0,0,0,0,0,0,0,0,0,0,26502,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,26500,0,0,0,0,0,0,0,0,0,0,0,0,26502,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,26500,0,0,0,0,0,0,0,0,0,0,0,0,26502,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,26500,0,0,0,0,0,0,0,0,0,0,0,0,26502,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,26516,26517,26517,26517,26517,26513,0,0,26512,26517,26517,26517,26517,26518,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+26541,26542,26542,26542,26542,26542,26542,26542,26542,26543,0,0,0,26541,26542,26542,26542,26542,26542,26542,26542,26542,26542,26542,26543,0,0,0,26541,26542,26542,26542,26542,26542,26542,26542,26542,26543,
+26557,26558,26558,26558,26558,26558,26558,26558,26558,26560,0,0,0,26557,26558,26558,26558,26558,26558,26558,26558,26558,26558,26558,26560,0,0,0,26557,26558,26558,26558,26558,26558,26558,26558,26558,26560,
+26500,0,0,0,0,0,0,0,0,26502,0,0,0,26500,0,0,0,0,0,0,0,0,0,0,26502,0,0,0,26500,0,0,0,0,0,0,0,0,26502,
+26500,0,0,0,0,0,0,0,0,26502,0,0,0,26500,0,0,0,0,0,0,0,0,0,0,26502,0,0,0,26500,0,0,0,0,0,0,0,0,26502,
+26500,0,0,0,0,0,0,0,0,26502,0,0,0,26500,0,0,0,0,0,0,0,0,0,0,26502,0,0,0,26500,0,0,0,0,0,0,0,0,26502,
+26500,0,0,0,0,0,0,0,0,26502,0,0,0,26500,0,0,0,0,0,0,0,0,0,0,26502,0,0,0,26500,0,0,0,0,0,0,0,0,26502,
+26541,26542,26542,26543,0,0,26541,26542,26542,26543,0,0,0,26541,26542,26542,26542,26543,0,0,26541,26542,26542,26542,26543,0,0,0,26541,26542,26542,26543,0,0,26541,26542,26542,26543,
+26557,26558,26558,26560,0,0,26557,26558,26558,26560,0,0,0,26557,26558,26558,26558,26560,0,0,26557,26558,26558,26558,26560,0,0,0,26557,26558,26558,26560,0,0,26557,26558,26558,26560,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+26541,26542,26542,26542,26542,26542,26542,26542,26542,26543,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,26541,26542,26542,26542,26542,26542,26542,26542,26542,26543,
+26557,26558,26558,26558,26558,26558,26558,26558,26558,26560,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,26557,26558,26558,26558,26558,26558,26558,26558,26558,26560,
+26500,0,0,0,0,0,0,0,0,26502,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,26500,0,0,0,0,0,0,0,0,26502,
+26500,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,26502,
+26500,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,26502,
+26500,0,0,0,0,0,0,0,0,26502,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,26500,0,0,0,0,0,0,0,0,26502,
+26500,0,0,0,0,0,0,0,0,26502,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,26500,0,0,0,0,0,0,0,0,26502,
+26541,26542,26542,26542,26542,26542,26542,26542,26542,26543,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,26541,26542,26542,26542,26542,26542,26542,26542,26542,26543,
+26557,26558,26558,26558,26558,26558,26558,26558,26558,26560,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,26557,26558,26558,26558,26558,26558,26558,26558,26558,26560,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+26541,26542,26542,26543,0,0,26541,26542,26542,26543,0,0,0,26541,26542,26542,26542,26543,0,0,26541,26542,26542,26542,26543,0,0,0,26541,26542,26542,26542,26542,26542,26542,26542,26542,26543,
+26557,26558,26558,26560,0,0,26557,26558,26558,26560,0,0,0,26557,26558,26558,26558,26560,0,0,26557,26558,26558,26558,26560,0,0,0,26557,26558,26558,26558,26558,26558,26558,26558,26558,26560,
+26500,0,0,0,0,0,0,0,0,26502,0,0,0,26500,0,0,0,0,0,0,0,0,0,0,26502,0,0,0,26500,0,0,0,0,0,0,0,0,26502,
+26500,0,0,0,0,0,0,0,0,26502,0,0,0,26500,0,0,0,0,0,0,0,0,0,0,26502,0,0,0,26500,0,0,0,0,0,0,0,0,26502,
+26500,0,0,0,0,0,0,0,0,26502,0,0,0,26500,0,0,0,0,0,0,0,0,0,0,26502,0,0,0,26500,0,0,0,0,0,0,0,0,26502,
+26500,0,0,0,0,0,0,0,0,26502,0,0,0,26500,0,0,0,0,0,0,0,0,0,0,26502,0,0,0,0,0,0,0,0,0,0,0,0,26502,
+26500,0,0,0,0,0,0,0,0,26502,0,0,0,26500,0,0,0,0,0,0,0,0,0,0,26502,0,0,0,0,0,0,0,0,0,0,0,0,26502,
+26541,26542,26542,26542,26542,26542,26542,26542,26542,26543,0,0,0,26541,26542,26542,26542,26542,26542,26542,26542,26542,26542,26542,26543,0,0,0,26541,26542,26542,26542,26542,26542,26542,26542,26542,26543,
+26557,26558,26558,26558,26558,26558,26558,26558,26558,26560,0,0,0,26557,26558,26558,26558,26558,26558,26558,26558,26558,26558,26558,26560,0,0,0,26557,26558,26558,26558,26558,26558,26558,26558,26558,26560
   </data>
  </layer>
- <layer id="3" name="furniture_below" width="30" height="20">
+ <layer id="3" name="furniture_below" width="38" height="32">
   <data encoding="csv">
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,25814,25815,0,25782,25783,0,25748,25749,25750,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,25830,25831,0,25798,25799,0,25764,25765,25766,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+0,25807,0,25810,0,25814,25815,25782,25783,0,0,0,0,0,25807,25810,0,25826,25807,25780,25805,25806,0,0,0,0,0,0,0,25810,0,25807,25805,25806,25826,0,25807,0,
+0,0,0,0,0,25830,25831,25798,25799,0,0,0,0,0,0,0,0,0,0,25796,25821,25822,0,0,0,0,0,0,0,0,0,0,25821,25822,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,25807,0,0,0,0,25807,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,25807,25805,25806,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,25821,25822,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,25810,0,0,0,25814,25815,25748,0,0,0,0,0,0,25814,25815,25810,0,0,25807,25782,25783,0,0,0,0,0,0,25814,25815,25748,25782,25783,25748,0,0,0,
+0,0,0,0,0,0,25830,25831,25764,0,0,0,0,0,0,25830,25831,0,0,0,0,25798,25799,0,0,0,0,0,0,25830,25831,25764,25798,25799,25764,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
   </data>
  </layer>
  <objectgroup id="7" name="furniture_sorted" draworder="index">
-  <object id="15" name="desk_office" type="furniture" gid="25614" x="96" y="160" width="32" height="32">
+  <object id="93" name="desk_lav" type="furniture" gid="25683" x="32" y="64" width="32" height="32">
    <properties>
-    <property name="foot" type="int" value="224"/>
+    <property name="foot" type="int" value="128"/>
    </properties>
   </object>
-  <object id="16" name="desk_office" type="furniture" gid="25615" x="128" y="160" width="32" height="32">
+  <object id="94" name="desk_lav" type="furniture" gid="25684" x="64" y="64" width="32" height="32">
    <properties>
-    <property name="foot" type="int" value="224"/>
+    <property name="foot" type="int" value="128"/>
    </properties>
   </object>
-  <object id="17" name="desk_office" type="furniture" gid="25616" x="160" y="160" width="32" height="32">
+  <object id="95" name="desk_lav" type="furniture" gid="25685" x="96" y="64" width="32" height="32">
    <properties>
-    <property name="foot" type="int" value="224"/>
+    <property name="foot" type="int" value="128"/>
    </properties>
   </object>
-  <object id="18" name="desk_office" type="furniture" gid="25630" x="96" y="192" width="32" height="32">
+  <object id="96" name="desk_lav" type="furniture" gid="25699" x="32" y="96" width="32" height="32">
    <properties>
-    <property name="foot" type="int" value="224"/>
+    <property name="foot" type="int" value="128"/>
    </properties>
   </object>
-  <object id="19" name="desk_office" type="furniture" gid="25631" x="128" y="192" width="32" height="32">
+  <object id="97" name="desk_lav" type="furniture" gid="25700" x="64" y="96" width="32" height="32">
    <properties>
-    <property name="foot" type="int" value="224"/>
+    <property name="foot" type="int" value="128"/>
    </properties>
   </object>
-  <object id="20" name="desk_office" type="furniture" gid="25632" x="160" y="192" width="32" height="32">
+  <object id="98" name="desk_lav" type="furniture" gid="25701" x="96" y="96" width="32" height="32">
    <properties>
-    <property name="foot" type="int" value="224"/>
+    <property name="foot" type="int" value="128"/>
    </properties>
   </object>
-  <object id="21" name="desk_office" type="furniture" gid="25646" x="96" y="224" width="32" height="32">
+  <object id="99" name="desk_lav" type="furniture" gid="25715" x="32" y="128" width="32" height="32">
    <properties>
-    <property name="foot" type="int" value="224"/>
+    <property name="foot" type="int" value="128"/>
    </properties>
   </object>
-  <object id="22" name="desk_office" type="furniture" gid="25647" x="128" y="224" width="32" height="32">
+  <object id="100" name="desk_lav" type="furniture" gid="25716" x="64" y="128" width="32" height="32">
    <properties>
-    <property name="foot" type="int" value="224"/>
+    <property name="foot" type="int" value="128"/>
    </properties>
   </object>
-  <object id="23" name="desk_office" type="furniture" gid="25648" x="160" y="224" width="32" height="32">
+  <object id="101" name="desk_lav" type="furniture" gid="25717" x="96" y="128" width="32" height="32">
    <properties>
-    <property name="foot" type="int" value="224"/>
+    <property name="foot" type="int" value="128"/>
    </properties>
   </object>
-  <object id="24" name="chair_swivel" type="furniture" gid="25743" x="128" y="256" width="32" height="32">
+  <object id="102" name="chair_swivel" type="furniture" gid="25743" x="64" y="160" width="32" height="32">
    <properties>
-    <property name="foot" type="int" value="288"/>
+    <property name="foot" type="int" value="192"/>
    </properties>
   </object>
-  <object id="25" name="chair_swivel" type="furniture" gid="25759" x="128" y="288" width="32" height="32">
+  <object id="103" name="chair_swivel" type="furniture" gid="25759" x="64" y="192" width="32" height="32">
    <properties>
-    <property name="foot" type="int" value="288"/>
+    <property name="foot" type="int" value="192"/>
    </properties>
   </object>
-  <object id="26" name="desk_office" type="furniture" gid="25614" x="192" y="160" width="32" height="32">
+  <object id="104" name="plant_small" type="furniture" gid="25779" x="32" y="160" width="32" height="32">
    <properties>
-    <property name="foot" type="int" value="224"/>
+    <property name="foot" type="int" value="192"/>
    </properties>
   </object>
-  <object id="27" name="desk_office" type="furniture" gid="25615" x="224" y="160" width="32" height="32">
+  <object id="105" name="plant_small" type="furniture" gid="25795" x="32" y="192" width="32" height="32">
    <properties>
-    <property name="foot" type="int" value="224"/>
+    <property name="foot" type="int" value="192"/>
    </properties>
   </object>
-  <object id="28" name="desk_office" type="furniture" gid="25616" x="256" y="160" width="32" height="32">
-   <properties>
-    <property name="foot" type="int" value="224"/>
-   </properties>
-  </object>
-  <object id="29" name="desk_office" type="furniture" gid="25630" x="192" y="192" width="32" height="32">
-   <properties>
-    <property name="foot" type="int" value="224"/>
-   </properties>
-  </object>
-  <object id="30" name="desk_office" type="furniture" gid="25631" x="224" y="192" width="32" height="32">
-   <properties>
-    <property name="foot" type="int" value="224"/>
-   </properties>
-  </object>
-  <object id="31" name="desk_office" type="furniture" gid="25632" x="256" y="192" width="32" height="32">
-   <properties>
-    <property name="foot" type="int" value="224"/>
-   </properties>
-  </object>
-  <object id="32" name="desk_office" type="furniture" gid="25646" x="192" y="224" width="32" height="32">
-   <properties>
-    <property name="foot" type="int" value="224"/>
-   </properties>
-  </object>
-  <object id="33" name="desk_office" type="furniture" gid="25647" x="224" y="224" width="32" height="32">
-   <properties>
-    <property name="foot" type="int" value="224"/>
-   </properties>
-  </object>
-  <object id="34" name="desk_office" type="furniture" gid="25648" x="256" y="224" width="32" height="32">
-   <properties>
-    <property name="foot" type="int" value="224"/>
-   </properties>
-  </object>
-  <object id="35" name="chair_swivel" type="furniture" gid="25743" x="224" y="256" width="32" height="32">
-   <properties>
-    <property name="foot" type="int" value="288"/>
-   </properties>
-  </object>
-  <object id="36" name="chair_swivel" type="furniture" gid="25759" x="224" y="288" width="32" height="32">
-   <properties>
-    <property name="foot" type="int" value="288"/>
-   </properties>
-  </object>
-  <object id="37" name="desk_office" type="furniture" gid="25614" x="288" y="160" width="32" height="32">
-   <properties>
-    <property name="foot" type="int" value="224"/>
-   </properties>
-  </object>
-  <object id="38" name="desk_office" type="furniture" gid="25615" x="320" y="160" width="32" height="32">
-   <properties>
-    <property name="foot" type="int" value="224"/>
-   </properties>
-  </object>
-  <object id="39" name="desk_office" type="furniture" gid="25616" x="352" y="160" width="32" height="32">
-   <properties>
-    <property name="foot" type="int" value="224"/>
-   </properties>
-  </object>
-  <object id="40" name="desk_office" type="furniture" gid="25630" x="288" y="192" width="32" height="32">
-   <properties>
-    <property name="foot" type="int" value="224"/>
-   </properties>
-  </object>
-  <object id="41" name="desk_office" type="furniture" gid="25631" x="320" y="192" width="32" height="32">
-   <properties>
-    <property name="foot" type="int" value="224"/>
-   </properties>
-  </object>
-  <object id="42" name="desk_office" type="furniture" gid="25632" x="352" y="192" width="32" height="32">
-   <properties>
-    <property name="foot" type="int" value="224"/>
-   </properties>
-  </object>
-  <object id="43" name="desk_office" type="furniture" gid="25646" x="288" y="224" width="32" height="32">
-   <properties>
-    <property name="foot" type="int" value="224"/>
-   </properties>
-  </object>
-  <object id="44" name="desk_office" type="furniture" gid="25647" x="320" y="224" width="32" height="32">
-   <properties>
-    <property name="foot" type="int" value="224"/>
-   </properties>
-  </object>
-  <object id="45" name="desk_office" type="furniture" gid="25648" x="352" y="224" width="32" height="32">
-   <properties>
-    <property name="foot" type="int" value="224"/>
-   </properties>
-  </object>
-  <object id="46" name="chair_swivel" type="furniture" gid="25743" x="320" y="256" width="32" height="32">
-   <properties>
-    <property name="foot" type="int" value="288"/>
-   </properties>
-  </object>
-  <object id="47" name="chair_swivel" type="furniture" gid="25759" x="320" y="288" width="32" height="32">
-   <properties>
-    <property name="foot" type="int" value="288"/>
-   </properties>
-  </object>
-  <object id="48" name="shelf" type="furniture" gid="25812" x="384" y="96" width="32" height="32">
+  <object id="106" name="table_lav_long" type="furniture" gid="25682" x="128" y="96" width="32" height="32">
    <properties>
     <property name="foot" type="int" value="160"/>
    </properties>
   </object>
-  <object id="49" name="shelf" type="furniture" gid="25813" x="416" y="96" width="32" height="32">
+  <object id="107" name="table_lav_long" type="furniture" gid="25683" x="160" y="96" width="32" height="32">
    <properties>
     <property name="foot" type="int" value="160"/>
    </properties>
   </object>
-  <object id="50" name="shelf" type="furniture" gid="25828" x="384" y="128" width="32" height="32">
+  <object id="108" name="table_lav_long" type="furniture" gid="25684" x="192" y="96" width="32" height="32">
    <properties>
     <property name="foot" type="int" value="160"/>
    </properties>
   </object>
-  <object id="51" name="shelf" type="furniture" gid="25829" x="416" y="128" width="32" height="32">
+  <object id="109" name="table_lav_long" type="furniture" gid="25685" x="224" y="96" width="32" height="32">
    <properties>
     <property name="foot" type="int" value="160"/>
    </properties>
   </object>
-  <object id="52" name="shelf" type="furniture" gid="25844" x="384" y="160" width="32" height="32">
+  <object id="110" name="table_lav_long" type="furniture" gid="25686" x="256" y="96" width="32" height="32">
    <properties>
     <property name="foot" type="int" value="160"/>
    </properties>
   </object>
-  <object id="53" name="shelf" type="furniture" gid="25845" x="416" y="160" width="32" height="32">
+  <object id="111" name="table_lav_long" type="furniture" gid="25698" x="128" y="128" width="32" height="32">
    <properties>
     <property name="foot" type="int" value="160"/>
    </properties>
   </object>
-  <object id="54" name="water_cooler" type="furniture" gid="25865" x="448" y="160" width="32" height="32">
+  <object id="112" name="table_lav_long" type="furniture" gid="25699" x="160" y="128" width="32" height="32">
    <properties>
-    <property name="foot" type="int" value="224"/>
+    <property name="foot" type="int" value="160"/>
    </properties>
   </object>
-  <object id="55" name="water_cooler" type="furniture" gid="25881" x="448" y="192" width="32" height="32">
+  <object id="113" name="table_lav_long" type="furniture" gid="25700" x="192" y="128" width="32" height="32">
    <properties>
-    <property name="foot" type="int" value="224"/>
+    <property name="foot" type="int" value="160"/>
    </properties>
   </object>
-  <object id="56" name="water_cooler" type="furniture" gid="25897" x="448" y="224" width="32" height="32">
+  <object id="114" name="table_lav_long" type="furniture" gid="25701" x="224" y="128" width="32" height="32">
    <properties>
-    <property name="foot" type="int" value="224"/>
+    <property name="foot" type="int" value="160"/>
    </properties>
   </object>
-  <object id="57" name="plant" type="furniture" gid="25731" x="384" y="224" width="32" height="32">
+  <object id="115" name="table_lav_long" type="furniture" gid="25702" x="256" y="128" width="32" height="32">
    <properties>
-    <property name="foot" type="int" value="288"/>
+    <property name="foot" type="int" value="160"/>
    </properties>
   </object>
-  <object id="58" name="plant" type="furniture" gid="25747" x="384" y="256" width="32" height="32">
+  <object id="116" name="table_lav_long" type="furniture" gid="25714" x="128" y="160" width="32" height="32">
    <properties>
-    <property name="foot" type="int" value="288"/>
+    <property name="foot" type="int" value="160"/>
    </properties>
   </object>
-  <object id="59" name="plant" type="furniture" gid="25763" x="384" y="288" width="32" height="32">
+  <object id="117" name="table_lav_long" type="furniture" gid="25715" x="160" y="160" width="32" height="32">
    <properties>
-    <property name="foot" type="int" value="288"/>
+    <property name="foot" type="int" value="160"/>
    </properties>
   </object>
-  <object id="60" name="printer" type="furniture" gid="25973" x="416" y="256" width="32" height="32">
+  <object id="118" name="table_lav_long" type="furniture" gid="25716" x="192" y="160" width="32" height="32">
    <properties>
-    <property name="foot" type="int" value="288"/>
+    <property name="foot" type="int" value="160"/>
    </properties>
   </object>
-  <object id="61" name="printer" type="furniture" gid="25989" x="416" y="288" width="32" height="32">
+  <object id="119" name="table_lav_long" type="furniture" gid="25717" x="224" y="160" width="32" height="32">
    <properties>
-    <property name="foot" type="int" value="288"/>
+    <property name="foot" type="int" value="160"/>
    </properties>
   </object>
-  <object id="62" name="plant_small" type="furniture" gid="25779" x="448" y="256" width="32" height="32">
+  <object id="120" name="table_lav_long" type="furniture" gid="25718" x="256" y="160" width="32" height="32">
    <properties>
-    <property name="foot" type="int" value="288"/>
+    <property name="foot" type="int" value="160"/>
    </properties>
   </object>
-  <object id="63" name="plant_small" type="furniture" gid="25795" x="448" y="288" width="32" height="32">
+  <object id="121" name="chair_swivel" type="furniture" gid="25743" x="256" y="160" width="32" height="32">
    <properties>
-    <property name="foot" type="int" value="288"/>
+    <property name="foot" type="int" value="192"/>
+   </properties>
+  </object>
+  <object id="122" name="chair_swivel" type="furniture" gid="25759" x="256" y="192" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="192"/>
+   </properties>
+  </object>
+  <object id="123" name="table_dark_long" type="furniture" gid="25623" x="448" y="64" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="128"/>
+   </properties>
+  </object>
+  <object id="124" name="table_dark_long" type="furniture" gid="25624" x="480" y="64" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="128"/>
+   </properties>
+  </object>
+  <object id="125" name="table_dark_long" type="furniture" gid="25625" x="512" y="64" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="128"/>
+   </properties>
+  </object>
+  <object id="126" name="table_dark_long" type="furniture" gid="25626" x="544" y="64" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="128"/>
+   </properties>
+  </object>
+  <object id="127" name="table_dark_long" type="furniture" gid="25627" x="576" y="64" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="128"/>
+   </properties>
+  </object>
+  <object id="128" name="table_dark_long" type="furniture" gid="25639" x="448" y="96" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="128"/>
+   </properties>
+  </object>
+  <object id="129" name="table_dark_long" type="furniture" gid="25640" x="480" y="96" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="128"/>
+   </properties>
+  </object>
+  <object id="130" name="table_dark_long" type="furniture" gid="25641" x="512" y="96" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="128"/>
+   </properties>
+  </object>
+  <object id="131" name="table_dark_long" type="furniture" gid="25642" x="544" y="96" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="128"/>
+   </properties>
+  </object>
+  <object id="132" name="table_dark_long" type="furniture" gid="25643" x="576" y="96" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="128"/>
+   </properties>
+  </object>
+  <object id="133" name="table_dark_long" type="furniture" gid="25655" x="448" y="128" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="128"/>
+   </properties>
+  </object>
+  <object id="134" name="table_dark_long" type="furniture" gid="25656" x="480" y="128" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="128"/>
+   </properties>
+  </object>
+  <object id="135" name="table_dark_long" type="furniture" gid="25657" x="512" y="128" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="128"/>
+   </properties>
+  </object>
+  <object id="136" name="table_dark_long" type="furniture" gid="25658" x="544" y="128" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="128"/>
+   </properties>
+  </object>
+  <object id="137" name="table_dark_long" type="furniture" gid="25659" x="576" y="128" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="128"/>
+   </properties>
+  </object>
+  <object id="138" name="chair_swivel" type="furniture" gid="25743" x="512" y="160" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="192"/>
+   </properties>
+  </object>
+  <object id="139" name="chair_swivel" type="furniture" gid="25759" x="512" y="192" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="192"/>
+   </properties>
+  </object>
+  <object id="140" name="chair_swivel" type="furniture" gid="25743" x="448" y="160" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="192"/>
+   </properties>
+  </object>
+  <object id="141" name="chair_swivel" type="furniture" gid="25759" x="448" y="192" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="192"/>
+   </properties>
+  </object>
+  <object id="142" name="sofa_dark" type="furniture" gid="25885" x="640" y="96" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="128"/>
+   </properties>
+  </object>
+  <object id="143" name="sofa_dark" type="furniture" gid="25886" x="672" y="96" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="128"/>
+   </properties>
+  </object>
+  <object id="144" name="sofa_dark" type="furniture" gid="25901" x="640" y="128" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="128"/>
+   </properties>
+  </object>
+  <object id="145" name="sofa_dark" type="furniture" gid="25902" x="672" y="128" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="128"/>
+   </properties>
+  </object>
+  <object id="146" name="plant" type="furniture" gid="25731" x="736" y="128" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="192"/>
+   </properties>
+  </object>
+  <object id="147" name="plant" type="furniture" gid="25747" x="736" y="160" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="192"/>
+   </properties>
+  </object>
+  <object id="148" name="plant" type="furniture" gid="25763" x="736" y="192" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="192"/>
+   </properties>
+  </object>
+  <object id="149" name="shelf" type="furniture" gid="25812" x="704" y="32" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="96"/>
+   </properties>
+  </object>
+  <object id="150" name="shelf" type="furniture" gid="25813" x="736" y="32" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="96"/>
+   </properties>
+  </object>
+  <object id="151" name="shelf" type="furniture" gid="25828" x="704" y="64" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="96"/>
+   </properties>
+  </object>
+  <object id="152" name="shelf" type="furniture" gid="25829" x="736" y="64" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="96"/>
+   </properties>
+  </object>
+  <object id="153" name="shelf" type="furniture" gid="25844" x="704" y="96" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="96"/>
+   </properties>
+  </object>
+  <object id="154" name="shelf" type="furniture" gid="25845" x="736" y="96" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="96"/>
+   </properties>
+  </object>
+  <object id="155" name="desk_light" type="furniture" gid="25619" x="928" y="64" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="128"/>
+   </properties>
+  </object>
+  <object id="156" name="desk_light" type="furniture" gid="25620" x="960" y="64" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="128"/>
+   </properties>
+  </object>
+  <object id="157" name="desk_light" type="furniture" gid="25621" x="992" y="64" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="128"/>
+   </properties>
+  </object>
+  <object id="158" name="desk_light" type="furniture" gid="25635" x="928" y="96" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="128"/>
+   </properties>
+  </object>
+  <object id="159" name="desk_light" type="furniture" gid="25636" x="960" y="96" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="128"/>
+   </properties>
+  </object>
+  <object id="160" name="desk_light" type="furniture" gid="25637" x="992" y="96" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="128"/>
+   </properties>
+  </object>
+  <object id="161" name="desk_light" type="furniture" gid="25651" x="928" y="128" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="128"/>
+   </properties>
+  </object>
+  <object id="162" name="desk_light" type="furniture" gid="25652" x="960" y="128" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="128"/>
+   </properties>
+  </object>
+  <object id="163" name="desk_light" type="furniture" gid="25653" x="992" y="128" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="128"/>
+   </properties>
+  </object>
+  <object id="164" name="chair_swivel" type="furniture" gid="25743" x="960" y="160" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="192"/>
+   </properties>
+  </object>
+  <object id="165" name="chair_swivel" type="furniture" gid="25759" x="960" y="192" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="192"/>
+   </properties>
+  </object>
+  <object id="166" name="desk_light" type="furniture" gid="25619" x="1088" y="64" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="128"/>
+   </properties>
+  </object>
+  <object id="167" name="desk_light" type="furniture" gid="25620" x="1120" y="64" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="128"/>
+   </properties>
+  </object>
+  <object id="168" name="desk_light" type="furniture" gid="25621" x="1152" y="64" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="128"/>
+   </properties>
+  </object>
+  <object id="169" name="desk_light" type="furniture" gid="25635" x="1088" y="96" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="128"/>
+   </properties>
+  </object>
+  <object id="170" name="desk_light" type="furniture" gid="25636" x="1120" y="96" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="128"/>
+   </properties>
+  </object>
+  <object id="171" name="desk_light" type="furniture" gid="25637" x="1152" y="96" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="128"/>
+   </properties>
+  </object>
+  <object id="172" name="desk_light" type="furniture" gid="25651" x="1088" y="128" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="128"/>
+   </properties>
+  </object>
+  <object id="173" name="desk_light" type="furniture" gid="25652" x="1120" y="128" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="128"/>
+   </properties>
+  </object>
+  <object id="174" name="desk_light" type="furniture" gid="25653" x="1152" y="128" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="128"/>
+   </properties>
+  </object>
+  <object id="175" name="chair_swivel" type="furniture" gid="25743" x="1120" y="160" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="192"/>
+   </properties>
+  </object>
+  <object id="176" name="chair_swivel" type="furniture" gid="25759" x="1120" y="192" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="192"/>
+   </properties>
+  </object>
+  <object id="177" name="printer" type="furniture" gid="25973" x="1056" y="128" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="160"/>
+   </properties>
+  </object>
+  <object id="178" name="printer" type="furniture" gid="25989" x="1056" y="160" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="160"/>
+   </properties>
+  </object>
+  <object id="179" name="plant_small" type="furniture" gid="25779" x="1024" y="96" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="128"/>
+   </properties>
+  </object>
+  <object id="180" name="plant_small" type="furniture" gid="25795" x="1024" y="128" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="128"/>
+   </properties>
+  </object>
+  <object id="181" name="plant_small" type="furniture" gid="25779" x="928" y="160" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="192"/>
+   </properties>
+  </object>
+  <object id="182" name="plant_small" type="furniture" gid="25795" x="928" y="192" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="192"/>
+   </properties>
+  </object>
+  <object id="183" name="plant_small" type="furniture" gid="25779" x="1152" y="160" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="192"/>
+   </properties>
+  </object>
+  <object id="184" name="plant_small" type="furniture" gid="25795" x="1152" y="192" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="192"/>
+   </properties>
+  </object>
+  <object id="185" name="rack_a" type="furniture" gid="25981" x="928" y="384" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="448"/>
+   </properties>
+  </object>
+  <object id="186" name="rack_a" type="furniture" gid="25982" x="960" y="384" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="448"/>
+   </properties>
+  </object>
+  <object id="187" name="rack_a" type="furniture" gid="25997" x="928" y="416" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="448"/>
+   </properties>
+  </object>
+  <object id="188" name="rack_a" type="furniture" gid="25998" x="960" y="416" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="448"/>
+   </properties>
+  </object>
+  <object id="189" name="rack_a" type="furniture" gid="26013" x="928" y="448" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="448"/>
+   </properties>
+  </object>
+  <object id="190" name="rack_a" type="furniture" gid="26014" x="960" y="448" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="448"/>
+   </properties>
+  </object>
+  <object id="191" name="rack_b" type="furniture" gid="25983" x="992" y="384" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="448"/>
+   </properties>
+  </object>
+  <object id="192" name="rack_b" type="furniture" gid="25984" x="1024" y="384" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="448"/>
+   </properties>
+  </object>
+  <object id="193" name="rack_b" type="furniture" gid="25999" x="992" y="416" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="448"/>
+   </properties>
+  </object>
+  <object id="194" name="rack_b" type="furniture" gid="26000" x="1024" y="416" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="448"/>
+   </properties>
+  </object>
+  <object id="195" name="rack_b" type="furniture" gid="26015" x="992" y="448" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="448"/>
+   </properties>
+  </object>
+  <object id="196" name="rack_b" type="furniture" gid="26016" x="1024" y="448" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="448"/>
+   </properties>
+  </object>
+  <object id="197" name="desk_dark" type="furniture" gid="25624" x="1056" y="448" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="512"/>
+   </properties>
+  </object>
+  <object id="198" name="desk_dark" type="furniture" gid="25625" x="1088" y="448" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="512"/>
+   </properties>
+  </object>
+  <object id="199" name="desk_dark" type="furniture" gid="25626" x="1120" y="448" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="512"/>
+   </properties>
+  </object>
+  <object id="200" name="desk_dark" type="furniture" gid="25640" x="1056" y="480" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="512"/>
+   </properties>
+  </object>
+  <object id="201" name="desk_dark" type="furniture" gid="25641" x="1088" y="480" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="512"/>
+   </properties>
+  </object>
+  <object id="202" name="desk_dark" type="furniture" gid="25642" x="1120" y="480" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="512"/>
+   </properties>
+  </object>
+  <object id="203" name="desk_dark" type="furniture" gid="25656" x="1056" y="512" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="512"/>
+   </properties>
+  </object>
+  <object id="204" name="desk_dark" type="furniture" gid="25657" x="1088" y="512" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="512"/>
+   </properties>
+  </object>
+  <object id="205" name="desk_dark" type="furniture" gid="25658" x="1120" y="512" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="512"/>
+   </properties>
+  </object>
+  <object id="206" name="chair_swivel" type="furniture" gid="25743" x="1088" y="544" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="576"/>
+   </properties>
+  </object>
+  <object id="207" name="chair_swivel" type="furniture" gid="25759" x="1088" y="576" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="576"/>
+   </properties>
+  </object>
+  <object id="208" name="chair_swivel" type="furniture" gid="25743" x="1120" y="544" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="576"/>
+   </properties>
+  </object>
+  <object id="209" name="chair_swivel" type="furniture" gid="25759" x="1120" y="576" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="576"/>
+   </properties>
+  </object>
+  <object id="210" name="studio_rig" type="furniture" gid="26183" x="928" y="512" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="576"/>
+   </properties>
+  </object>
+  <object id="211" name="studio_rig" type="furniture" gid="26184" x="960" y="512" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="576"/>
+   </properties>
+  </object>
+  <object id="212" name="studio_rig" type="furniture" gid="26185" x="992" y="512" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="576"/>
+   </properties>
+  </object>
+  <object id="213" name="studio_rig" type="furniture" gid="26199" x="928" y="544" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="576"/>
+   </properties>
+  </object>
+  <object id="214" name="studio_rig" type="furniture" gid="26200" x="960" y="544" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="576"/>
+   </properties>
+  </object>
+  <object id="215" name="studio_rig" type="furniture" gid="26201" x="992" y="544" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="576"/>
+   </properties>
+  </object>
+  <object id="216" name="studio_rig" type="furniture" gid="26215" x="928" y="576" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="576"/>
+   </properties>
+  </object>
+  <object id="217" name="studio_rig" type="furniture" gid="26216" x="960" y="576" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="576"/>
+   </properties>
+  </object>
+  <object id="218" name="plant" type="furniture" gid="25731" x="1152" y="480" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="544"/>
+   </properties>
+  </object>
+  <object id="219" name="plant" type="furniture" gid="25747" x="1152" y="512" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="544"/>
+   </properties>
+  </object>
+  <object id="220" name="plant" type="furniture" gid="25763" x="1152" y="544" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="544"/>
+   </properties>
+  </object>
+  <object id="221" name="desk_office" type="furniture" gid="25614" x="928" y="832" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="896"/>
+   </properties>
+  </object>
+  <object id="222" name="desk_office" type="furniture" gid="25615" x="960" y="832" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="896"/>
+   </properties>
+  </object>
+  <object id="223" name="desk_office" type="furniture" gid="25616" x="992" y="832" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="896"/>
+   </properties>
+  </object>
+  <object id="224" name="desk_office" type="furniture" gid="25630" x="928" y="864" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="896"/>
+   </properties>
+  </object>
+  <object id="225" name="desk_office" type="furniture" gid="25631" x="960" y="864" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="896"/>
+   </properties>
+  </object>
+  <object id="226" name="desk_office" type="furniture" gid="25632" x="992" y="864" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="896"/>
+   </properties>
+  </object>
+  <object id="227" name="desk_office" type="furniture" gid="25646" x="928" y="896" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="896"/>
+   </properties>
+  </object>
+  <object id="228" name="desk_office" type="furniture" gid="25647" x="960" y="896" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="896"/>
+   </properties>
+  </object>
+  <object id="229" name="desk_office" type="furniture" gid="25648" x="992" y="896" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="896"/>
+   </properties>
+  </object>
+  <object id="230" name="chair_swivel" type="furniture" gid="25743" x="960" y="928" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="960"/>
+   </properties>
+  </object>
+  <object id="231" name="chair_swivel" type="furniture" gid="25759" x="960" y="960" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="960"/>
+   </properties>
+  </object>
+  <object id="232" name="desk_office" type="furniture" gid="25614" x="1024" y="832" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="896"/>
+   </properties>
+  </object>
+  <object id="233" name="desk_office" type="furniture" gid="25615" x="1056" y="832" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="896"/>
+   </properties>
+  </object>
+  <object id="234" name="desk_office" type="furniture" gid="25616" x="1088" y="832" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="896"/>
+   </properties>
+  </object>
+  <object id="235" name="desk_office" type="furniture" gid="25630" x="1024" y="864" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="896"/>
+   </properties>
+  </object>
+  <object id="236" name="desk_office" type="furniture" gid="25631" x="1056" y="864" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="896"/>
+   </properties>
+  </object>
+  <object id="237" name="desk_office" type="furniture" gid="25632" x="1088" y="864" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="896"/>
+   </properties>
+  </object>
+  <object id="238" name="desk_office" type="furniture" gid="25646" x="1024" y="896" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="896"/>
+   </properties>
+  </object>
+  <object id="239" name="desk_office" type="furniture" gid="25647" x="1056" y="896" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="896"/>
+   </properties>
+  </object>
+  <object id="240" name="desk_office" type="furniture" gid="25648" x="1088" y="896" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="896"/>
+   </properties>
+  </object>
+  <object id="241" name="chair_swivel" type="furniture" gid="25743" x="1056" y="928" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="960"/>
+   </properties>
+  </object>
+  <object id="242" name="chair_swivel" type="furniture" gid="25759" x="1056" y="960" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="960"/>
+   </properties>
+  </object>
+  <object id="243" name="shelf" type="furniture" gid="25812" x="1120" y="768" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="832"/>
+   </properties>
+  </object>
+  <object id="244" name="shelf" type="furniture" gid="25813" x="1152" y="768" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="832"/>
+   </properties>
+  </object>
+  <object id="245" name="shelf" type="furniture" gid="25828" x="1120" y="800" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="832"/>
+   </properties>
+  </object>
+  <object id="246" name="shelf" type="furniture" gid="25829" x="1152" y="800" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="832"/>
+   </properties>
+  </object>
+  <object id="247" name="shelf" type="furniture" gid="25844" x="1120" y="832" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="832"/>
+   </properties>
+  </object>
+  <object id="248" name="shelf" type="furniture" gid="25845" x="1152" y="832" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="832"/>
+   </properties>
+  </object>
+  <object id="249" name="plant_small" type="furniture" gid="25779" x="1152" y="864" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="896"/>
+   </properties>
+  </object>
+  <object id="250" name="plant_small" type="furniture" gid="25795" x="1152" y="896" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="896"/>
+   </properties>
+  </object>
+  <object id="251" name="printer" type="furniture" gid="25973" x="1120" y="928" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="960"/>
+   </properties>
+  </object>
+  <object id="252" name="printer" type="furniture" gid="25989" x="1120" y="960" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="960"/>
+   </properties>
+  </object>
+  <object id="253" name="desk_office" type="furniture" gid="25614" x="480" y="832" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="896"/>
+   </properties>
+  </object>
+  <object id="254" name="desk_office" type="furniture" gid="25615" x="512" y="832" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="896"/>
+   </properties>
+  </object>
+  <object id="255" name="desk_office" type="furniture" gid="25616" x="544" y="832" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="896"/>
+   </properties>
+  </object>
+  <object id="256" name="desk_office" type="furniture" gid="25630" x="480" y="864" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="896"/>
+   </properties>
+  </object>
+  <object id="257" name="desk_office" type="furniture" gid="25631" x="512" y="864" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="896"/>
+   </properties>
+  </object>
+  <object id="258" name="desk_office" type="furniture" gid="25632" x="544" y="864" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="896"/>
+   </properties>
+  </object>
+  <object id="259" name="desk_office" type="furniture" gid="25646" x="480" y="896" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="896"/>
+   </properties>
+  </object>
+  <object id="260" name="desk_office" type="furniture" gid="25647" x="512" y="896" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="896"/>
+   </properties>
+  </object>
+  <object id="261" name="desk_office" type="furniture" gid="25648" x="544" y="896" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="896"/>
+   </properties>
+  </object>
+  <object id="262" name="chair_swivel" type="furniture" gid="25743" x="512" y="928" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="960"/>
+   </properties>
+  </object>
+  <object id="263" name="chair_swivel" type="furniture" gid="25759" x="512" y="960" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="960"/>
+   </properties>
+  </object>
+  <object id="264" name="desk_office" type="furniture" gid="25614" x="640" y="832" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="896"/>
+   </properties>
+  </object>
+  <object id="265" name="desk_office" type="furniture" gid="25615" x="672" y="832" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="896"/>
+   </properties>
+  </object>
+  <object id="266" name="desk_office" type="furniture" gid="25616" x="704" y="832" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="896"/>
+   </properties>
+  </object>
+  <object id="267" name="desk_office" type="furniture" gid="25630" x="640" y="864" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="896"/>
+   </properties>
+  </object>
+  <object id="268" name="desk_office" type="furniture" gid="25631" x="672" y="864" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="896"/>
+   </properties>
+  </object>
+  <object id="269" name="desk_office" type="furniture" gid="25632" x="704" y="864" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="896"/>
+   </properties>
+  </object>
+  <object id="270" name="desk_office" type="furniture" gid="25646" x="640" y="896" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="896"/>
+   </properties>
+  </object>
+  <object id="271" name="desk_office" type="furniture" gid="25647" x="672" y="896" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="896"/>
+   </properties>
+  </object>
+  <object id="272" name="desk_office" type="furniture" gid="25648" x="704" y="896" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="896"/>
+   </properties>
+  </object>
+  <object id="273" name="chair_swivel" type="furniture" gid="25743" x="672" y="928" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="960"/>
+   </properties>
+  </object>
+  <object id="274" name="chair_swivel" type="furniture" gid="25759" x="672" y="960" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="960"/>
+   </properties>
+  </object>
+  <object id="275" name="water_cooler" type="furniture" gid="25865" x="448" y="896" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="960"/>
+   </properties>
+  </object>
+  <object id="276" name="water_cooler" type="furniture" gid="25881" x="448" y="928" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="960"/>
+   </properties>
+  </object>
+  <object id="277" name="water_cooler" type="furniture" gid="25897" x="448" y="960" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="960"/>
+   </properties>
+  </object>
+  <object id="278" name="plant" type="furniture" gid="25731" x="736" y="896" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="960"/>
+   </properties>
+  </object>
+  <object id="279" name="plant" type="furniture" gid="25747" x="736" y="928" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="960"/>
+   </properties>
+  </object>
+  <object id="280" name="plant" type="furniture" gid="25763" x="736" y="960" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="960"/>
+   </properties>
+  </object>
+  <object id="281" name="sofa_blue" type="furniture" gid="26692" x="32" y="800" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="832"/>
+   </properties>
+  </object>
+  <object id="282" name="sofa_blue" type="furniture" gid="26693" x="64" y="800" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="832"/>
+   </properties>
+  </object>
+  <object id="283" name="sofa_blue" type="furniture" gid="26694" x="96" y="800" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="832"/>
+   </properties>
+  </object>
+  <object id="284" name="sofa_blue" type="furniture" gid="26703" x="32" y="832" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="832"/>
+   </properties>
+  </object>
+  <object id="285" name="sofa_blue" type="furniture" gid="26704" x="64" y="832" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="832"/>
+   </properties>
+  </object>
+  <object id="286" name="sofa_blue" type="furniture" gid="26705" x="96" y="832" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="832"/>
+   </properties>
+  </object>
+  <object id="287" name="armchair_blue" type="furniture" gid="26714" x="32" y="864" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="864"/>
+   </properties>
+  </object>
+  <object id="288" name="plant_small" type="furniture" gid="25779" x="256" y="832" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="864"/>
+   </properties>
+  </object>
+  <object id="289" name="plant_small" type="furniture" gid="25795" x="256" y="864" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="864"/>
+   </properties>
+  </object>
+  <object id="290" name="table_lav_long" type="furniture" gid="25682" x="128" y="896" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="960"/>
+   </properties>
+  </object>
+  <object id="291" name="table_lav_long" type="furniture" gid="25683" x="160" y="896" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="960"/>
+   </properties>
+  </object>
+  <object id="292" name="table_lav_long" type="furniture" gid="25684" x="192" y="896" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="960"/>
+   </properties>
+  </object>
+  <object id="293" name="table_lav_long" type="furniture" gid="25685" x="224" y="896" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="960"/>
+   </properties>
+  </object>
+  <object id="294" name="table_lav_long" type="furniture" gid="25686" x="256" y="896" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="960"/>
+   </properties>
+  </object>
+  <object id="295" name="table_lav_long" type="furniture" gid="25698" x="128" y="928" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="960"/>
+   </properties>
+  </object>
+  <object id="296" name="table_lav_long" type="furniture" gid="25699" x="160" y="928" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="960"/>
+   </properties>
+  </object>
+  <object id="297" name="table_lav_long" type="furniture" gid="25700" x="192" y="928" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="960"/>
+   </properties>
+  </object>
+  <object id="298" name="table_lav_long" type="furniture" gid="25701" x="224" y="928" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="960"/>
+   </properties>
+  </object>
+  <object id="299" name="table_lav_long" type="furniture" gid="25702" x="256" y="928" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="960"/>
+   </properties>
+  </object>
+  <object id="300" name="table_lav_long" type="furniture" gid="25714" x="128" y="960" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="960"/>
+   </properties>
+  </object>
+  <object id="301" name="table_lav_long" type="furniture" gid="25715" x="160" y="960" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="960"/>
+   </properties>
+  </object>
+  <object id="302" name="table_lav_long" type="furniture" gid="25716" x="192" y="960" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="960"/>
+   </properties>
+  </object>
+  <object id="303" name="table_lav_long" type="furniture" gid="25717" x="224" y="960" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="960"/>
+   </properties>
+  </object>
+  <object id="304" name="table_lav_long" type="furniture" gid="25718" x="256" y="960" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="960"/>
+   </properties>
+  </object>
+  <object id="305" name="plant_small" type="furniture" gid="25779" x="32" y="928" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="960"/>
+   </properties>
+  </object>
+  <object id="306" name="plant_small" type="furniture" gid="25795" x="32" y="960" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="960"/>
+   </properties>
+  </object>
+  <object id="307" name="sofa_blue" type="furniture" gid="26692" x="32" y="416" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="448"/>
+   </properties>
+  </object>
+  <object id="308" name="sofa_blue" type="furniture" gid="26693" x="64" y="416" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="448"/>
+   </properties>
+  </object>
+  <object id="309" name="sofa_blue" type="furniture" gid="26694" x="96" y="416" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="448"/>
+   </properties>
+  </object>
+  <object id="310" name="sofa_blue" type="furniture" gid="26703" x="32" y="448" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="448"/>
+   </properties>
+  </object>
+  <object id="311" name="sofa_blue" type="furniture" gid="26704" x="64" y="448" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="448"/>
+   </properties>
+  </object>
+  <object id="312" name="sofa_blue" type="furniture" gid="26705" x="96" y="448" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="448"/>
+   </properties>
+  </object>
+  <object id="313" name="sofa_gray" type="furniture" gid="26695" x="192" y="416" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="448"/>
+   </properties>
+  </object>
+  <object id="314" name="sofa_gray" type="furniture" gid="26696" x="224" y="416" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="448"/>
+   </properties>
+  </object>
+  <object id="315" name="sofa_gray" type="furniture" gid="26697" x="256" y="416" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="448"/>
+   </properties>
+  </object>
+  <object id="316" name="sofa_gray" type="furniture" gid="26706" x="192" y="448" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="448"/>
+   </properties>
+  </object>
+  <object id="317" name="sofa_gray" type="furniture" gid="26707" x="224" y="448" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="448"/>
+   </properties>
+  </object>
+  <object id="318" name="sofa_gray" type="furniture" gid="26708" x="256" y="448" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="448"/>
+   </properties>
+  </object>
+  <object id="319" name="pingpong_blue" type="furniture" gid="26719" x="96" y="480" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="576"/>
+   </properties>
+  </object>
+  <object id="320" name="pingpong_blue" type="furniture" gid="26720" x="128" y="480" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="576"/>
+   </properties>
+  </object>
+  <object id="321" name="pingpong_blue" type="furniture" gid="26721" x="160" y="480" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="576"/>
+   </properties>
+  </object>
+  <object id="322" name="pingpong_blue" type="furniture" gid="26722" x="96" y="512" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="576"/>
+   </properties>
+  </object>
+  <object id="323" name="pingpong_blue" type="furniture" gid="26723" x="128" y="512" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="576"/>
+   </properties>
+  </object>
+  <object id="324" name="pingpong_blue" type="furniture" gid="26724" x="160" y="512" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="576"/>
+   </properties>
+  </object>
+  <object id="325" name="pingpong_blue" type="furniture" gid="26725" x="96" y="544" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="576"/>
+   </properties>
+  </object>
+  <object id="326" name="pingpong_blue" type="furniture" gid="26726" x="128" y="544" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="576"/>
+   </properties>
+  </object>
+  <object id="327" name="pingpong_blue" type="furniture" gid="26727" x="160" y="544" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="576"/>
+   </properties>
+  </object>
+  <object id="328" name="pingpong_blue" type="furniture" gid="26729" x="96" y="576" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="576"/>
+   </properties>
+  </object>
+  <object id="329" name="pingpong_blue" type="furniture" gid="26730" x="128" y="576" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="576"/>
+   </properties>
+  </object>
+  <object id="330" name="pingpong_blue" type="furniture" gid="26731" x="160" y="576" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="576"/>
+   </properties>
+  </object>
+  <object id="331" name="puff_red" type="furniture" gid="26733" x="224" y="512" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="512"/>
+   </properties>
+  </object>
+  <object id="332" name="puff_yellow" type="furniture" gid="26732" x="256" y="544" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="544"/>
+   </properties>
+  </object>
+  <object id="333" name="puff_blue" type="furniture" gid="26728" x="192" y="576" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="576"/>
+   </properties>
+  </object>
+  <object id="334" name="puff_red" type="furniture" gid="26733" x="256" y="576" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="576"/>
+   </properties>
+  </object>
+  <object id="335" name="plant_small" type="furniture" gid="25779" x="32" y="544" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="576"/>
+   </properties>
+  </object>
+  <object id="336" name="plant_small" type="furniture" gid="25795" x="32" y="576" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="576"/>
+   </properties>
+  </object>
+  <object id="337" name="glass_divider" type="furniture" gid="26029" x="480" y="480" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="544"/>
+   </properties>
+  </object>
+  <object id="338" name="glass_divider" type="furniture" gid="26032" x="576" y="480" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="544"/>
+   </properties>
+  </object>
+  <object id="339" name="glass_divider" type="furniture" gid="26045" x="480" y="512" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="544"/>
+   </properties>
+  </object>
+  <object id="340" name="glass_divider" type="furniture" gid="26046" x="512" y="512" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="544"/>
+   </properties>
+  </object>
+  <object id="341" name="glass_divider" type="furniture" gid="26047" x="544" y="512" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="544"/>
+   </properties>
+  </object>
+  <object id="342" name="glass_divider" type="furniture" gid="26048" x="576" y="512" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="544"/>
+   </properties>
+  </object>
+  <object id="343" name="glass_divider" type="furniture" gid="26061" x="480" y="544" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="544"/>
+   </properties>
+  </object>
+  <object id="344" name="glass_divider" type="furniture" gid="26062" x="512" y="544" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="544"/>
+   </properties>
+  </object>
+  <object id="345" name="glass_divider" type="furniture" gid="26063" x="544" y="544" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="544"/>
+   </properties>
+  </object>
+  <object id="346" name="glass_divider" type="furniture" gid="26064" x="576" y="544" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="544"/>
+   </properties>
+  </object>
+  <object id="347" name="glass_divider" type="furniture" gid="26029" x="608" y="480" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="544"/>
+   </properties>
+  </object>
+  <object id="348" name="glass_divider" type="furniture" gid="26032" x="704" y="480" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="544"/>
+   </properties>
+  </object>
+  <object id="349" name="glass_divider" type="furniture" gid="26045" x="608" y="512" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="544"/>
+   </properties>
+  </object>
+  <object id="350" name="glass_divider" type="furniture" gid="26046" x="640" y="512" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="544"/>
+   </properties>
+  </object>
+  <object id="351" name="glass_divider" type="furniture" gid="26047" x="672" y="512" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="544"/>
+   </properties>
+  </object>
+  <object id="352" name="glass_divider" type="furniture" gid="26048" x="704" y="512" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="544"/>
+   </properties>
+  </object>
+  <object id="353" name="glass_divider" type="furniture" gid="26061" x="608" y="544" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="544"/>
+   </properties>
+  </object>
+  <object id="354" name="glass_divider" type="furniture" gid="26062" x="640" y="544" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="544"/>
+   </properties>
+  </object>
+  <object id="355" name="glass_divider" type="furniture" gid="26063" x="672" y="544" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="544"/>
+   </properties>
+  </object>
+  <object id="356" name="glass_divider" type="furniture" gid="26064" x="704" y="544" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="544"/>
+   </properties>
+  </object>
+  <object id="357" name="chair_swivel" type="furniture" gid="25743" x="480" y="480" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="512"/>
+   </properties>
+  </object>
+  <object id="358" name="chair_swivel" type="furniture" gid="25759" x="480" y="512" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="512"/>
+   </properties>
+  </object>
+  <object id="359" name="desk_light" type="furniture" gid="25619" x="416" y="576" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="640"/>
+   </properties>
+  </object>
+  <object id="360" name="desk_light" type="furniture" gid="25620" x="448" y="576" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="640"/>
+   </properties>
+  </object>
+  <object id="361" name="desk_light" type="furniture" gid="25621" x="480" y="576" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="640"/>
+   </properties>
+  </object>
+  <object id="362" name="desk_light" type="furniture" gid="25635" x="416" y="608" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="640"/>
+   </properties>
+  </object>
+  <object id="363" name="desk_light" type="furniture" gid="25636" x="448" y="608" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="640"/>
+   </properties>
+  </object>
+  <object id="364" name="desk_light" type="furniture" gid="25637" x="480" y="608" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="640"/>
+   </properties>
+  </object>
+  <object id="365" name="desk_light" type="furniture" gid="25651" x="416" y="640" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="640"/>
+   </properties>
+  </object>
+  <object id="366" name="desk_light" type="furniture" gid="25652" x="448" y="640" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="640"/>
+   </properties>
+  </object>
+  <object id="367" name="desk_light" type="furniture" gid="25653" x="480" y="640" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="640"/>
+   </properties>
+  </object>
+  <object id="368" name="fridge" type="furniture" gid="26687" x="512" y="576" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="640"/>
+   </properties>
+  </object>
+  <object id="369" name="fridge" type="furniture" gid="26688" x="512" y="608" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="640"/>
+   </properties>
+  </object>
+  <object id="370" name="fridge" type="furniture" gid="26690" x="512" y="640" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="640"/>
+   </properties>
+  </object>
+  <object id="371" name="water_cooler" type="furniture" gid="25865" x="544" y="576" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="640"/>
+   </properties>
+  </object>
+  <object id="372" name="water_cooler" type="furniture" gid="25881" x="544" y="608" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="640"/>
+   </properties>
+  </object>
+  <object id="373" name="water_cooler" type="furniture" gid="25897" x="544" y="640" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="640"/>
+   </properties>
+  </object>
+  <object id="374" name="table_round_light" type="furniture" gid="26691" x="608" y="576" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="640"/>
+   </properties>
+  </object>
+  <object id="375" name="table_round_light" type="furniture" gid="26700" x="576" y="608" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="640"/>
+   </properties>
+  </object>
+  <object id="376" name="table_round_light" type="furniture" gid="26701" x="608" y="608" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="640"/>
+   </properties>
+  </object>
+  <object id="377" name="table_round_light" type="furniture" gid="26702" x="640" y="608" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="640"/>
+   </properties>
+  </object>
+  <object id="378" name="table_round_light" type="furniture" gid="26711" x="576" y="640" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="640"/>
+   </properties>
+  </object>
+  <object id="379" name="table_round_light" type="furniture" gid="26712" x="608" y="640" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="640"/>
+   </properties>
+  </object>
+  <object id="380" name="table_round_light" type="furniture" gid="26713" x="640" y="640" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="640"/>
+   </properties>
+  </object>
+  <object id="381" name="sofa_gray" type="furniture" gid="26695" x="672" y="608" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="640"/>
+   </properties>
+  </object>
+  <object id="382" name="sofa_gray" type="furniture" gid="26696" x="704" y="608" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="640"/>
+   </properties>
+  </object>
+  <object id="383" name="sofa_gray" type="furniture" gid="26697" x="736" y="608" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="640"/>
+   </properties>
+  </object>
+  <object id="384" name="sofa_gray" type="furniture" gid="26706" x="672" y="640" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="640"/>
+   </properties>
+  </object>
+  <object id="385" name="sofa_gray" type="furniture" gid="26707" x="704" y="640" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="640"/>
+   </properties>
+  </object>
+  <object id="386" name="sofa_gray" type="furniture" gid="26708" x="736" y="640" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="640"/>
+   </properties>
+  </object>
+  <object id="387" name="plant" type="furniture" gid="25731" x="416" y="384" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="448"/>
+   </properties>
+  </object>
+  <object id="388" name="plant" type="furniture" gid="25747" x="416" y="416" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="448"/>
+   </properties>
+  </object>
+  <object id="389" name="plant" type="furniture" gid="25763" x="416" y="448" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="448"/>
+   </properties>
+  </object>
+  <object id="390" name="plant" type="furniture" gid="25731" x="768" y="384" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="448"/>
+   </properties>
+  </object>
+  <object id="391" name="plant" type="furniture" gid="25747" x="768" y="416" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="448"/>
+   </properties>
+  </object>
+  <object id="392" name="plant" type="furniture" gid="25763" x="768" y="448" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="448"/>
+   </properties>
+  </object>
+  <object id="393" name="plant" type="furniture" gid="25731" x="768" y="576" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="640"/>
+   </properties>
+  </object>
+  <object id="394" name="plant" type="furniture" gid="25747" x="768" y="608" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="640"/>
+   </properties>
+  </object>
+  <object id="395" name="plant" type="furniture" gid="25763" x="768" y="640" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="640"/>
+   </properties>
+  </object>
+  <object id="396" name="plant_small" type="furniture" gid="25779" x="512" y="384" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="416"/>
+   </properties>
+  </object>
+  <object id="397" name="plant_small" type="furniture" gid="25795" x="512" y="416" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="416"/>
+   </properties>
+  </object>
+  <object id="398" name="plant_small" type="furniture" gid="25779" x="608" y="384" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="416"/>
+   </properties>
+  </object>
+  <object id="399" name="plant_small" type="furniture" gid="25795" x="608" y="416" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="416"/>
+   </properties>
+  </object>
+  <object id="400" name="plant_small" type="furniture" gid="25779" x="704" y="384" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="416"/>
+   </properties>
+  </object>
+  <object id="401" name="plant_small" type="furniture" gid="25795" x="704" y="416" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="416"/>
+   </properties>
+  </object>
+  <object id="402" name="sofa_brown" type="furniture" gid="26698" x="416" y="480" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="512"/>
+   </properties>
+  </object>
+  <object id="403" name="sofa_brown" type="furniture" gid="26699" x="448" y="480" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="512"/>
+   </properties>
+  </object>
+  <object id="404" name="sofa_brown" type="furniture" gid="26709" x="416" y="512" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="512"/>
+   </properties>
+  </object>
+  <object id="405" name="sofa_brown" type="furniture" gid="26710" x="448" y="512" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="512"/>
+   </properties>
+  </object>
+  <object id="406" name="sofa_lilac" type="furniture" gid="26715" x="736" y="480" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="512"/>
+   </properties>
+  </object>
+  <object id="407" name="sofa_lilac" type="furniture" gid="26716" x="768" y="480" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="512"/>
+   </properties>
+  </object>
+  <object id="408" name="sofa_lilac" type="furniture" gid="26717" x="736" y="512" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="512"/>
+   </properties>
+  </object>
+  <object id="409" name="sofa_lilac" type="furniture" gid="26718" x="768" y="512" width="32" height="32">
+   <properties>
+    <property name="foot" type="int" value="512"/>
    </properties>
   </object>
  </objectgroup>
- <layer id="4" name="furniture_above" width="30" height="20">
+ <layer id="4" name="furniture_above" width="38" height="32">
   <data encoding="csv">
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,25767,25819,0,0,25819,25864,0,25819,25767,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,25851,0,0,25851,0,0,25851,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,25767,25819,25864,0,0,0,0,0,0,0,0,0,0,0,25864,25819,0,25767,0,0,0,0,0,0,0,0,0,0,25767,25819,0,0,0,0,25819,25864,0,
+0,0,25851,0,0,0,0,0,0,0,0,0,0,0,0,0,25851,0,0,0,0,0,0,0,0,0,0,0,0,0,25851,0,0,0,0,25851,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,26685,26686,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,25818,25819,25820,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,25851,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,26689,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,25767,25819,0,0,0,0,25819,25864,0,0,0,0,0,0,25767,25819,0,0,25819,25864,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,25851,0,0,0,0,25851,0,0,0,0,0,0,0,0,25851,0,0,25851,0,0,0,0,
+0,0,0,0,25864,25819,0,25767,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
   </data>
  </layer>
  <objectgroup id="5" name="collision">
-  <object id="1" type="collision" x="64" y="64" width="448" height="64"/>
-  <object id="2" type="collision" x="64" y="128" width="32" height="32"/>
-  <object id="3" type="collision" x="64" y="160" width="320" height="64"/>
-  <object id="4" type="collision" x="64" y="224" width="32" height="64"/>
-  <object id="5" type="collision" x="64" y="288" width="192" height="32"/>
-  <object id="6" type="collision" x="128" y="256" width="32" height="32"/>
-  <object id="7" type="collision" x="224" y="256" width="32" height="32"/>
-  <object id="8" type="collision" x="320" y="256" width="32" height="32"/>
-  <object id="9" type="collision" x="320" y="288" width="192" height="32"/>
-  <object id="10" type="collision" x="384" y="128" width="64" height="32"/>
-  <object id="11" type="collision" x="384" y="256" width="128" height="32"/>
-  <object id="12" type="collision" x="448" y="160" width="64" height="64"/>
-  <object id="13" type="collision" x="480" y="128" width="32" height="32"/>
-  <object id="14" type="collision" x="480" y="224" width="32" height="32"/>
+  <object id="1" type="collision" x="0" y="0" width="320" height="128"/>
+  <object id="2" type="collision" x="0" y="128" width="32" height="32"/>
+  <object id="3" type="collision" x="0" y="160" width="96" height="32"/>
+  <object id="4" type="collision" x="0" y="192" width="128" height="64"/>
+  <object id="5" type="collision" x="0" y="352" width="320" height="64"/>
+  <object id="6" type="collision" x="0" y="416" width="128" height="32"/>
+  <object id="7" type="collision" x="0" y="448" width="32" height="96"/>
+  <object id="8" type="collision" x="0" y="544" width="64" height="32"/>
+  <object id="9" type="collision" x="0" y="576" width="320" height="64"/>
+  <object id="10" type="collision" x="0" y="736" width="128" height="96"/>
+  <object id="11" type="collision" x="0" y="832" width="64" height="32"/>
+  <object id="12" type="collision" x="0" y="864" width="32" height="64"/>
+  <object id="13" type="collision" x="0" y="928" width="64" height="32"/>
+  <object id="14" type="collision" x="0" y="960" width="320" height="64"/>
+  <object id="15" type="collision" x="96" y="480" width="96" height="64"/>
+  <object id="16" type="collision" x="96" y="544" width="128" height="32"/>
+  <object id="17" type="collision" x="128" y="128" width="192" height="32"/>
+  <object id="18" type="collision" x="128" y="864" width="192" height="96"/>
+  <object id="19" type="collision" x="192" y="192" width="128" height="64"/>
+  <object id="20" type="collision" x="192" y="416" width="128" height="32"/>
+  <object id="21" type="collision" x="192" y="736" width="128" height="64"/>
+  <object id="22" type="collision" x="224" y="480" width="32" height="32"/>
+  <object id="23" type="collision" x="256" y="160" width="64" height="32"/>
+  <object id="24" type="collision" x="256" y="512" width="64" height="64"/>
+  <object id="25" type="collision" x="256" y="832" width="64" height="32"/>
+  <object id="26" type="collision" x="288" y="800" width="32" height="32"/>
+  <object id="27" type="collision" x="416" y="0" width="384" height="64"/>
+  <object id="28" type="collision" x="416" y="64" width="192" height="64"/>
+  <object id="29" type="collision" x="416" y="128" width="32" height="32"/>
+  <object id="30" type="collision" x="416" y="160" width="64" height="32"/>
+  <object id="31" type="collision" x="416" y="192" width="160" height="64"/>
+  <object id="32" type="collision" x="416" y="416" width="32" height="32"/>
+  <object id="33" type="collision" x="416" y="448" width="64" height="32"/>
+  <object id="34" type="collision" x="416" y="480" width="96" height="32"/>
+  <object id="35" type="collision" x="416" y="576" width="352" height="32"/>
+  <object id="36" type="collision" x="416" y="608" width="384" height="32"/>
+  <object id="37" type="collision" x="416" y="736" width="160" height="64"/>
+  <object id="38" type="collision" x="416" y="800" width="32" height="96"/>
+  <object id="39" type="collision" x="416" y="896" width="64" height="64"/>
+  <object id="40" type="collision" x="416" y="960" width="384" height="64"/>
+  <object id="41" type="collision" x="480" y="512" width="256" height="32"/>
+  <object id="42" type="collision" x="480" y="832" width="96" height="64"/>
+  <object id="43" type="collision" x="512" y="160" width="32" height="32"/>
+  <object id="44" type="collision" x="512" y="384" width="32" height="32"/>
+  <object id="45" type="collision" x="512" y="928" width="32" height="32"/>
+  <object id="46" type="collision" x="608" y="384" width="32" height="32"/>
+  <object id="47" type="collision" x="640" y="64" width="160" height="32"/>
+  <object id="48" type="collision" x="640" y="96" width="64" height="32"/>
+  <object id="49" type="collision" x="640" y="192" width="160" height="64"/>
+  <object id="50" type="collision" x="640" y="736" width="160" height="64"/>
+  <object id="51" type="collision" x="640" y="832" width="96" height="64"/>
+  <object id="52" type="collision" x="672" y="928" width="32" height="32"/>
+  <object id="53" type="collision" x="704" y="384" width="32" height="32"/>
+  <object id="54" type="collision" x="736" y="160" width="64" height="32"/>
+  <object id="55" type="collision" x="736" y="448" width="64" height="64"/>
+  <object id="56" type="collision" x="736" y="928" width="64" height="32"/>
+  <object id="57" type="collision" x="768" y="96" width="32" height="64"/>
+  <object id="58" type="collision" x="768" y="416" width="32" height="32"/>
+  <object id="59" type="collision" x="768" y="800" width="32" height="128"/>
+  <object id="60" type="collision" x="896" y="0" width="320" height="64"/>
+  <object id="61" type="collision" x="896" y="64" width="128" height="32"/>
+  <object id="62" type="collision" x="896" y="96" width="160" height="32"/>
+  <object id="63" type="collision" x="896" y="128" width="32" height="32"/>
+  <object id="64" type="collision" x="896" y="160" width="96" height="32"/>
+  <object id="65" type="collision" x="896" y="192" width="128" height="64"/>
+  <object id="66" type="collision" x="896" y="352" width="320" height="64"/>
+  <object id="67" type="collision" x="896" y="416" width="160" height="32"/>
+  <object id="68" type="collision" x="896" y="512" width="32" height="32"/>
+  <object id="69" type="collision" x="896" y="544" width="96" height="32"/>
+  <object id="70" type="collision" x="896" y="576" width="320" height="64"/>
+  <object id="71" type="collision" x="896" y="736" width="320" height="64"/>
+  <object id="72" type="collision" x="896" y="800" width="32" height="32"/>
+  <object id="73" type="collision" x="896" y="832" width="224" height="64"/>
+  <object id="74" type="collision" x="896" y="960" width="320" height="64"/>
+  <object id="75" type="collision" x="960" y="928" width="32" height="32"/>
+  <object id="76" type="collision" x="992" y="512" width="32" height="32"/>
+  <object id="77" type="collision" x="1056" y="128" width="32" height="32"/>
+  <object id="78" type="collision" x="1056" y="448" width="96" height="64"/>
+  <object id="79" type="collision" x="1056" y="928" width="32" height="32"/>
+  <object id="80" type="collision" x="1088" y="64" width="128" height="64"/>
+  <object id="81" type="collision" x="1088" y="192" width="128" height="64"/>
+  <object id="82" type="collision" x="1088" y="544" width="64" height="32"/>
+  <object id="83" type="collision" x="1120" y="160" width="96" height="32"/>
+  <object id="84" type="collision" x="1120" y="800" width="96" height="32"/>
+  <object id="85" type="collision" x="1120" y="928" width="32" height="32"/>
+  <object id="86" type="collision" x="1152" y="512" width="64" height="32"/>
+  <object id="87" type="collision" x="1152" y="864" width="64" height="32"/>
+  <object id="88" type="collision" x="1184" y="128" width="32" height="32"/>
+  <object id="89" type="collision" x="1184" y="416" width="32" height="96"/>
+  <object id="90" type="collision" x="1184" y="544" width="32" height="32"/>
+  <object id="91" type="collision" x="1184" y="832" width="32" height="32"/>
+  <object id="92" type="collision" x="1184" y="896" width="32" height="64"/>
  </objectgroup>
  <objectgroup id="6" name="objects">
-  <object id="64" name="Edição" type="room" x="64" y="64" width="448" height="256">
+  <object id="410" name="Planejamento" type="room" x="0" y="0" width="320" height="256">
+   <properties>
+    <property name="id" value="planejamento"/>
+    <property name="nome" value="Planejamento"/>
+    <property name="agent" value="nina"/>
+    <property name="tab" value="produto"/>
+   </properties>
+  </object>
+  <object id="411" name="" type="seat" x="64" y="160" width="32" height="32">
+   <properties>
+    <property name="room" value="planejamento"/>
+    <property name="face" value="down"/>
+    <property name="kind" value="agent"/>
+    <property name="agent" value="nina"/>
+    <property name="monitor" type="bool" value="true"/>
+    <property name="back" type="int" value="1"/>
+   </properties>
+  </object>
+  <object id="412" name="" type="seat" x="256" y="160" width="32" height="32">
+   <properties>
+    <property name="room" value="planejamento"/>
+    <property name="face" value="down"/>
+    <property name="kind" value="visitor"/>
+    <property name="monitor" type="bool" value="false"/>
+    <property name="back" type="int" value="1"/>
+   </properties>
+  </object>
+  <object id="413" name="monitor" type="interact" x="32" y="64" width="96" height="64">
+   <properties>
+    <property name="action" value="monitor"/>
+    <property name="room" value="planejamento"/>
+   </properties>
+  </object>
+  <object id="414" name="" type="entry" x="128" y="160" width="32" height="32">
+   <properties>
+    <property name="room" value="planejamento"/>
+   </properties>
+  </object>
+  <object id="415" name="" type="spot" x="96" y="160" width="32" height="32">
+   <properties>
+    <property name="room" value="planejamento"/>
+   </properties>
+  </object>
+  <object id="416" name="" type="spot" x="160" y="160" width="32" height="32">
+   <properties>
+    <property name="room" value="planejamento"/>
+   </properties>
+  </object>
+  <object id="417" name="" type="spot" x="224" y="160" width="32" height="32">
+   <properties>
+    <property name="room" value="planejamento"/>
+   </properties>
+  </object>
+  <object id="418" name="Direção criativa" type="room" x="416" y="0" width="384" height="256">
+   <properties>
+    <property name="id" value="direcao"/>
+    <property name="nome" value="Direção criativa"/>
+    <property name="agent" value="theo"/>
+    <property name="tab" value="direcao"/>
+   </properties>
+  </object>
+  <object id="419" name="" type="seat" x="512" y="160" width="32" height="32">
+   <properties>
+    <property name="room" value="direcao"/>
+    <property name="face" value="down"/>
+    <property name="kind" value="agent"/>
+    <property name="agent" value="theo"/>
+    <property name="monitor" type="bool" value="true"/>
+    <property name="back" type="int" value="1"/>
+   </properties>
+  </object>
+  <object id="420" name="" type="seat" x="448" y="160" width="32" height="32">
+   <properties>
+    <property name="room" value="direcao"/>
+    <property name="face" value="down"/>
+    <property name="kind" value="visitor"/>
+    <property name="monitor" type="bool" value="false"/>
+    <property name="back" type="int" value="1"/>
+   </properties>
+  </object>
+  <object id="421" name="" type="seat" x="640" y="96" width="32" height="32">
+   <properties>
+    <property name="room" value="direcao"/>
+    <property name="face" value="down"/>
+    <property name="kind" value="free"/>
+    <property name="monitor" type="bool" value="false"/>
+    <property name="back" type="int" value="1"/>
+   </properties>
+  </object>
+  <object id="422" name="" type="seat" x="672" y="96" width="32" height="32">
+   <properties>
+    <property name="room" value="direcao"/>
+    <property name="face" value="down"/>
+    <property name="kind" value="free"/>
+    <property name="monitor" type="bool" value="false"/>
+    <property name="back" type="int" value="1"/>
+   </properties>
+  </object>
+  <object id="423" name="monitor" type="interact" x="448" y="64" width="160" height="64">
+   <properties>
+    <property name="action" value="monitor"/>
+    <property name="room" value="direcao"/>
+   </properties>
+  </object>
+  <object id="424" name="" type="entry" x="576" y="160" width="32" height="32">
+   <properties>
+    <property name="room" value="direcao"/>
+   </properties>
+  </object>
+  <object id="425" name="" type="spot" x="608" y="160" width="32" height="32">
+   <properties>
+    <property name="room" value="direcao"/>
+   </properties>
+  </object>
+  <object id="426" name="" type="spot" x="672" y="160" width="32" height="32">
+   <properties>
+    <property name="room" value="direcao"/>
+   </properties>
+  </object>
+  <object id="427" name="" type="spot" x="704" y="128" width="32" height="32">
+   <properties>
+    <property name="room" value="direcao"/>
+   </properties>
+  </object>
+  <object id="428" name="Imagens" type="room" x="896" y="0" width="320" height="256">
+   <properties>
+    <property name="id" value="imagens"/>
+    <property name="nome" value="Imagens"/>
+    <property name="agent" value="iris"/>
+    <property name="tab" value="imagens"/>
+   </properties>
+  </object>
+  <object id="429" name="" type="seat" x="960" y="160" width="32" height="32">
+   <properties>
+    <property name="room" value="imagens"/>
+    <property name="face" value="down"/>
+    <property name="kind" value="agent"/>
+    <property name="agent" value="iris"/>
+    <property name="monitor" type="bool" value="true"/>
+    <property name="back" type="int" value="1"/>
+   </properties>
+  </object>
+  <object id="430" name="" type="seat" x="1120" y="160" width="32" height="32">
+   <properties>
+    <property name="room" value="imagens"/>
+    <property name="face" value="down"/>
+    <property name="kind" value="visitor"/>
+    <property name="monitor" type="bool" value="true"/>
+    <property name="back" type="int" value="1"/>
+   </properties>
+  </object>
+  <object id="431" name="monitor" type="interact" x="928" y="64" width="256" height="64">
+   <properties>
+    <property name="action" value="monitor"/>
+    <property name="room" value="imagens"/>
+   </properties>
+  </object>
+  <object id="432" name="" type="entry" x="1024" y="160" width="32" height="32">
+   <properties>
+    <property name="room" value="imagens"/>
+   </properties>
+  </object>
+  <object id="433" name="" type="spot" x="992" y="160" width="32" height="32">
+   <properties>
+    <property name="room" value="imagens"/>
+   </properties>
+  </object>
+  <object id="434" name="" type="spot" x="1056" y="160" width="32" height="32">
+   <properties>
+    <property name="room" value="imagens"/>
+   </properties>
+  </object>
+  <object id="435" name="" type="spot" x="1088" y="160" width="32" height="32">
+   <properties>
+    <property name="room" value="imagens"/>
+   </properties>
+  </object>
+  <object id="436" name="Vídeos" type="room" x="896" y="352" width="320" height="288">
+   <properties>
+    <property name="id" value="videos"/>
+    <property name="nome" value="Vídeos"/>
+    <property name="agent" value="lia"/>
+    <property name="tab" value="videos"/>
+   </properties>
+  </object>
+  <object id="437" name="" type="seat" x="1088" y="544" width="32" height="32">
+   <properties>
+    <property name="room" value="videos"/>
+    <property name="face" value="down"/>
+    <property name="kind" value="agent"/>
+    <property name="agent" value="lia"/>
+    <property name="monitor" type="bool" value="true"/>
+    <property name="back" type="int" value="1"/>
+   </properties>
+  </object>
+  <object id="438" name="" type="seat" x="1120" y="544" width="32" height="32">
+   <properties>
+    <property name="room" value="videos"/>
+    <property name="face" value="down"/>
+    <property name="kind" value="visitor"/>
+    <property name="monitor" type="bool" value="true"/>
+    <property name="back" type="int" value="1"/>
+   </properties>
+  </object>
+  <object id="439" name="monitor" type="interact" x="1056" y="416" width="96" height="96">
+   <properties>
+    <property name="action" value="monitor"/>
+    <property name="room" value="videos"/>
+   </properties>
+  </object>
+  <object id="440" name="" type="entry" x="928" y="448" width="32" height="32">
+   <properties>
+    <property name="room" value="videos"/>
+   </properties>
+  </object>
+  <object id="441" name="" type="spot" x="1024" y="480" width="32" height="32">
+   <properties>
+    <property name="room" value="videos"/>
+   </properties>
+  </object>
+  <object id="442" name="" type="spot" x="1056" y="544" width="32" height="32">
+   <properties>
+    <property name="room" value="videos"/>
+   </properties>
+  </object>
+  <object id="443" name="" type="spot" x="992" y="544" width="32" height="32">
+   <properties>
+    <property name="room" value="videos"/>
+   </properties>
+  </object>
+  <object id="444" name="Edição" type="room" x="896" y="736" width="320" height="288">
    <properties>
     <property name="id" value="edicao"/>
     <property name="nome" value="Edição"/>
@@ -380,60 +2076,392 @@
     <property name="tab" value="entrega"/>
    </properties>
   </object>
-  <object id="65" name="" type="seat" x="128" y="256" width="32" height="32">
+  <object id="445" name="" type="seat" x="960" y="928" width="32" height="32">
    <properties>
     <property name="room" value="edicao"/>
     <property name="face" value="down"/>
     <property name="kind" value="agent"/>
     <property name="agent" value="beto"/>
     <property name="monitor" type="bool" value="true"/>
+    <property name="back" type="int" value="1"/>
    </properties>
   </object>
-  <object id="66" name="" type="seat" x="224" y="256" width="32" height="32">
+  <object id="446" name="" type="seat" x="1056" y="928" width="32" height="32">
    <properties>
     <property name="room" value="edicao"/>
     <property name="face" value="down"/>
     <property name="kind" value="visitor"/>
     <property name="monitor" type="bool" value="true"/>
+    <property name="back" type="int" value="1"/>
    </properties>
   </object>
-  <object id="67" name="" type="seat" x="320" y="256" width="32" height="32">
-   <properties>
-    <property name="room" value="edicao"/>
-    <property name="face" value="down"/>
-    <property name="kind" value="free"/>
-    <property name="monitor" type="bool" value="false"/>
-   </properties>
-  </object>
-  <object id="68" name="monitor" type="interact" x="96" y="128" width="288" height="96">
+  <object id="447" name="monitor" type="interact" x="928" y="800" width="192" height="96">
    <properties>
     <property name="action" value="monitor"/>
     <property name="room" value="edicao"/>
    </properties>
   </object>
-  <object id="69" name="" type="entry" x="288" y="256" width="32" height="32">
+  <object id="448" name="" type="entry" x="928" y="896" width="32" height="32">
    <properties>
     <property name="room" value="edicao"/>
    </properties>
   </object>
-  <object id="70" name="" type="spawn" x="288" y="256" width="32" height="32">
+  <object id="449" name="" type="spot" x="992" y="896" width="32" height="32">
    <properties>
     <property name="room" value="edicao"/>
    </properties>
   </object>
-  <object id="71" name="" type="spot" x="416" y="160" width="32" height="32">
+  <object id="450" name="" type="spot" x="1088" y="896" width="32" height="32">
    <properties>
     <property name="room" value="edicao"/>
    </properties>
   </object>
-  <object id="72" name="" type="spot" x="160" y="224" width="32" height="32">
+  <object id="451" name="" type="spot" x="1152" y="896" width="32" height="32">
    <properties>
     <property name="room" value="edicao"/>
    </properties>
   </object>
-  <object id="73" name="" type="spot" x="352" y="224" width="32" height="32">
+  <object id="452" name="Revisão" type="room" x="416" y="736" width="384" height="288">
    <properties>
-    <property name="room" value="edicao"/>
+    <property name="id" value="revisao"/>
+    <property name="nome" value="Revisão"/>
+    <property name="agent" value="rui"/>
+    <property name="tab" value="revisao"/>
+   </properties>
+  </object>
+  <object id="453" name="" type="seat" x="512" y="928" width="32" height="32">
+   <properties>
+    <property name="room" value="revisao"/>
+    <property name="face" value="down"/>
+    <property name="kind" value="agent"/>
+    <property name="agent" value="rui"/>
+    <property name="monitor" type="bool" value="true"/>
+    <property name="back" type="int" value="1"/>
+   </properties>
+  </object>
+  <object id="454" name="" type="seat" x="672" y="928" width="32" height="32">
+   <properties>
+    <property name="room" value="revisao"/>
+    <property name="face" value="down"/>
+    <property name="kind" value="visitor"/>
+    <property name="monitor" type="bool" value="true"/>
+    <property name="back" type="int" value="1"/>
+   </properties>
+  </object>
+  <object id="455" name="monitor" type="interact" x="480" y="800" width="256" height="96">
+   <properties>
+    <property name="action" value="monitor"/>
+    <property name="room" value="revisao"/>
+   </properties>
+  </object>
+  <object id="456" name="" type="entry" x="576" y="800" width="32" height="32">
+   <properties>
+    <property name="room" value="revisao"/>
+   </properties>
+  </object>
+  <object id="457" name="" type="spot" x="576" y="864" width="32" height="32">
+   <properties>
+    <property name="room" value="revisao"/>
+   </properties>
+  </object>
+  <object id="458" name="" type="spot" x="608" y="928" width="32" height="32">
+   <properties>
+    <property name="room" value="revisao"/>
+   </properties>
+  </object>
+  <object id="459" name="" type="spot" x="576" y="928" width="32" height="32">
+   <properties>
+    <property name="room" value="revisao"/>
+   </properties>
+  </object>
+  <object id="460" name="Entrada" type="room" x="0" y="736" width="320" height="288">
+   <properties>
+    <property name="id" value="entrada"/>
+    <property name="nome" value="Entrada"/>
+    <property name="agent" value=""/>
+    <property name="tab" value=""/>
+   </properties>
+  </object>
+  <object id="461" name="" type="seat" x="96" y="800" width="32" height="32">
+   <properties>
+    <property name="room" value="entrada"/>
+    <property name="face" value="down"/>
+    <property name="kind" value="free"/>
+    <property name="monitor" type="bool" value="false"/>
+    <property name="back" type="int" value="1"/>
+   </properties>
+  </object>
+  <object id="462" name="" type="seat" x="32" y="832" width="32" height="32">
+   <properties>
+    <property name="room" value="entrada"/>
+    <property name="face" value="down"/>
+    <property name="kind" value="free"/>
+    <property name="monitor" type="bool" value="false"/>
+    <property name="back" type="int" value="0"/>
+   </properties>
+  </object>
+  <object id="463" name="" type="entry" x="128" y="800" width="32" height="32">
+   <properties>
+    <property name="room" value="entrada"/>
+   </properties>
+  </object>
+  <object id="464" name="" type="spawn" x="160" y="832" width="32" height="32">
+   <properties>
+    <property name="room" value="entrada"/>
+   </properties>
+  </object>
+  <object id="465" name="Jogos e lazer" type="room" x="0" y="352" width="320" height="288">
+   <properties>
+    <property name="id" value="jogos"/>
+    <property name="nome" value="Jogos e lazer"/>
+    <property name="agent" value=""/>
+    <property name="tab" value=""/>
+   </properties>
+  </object>
+  <object id="466" name="" type="seat" x="32" y="416" width="32" height="32">
+   <properties>
+    <property name="room" value="jogos"/>
+    <property name="face" value="down"/>
+    <property name="kind" value="free"/>
+    <property name="monitor" type="bool" value="false"/>
+    <property name="back" type="int" value="1"/>
+   </properties>
+  </object>
+  <object id="467" name="" type="seat" x="96" y="416" width="32" height="32">
+   <properties>
+    <property name="room" value="jogos"/>
+    <property name="face" value="down"/>
+    <property name="kind" value="free"/>
+    <property name="monitor" type="bool" value="false"/>
+    <property name="back" type="int" value="1"/>
+   </properties>
+  </object>
+  <object id="468" name="" type="seat" x="192" y="416" width="32" height="32">
+   <properties>
+    <property name="room" value="jogos"/>
+    <property name="face" value="down"/>
+    <property name="kind" value="free"/>
+    <property name="monitor" type="bool" value="false"/>
+    <property name="back" type="int" value="1"/>
+   </properties>
+  </object>
+  <object id="469" name="" type="seat" x="256" y="416" width="32" height="32">
+   <properties>
+    <property name="room" value="jogos"/>
+    <property name="face" value="down"/>
+    <property name="kind" value="free"/>
+    <property name="monitor" type="bool" value="false"/>
+    <property name="back" type="int" value="1"/>
+   </properties>
+  </object>
+  <object id="470" name="" type="seat" x="224" y="480" width="32" height="32">
+   <properties>
+    <property name="room" value="jogos"/>
+    <property name="face" value="down"/>
+    <property name="kind" value="free"/>
+    <property name="monitor" type="bool" value="false"/>
+    <property name="back" type="int" value="0"/>
+   </properties>
+  </object>
+  <object id="471" name="" type="seat" x="256" y="512" width="32" height="32">
+   <properties>
+    <property name="room" value="jogos"/>
+    <property name="face" value="down"/>
+    <property name="kind" value="free"/>
+    <property name="monitor" type="bool" value="false"/>
+    <property name="back" type="int" value="0"/>
+   </properties>
+  </object>
+  <object id="472" name="" type="seat" x="192" y="544" width="32" height="32">
+   <properties>
+    <property name="room" value="jogos"/>
+    <property name="face" value="down"/>
+    <property name="kind" value="free"/>
+    <property name="monitor" type="bool" value="false"/>
+    <property name="back" type="int" value="0"/>
+   </properties>
+  </object>
+  <object id="473" name="" type="seat" x="256" y="544" width="32" height="32">
+   <properties>
+    <property name="room" value="jogos"/>
+    <property name="face" value="down"/>
+    <property name="kind" value="free"/>
+    <property name="monitor" type="bool" value="false"/>
+    <property name="back" type="int" value="0"/>
+   </properties>
+  </object>
+  <object id="474" name="" type="entry" x="256" y="448" width="32" height="32">
+   <properties>
+    <property name="room" value="jogos"/>
+   </properties>
+  </object>
+  <object id="475" name="" type="spot" x="224" y="448" width="32" height="32">
+   <properties>
+    <property name="room" value="jogos"/>
+   </properties>
+  </object>
+  <object id="476" name="" type="spot" x="64" y="448" width="32" height="32">
+   <properties>
+    <property name="room" value="jogos"/>
+   </properties>
+  </object>
+  <object id="477" name="Pátio" type="room" x="416" y="352" width="384" height="288">
+   <properties>
+    <property name="id" value="patio"/>
+    <property name="nome" value="Pátio"/>
+    <property name="agent" value=""/>
+    <property name="tab" value=""/>
+   </properties>
+  </object>
+  <object id="478" name="" type="seat" x="480" y="480" width="32" height="32">
+   <properties>
+    <property name="room" value="meu"/>
+    <property name="face" value="right"/>
+    <property name="kind" value="mine"/>
+    <property name="monitor" type="bool" value="false"/>
+    <property name="back" type="int" value="1"/>
+   </properties>
+  </object>
+  <object id="479" name="" type="seat" x="672" y="608" width="32" height="32">
+   <properties>
+    <property name="room" value="patio"/>
+    <property name="face" value="down"/>
+    <property name="kind" value="free"/>
+    <property name="monitor" type="bool" value="false"/>
+    <property name="back" type="int" value="1"/>
+   </properties>
+  </object>
+  <object id="480" name="" type="seat" x="736" y="608" width="32" height="32">
+   <properties>
+    <property name="room" value="patio"/>
+    <property name="face" value="down"/>
+    <property name="kind" value="free"/>
+    <property name="monitor" type="bool" value="false"/>
+    <property name="back" type="int" value="1"/>
+   </properties>
+  </object>
+  <object id="481" name="" type="seat" x="416" y="480" width="32" height="32">
+   <properties>
+    <property name="room" value="patio"/>
+    <property name="face" value="down"/>
+    <property name="kind" value="free"/>
+    <property name="monitor" type="bool" value="false"/>
+    <property name="back" type="int" value="1"/>
+   </properties>
+  </object>
+  <object id="482" name="" type="seat" x="448" y="480" width="32" height="32">
+   <properties>
+    <property name="room" value="patio"/>
+    <property name="face" value="down"/>
+    <property name="kind" value="free"/>
+    <property name="monitor" type="bool" value="false"/>
+    <property name="back" type="int" value="1"/>
+   </properties>
+  </object>
+  <object id="483" name="" type="seat" x="736" y="480" width="32" height="32">
+   <properties>
+    <property name="room" value="patio"/>
+    <property name="face" value="down"/>
+    <property name="kind" value="free"/>
+    <property name="monitor" type="bool" value="false"/>
+    <property name="back" type="int" value="1"/>
+   </properties>
+  </object>
+  <object id="484" name="" type="seat" x="768" y="480" width="32" height="32">
+   <properties>
+    <property name="room" value="patio"/>
+    <property name="face" value="down"/>
+    <property name="kind" value="free"/>
+    <property name="monitor" type="bool" value="false"/>
+    <property name="back" type="int" value="1"/>
+   </properties>
+  </object>
+  <object id="485" name="" type="entry" x="704" y="544" width="32" height="32">
+   <properties>
+    <property name="room" value="patio"/>
+   </properties>
+  </object>
+  <object id="486" name="" type="spot" x="448" y="384" width="32" height="32">
+   <properties>
+    <property name="room" value="patio"/>
+   </properties>
+  </object>
+  <object id="487" name="" type="spot" x="736" y="384" width="32" height="32">
+   <properties>
+    <property name="room" value="patio"/>
+   </properties>
+  </object>
+  <object id="488" name="" type="spot" x="672" y="544" width="32" height="32">
+   <properties>
+    <property name="room" value="patio"/>
+   </properties>
+  </object>
+  <object id="489" name="" type="spot" x="736" y="544" width="32" height="32">
+   <properties>
+    <property name="room" value="patio"/>
+   </properties>
+  </object>
+  <object id="490" name="Meu escritório" type="room" x="480" y="416" width="256" height="128">
+   <properties>
+    <property name="id" value="meu"/>
+    <property name="nome" value="Meu escritório"/>
+    <property name="agent" value=""/>
+    <property name="tab" value=""/>
+   </properties>
+  </object>
+  <object id="491" name="" type="entry" x="576" y="448" width="32" height="32">
+   <properties>
+    <property name="room" value="meu"/>
+   </properties>
+  </object>
+  <object id="492" name="" type="spot" x="448" y="384" width="32" height="32">
+   <properties>
+    <property name="room" value=""/>
+   </properties>
+  </object>
+  <object id="493" name="" type="spot" x="736" y="384" width="32" height="32">
+   <properties>
+    <property name="room" value=""/>
+   </properties>
+  </object>
+  <object id="494" name="" type="spot" x="608" y="288" width="32" height="32">
+   <properties>
+    <property name="room" value=""/>
+   </properties>
+  </object>
+  <object id="495" name="" type="spot" x="608" y="672" width="32" height="32">
+   <properties>
+    <property name="room" value=""/>
+   </properties>
+  </object>
+  <object id="496" name="" type="spot" x="352" y="480" width="32" height="32">
+   <properties>
+    <property name="room" value=""/>
+   </properties>
+  </object>
+  <object id="497" name="" type="spot" x="832" y="480" width="32" height="32">
+   <properties>
+    <property name="room" value=""/>
+   </properties>
+  </object>
+  <object id="498" name="" type="spot" x="160" y="288" width="32" height="32">
+   <properties>
+    <property name="room" value=""/>
+   </properties>
+  </object>
+  <object id="499" name="" type="spot" x="1024" y="288" width="32" height="32">
+   <properties>
+    <property name="room" value=""/>
+   </properties>
+  </object>
+  <object id="500" name="" type="spot" x="160" y="672" width="32" height="32">
+   <properties>
+    <property name="room" value=""/>
+   </properties>
+  </object>
+  <object id="501" name="" type="spot" x="1024" y="672" width="32" height="32">
+   <properties>
+    <property name="room" value=""/>
    </properties>
   </object>
  </objectgroup>

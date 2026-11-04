@@ -1,0 +1,47 @@
+# Sala de Direção criativa (Theo) — 12x8, só Room_Builder_Office + Modern_Office. Identidade: MESA GRANDE cinza-escuro, estante, quadros e sofá.
+# Piso útil 10x4 (colunas 1-10, linhas 2-5). Mesa grande 5x3 na parede norte (colunas 1-5); a direita é o cantinho do sofá,
+# com o quadro grande na parede e a estante no canto. Porta ao sul (colunas 5-6).
+id: direcao
+nome: Direção criativa
+agent: theo
+tab: direcao
+size: [12, 8]
+floor: sala_azul
+
+seats:
+  - { at: [3, 5], face: down, kind: agent, monitor: true }     # mesa grande: Theo
+  - { at: [1, 5], face: down, kind: visitor }                  # cadeira de visita na ponta da mesa
+monitor: [1, 2, 5, 2]
+entry: [5, 5]
+spots: [[6, 5], [8, 5], [9, 4]]
+
+grid: |
+  FFFFFFFFFFFF
+  BBBBBBBBBBBB
+  L..........R
+  L..........R
+  L..........R
+  L..........R
+  FFFFF..FFFFF
+  BBBBB..BBBBB
+
+objects:
+  # mesa grande do Theo
+  - { use: table_dark_long, at: [1, 1] }
+  - { use: monitor_modern,  at: [3, 2] }
+  - { use: desk_lamp,       at: [2, 2] }
+  - { use: phone,           at: [5, 2] }
+  - { use: keyboard,        at: [3, 3] }
+  - { use: chair_swivel,    at: [3, 4] }
+  - { use: chair_swivel,    at: [1, 4] }
+  # cantinho do sofá
+  - { use: sofa_dark,       at: [7, 2] }
+  - { use: plant,           at: [10, 3] }
+  # parede norte: quadros sobre a mesa, diploma ao lado da porta, quadro grande e estante
+  - { use: frame_mini,      at: [1, 0] }
+  - { use: frame_face_a,    at: [2, 0] }
+  - { use: frame_face_b,    at: [4, 0] }
+  - { use: frame_mini,      at: [5, 0] }
+  - { use: certificate_a,   at: [6, 0] }
+  - { use: art_pop,         at: [7, 0] }
+  - { use: shelf,           at: [9, 0] }

@@ -105,6 +105,7 @@ details > summary { cursor: pointer; }
 .px-hot .px-tag { bottom: auto; top: 0; transform: translate(-50%, -100%) scale(var(--inv)); }
 .px-bubble { position: absolute; left: 50%; bottom: calc(100% + 1px); transform: translate(-50%, calc(-100% - 2px)) scale(var(--inv)); transform-origin: 50% 200%; white-space: nowrap;
   font: 800 11px/1.1 Nunito Sans, system-ui, sans-serif; padding: 4px 8px; border-radius: 8px; border: 2px solid #17234B; background: #FFF8EC; color: #17234B; pointer-events: none; }
+.px-char[data-walk] .px-bubble { display: none; }
 .px-bubble-need { background: #D5F45B; animation: bounce .6s ease-in-out infinite alternate; }
 .px-sign { transform: translateX(-50%) scale(var(--inv)); transform-origin: 50% 0; display: flex; flex-direction: column; align-items: center; gap: 0; padding: 3px 9px;
   border: 2px solid #17234B; border-radius: 10px; background: #FFF8EC; box-shadow: 0 3px 0 #17234B; color: #17234B; white-space: nowrap; font-family: Nunito Sans, system-ui, sans-serif; z-index: 900; }

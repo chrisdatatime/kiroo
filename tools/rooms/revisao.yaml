@@ -1,0 +1,49 @@
+# Sala de Revisão (Rui) — 12x9, só Room_Builder_Office + Modern_Office. Identidade: LARANJA, conferência — duas estações, quadros brancos e bebedouro.
+# Piso útil 10x5 (colunas 1-10, linhas 2-6). Porta ao NORTE (colunas 5-6) entre as duas estações; mesas nas linhas 2-4 e cadeiras
+# nas linhas 5-6, como na Edição. O corredor central (colunas 5-6) leva do vão às duas cadeiras.
+id: revisao
+nome: Revisão
+agent: rui
+tab: revisao
+size: [12, 9]
+floor: sala_laranja
+
+seats:
+  - { at: [3, 6], face: down, kind: agent, monitor: true }     # estação A: Rui
+  - { at: [8, 6], face: down, kind: visitor, monitor: true }   # estação B
+monitor: [2, 2, 8, 3]
+entry: [5, 2]
+spots: [[5, 4], [6, 6], [5, 6]]
+
+grid: |
+  FFFFF..FFFFF
+  BBBBB..BBBBB
+  L..........R
+  L..........R
+  L..........R
+  L..........R
+  L..........R
+  FFFFFFFFFFFF
+  BBBBBBBBBBBB
+
+objects:
+  # estação A
+  - { use: desk_office,     at: [2, 2] }
+  - { use: phone,           at: [2, 3] }
+  - { use: monitor_modern,  at: [3, 3] }
+  - { use: keyboard,        at: [3, 4] }
+  - { use: chair_swivel,    at: [3, 5] }
+  # estação B
+  - { use: desk_office,     at: [7, 2] }
+  - { use: monitor_modern,  at: [8, 3] }
+  - { use: desk_lamp,       at: [9, 3] }
+  - { use: keyboard,        at: [8, 4] }
+  - { use: chair_swivel,    at: [8, 5] }
+  # bebedouro e planta nos cantos de baixo
+  - { use: water_cooler,    at: [1, 4] }
+  - { use: plant,           at: [10, 4] }
+  # parede norte: quadros brancos sobre as estações
+  - { use: whiteboard_chart, at: [2, 0] }
+  - { use: frame_face_a,     at: [4, 0] }
+  - { use: frame_mini,       at: [7, 0] }
+  - { use: whiteboard,       at: [8, 0] }

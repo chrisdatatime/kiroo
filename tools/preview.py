@@ -19,7 +19,7 @@ ORDER = ["floor", "walls", "furniture_below", "furniture_above"]
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--grid", action="store_true", help="desenha a grade e os retângulos de colisão")
-    p.add_argument("--zoom", type=int, default=2)
+    p.add_argument("--zoom", type=float, default=2, help="aceita fração (0.5 = metade)")
     p.add_argument("--crop", help="recorte em tiles: x,y,w,h")
     a = p.parse_args()
 
@@ -47,7 +47,8 @@ def main() -> None:
                     img.alpha_composite(tile_image(o["gid"]), (x * TILE, y * TILE))
 
     if a.zoom != 1:
-        img = img.resize((img.width * a.zoom, img.height * a.zoom), Image.Resampling.NEAREST)
+        mode = Image.Resampling.NEAREST if a.zoom > 1 else Image.Resampling.LANCZOS
+        img = img.resize((round(img.width * a.zoom), round(img.height * a.zoom)), mode)
 
     if a.grid:
         d = ImageDraw.Draw(img)

@@ -1,0 +1,37 @@
+# Jogos e lazer — 10x9, sala de DESCANSO (clima diferente das de trabalho): verde claro, sofás, puffs, TV e pingue-pongue.
+# Piso útil 8x5 (colunas 1-8, linhas 2-6). Porta a leste (linhas 3-4). Sofás e TV na parede norte; mesa de pingue-pongue
+# à esquerda (o corpo ocupa as linhas 4-6); puffs espalhados à direita, perto da porta.
+id: jogos
+nome: Jogos e lazer
+size: [10, 9]
+floor: sala_verde_claro
+
+entry: [8, 3]
+spots: [[7, 3], [2, 3]]
+
+grid: |
+  FFFFFFFFFF
+  BBBBBBBBBB
+  L........R
+  L.........
+  L.........
+  L........R
+  L........R
+  FFFFFFFFFF
+  BBBBBBBBBB
+
+objects:
+  # parede norte: sofá azul, TV no meio, sofá cinza; quadrinhos
+  - { use: sofa_blue,       at: [1, 1] }
+  - { use: tv_wall,         at: [4, 1] }
+  - { use: sofa_gray,       at: [6, 1] }
+  - { use: frame_mini,      at: [2, 0] }
+  - { use: frame_mini,      at: [7, 0] }
+  # mesa de pingue-pongue
+  - { use: pingpong_blue,   at: [3, 3] }
+  # puffs e planta
+  - { use: puff_red,        at: [7, 4] }
+  - { use: puff_yellow,     at: [8, 5] }
+  - { use: puff_blue,       at: [6, 6] }
+  - { use: puff_red,        at: [8, 6] }
+  - { use: plant_small,     at: [1, 5] }

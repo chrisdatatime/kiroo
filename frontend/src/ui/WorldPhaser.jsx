@@ -2,8 +2,8 @@ import React from 'react';
 import { GRID, TMJ } from '../game/data.js';
 import { createOffice } from '../game/phaser/OfficeScene.js';
 
-// Tilesets LimeZu (assets/tilesets, fora do git: licença). O Interiors_32x32.png (34.048 px) fica de fora:
-// passa do limite de textura WebGL e não é usado pela sala de Edição (Fase 2b: atlas só com os tiles usados).
+// Tilesets LimeZu (assets/tilesets, fora do git: licença). O Interiors_32x32.png (34.048 px) fica de fora: passa do limite
+// de textura WebGL. O mapa usa interiors_atlas.png, gerado por tools/build_map.py só com os tiles do Interiors usados.
 const FILES = import.meta.glob(['../../../assets/tilesets/*.png', '!../../../assets/tilesets/Interiors_32x32.png'], { query: '?url', import: 'default', eager: true });
 const URLS = {};
 Object.entries(FILES).forEach(([path, url]) => { URLS[path.split('/').pop().replace(/\.png$/, '')] = url; });
@@ -49,15 +49,13 @@ export default function WorldPhaser({ v }) {
         ))}
 
         {v.chars.map((c) => (
-          <button key={c.id} className="px-char" onClick={c.click} aria-label={c.aria} style={{ left: c.l, top: c.t, zIndex: c.z, width: c.w, height: c.h }}>
+          // o nome é desenhado pelo Phaser (preso ao sprite); aqui ficam só o clique e o balão (escondido enquanto anda)
+          <button key={c.id} className="px-char" data-walk={c.walking ? '1' : undefined} onClick={c.click} aria-label={c.aria} style={{ left: c.l, top: c.t, zIndex: c.z, width: c.w, height: c.h }}>
             {(c.need || c.work || c.near) && c.status && <span className={'px-bubble' + (c.need ? ' px-bubble-need' : '')}>{c.status}</span>}
-            <span className={'px-tag' + (c.near ? ' px-tag-lime' : '')}>{c.tagText}</span>
           </button>
         ))}
 
-        <div aria-label="Você" className="px-char px-me" style={{ left: v.pl.l, top: v.pl.t, zIndex: v.pl.z, width: v.pl.w, height: v.pl.h }}>
-          <span className="px-tag px-tag-lime">Você</span>
-        </div>
+        <div aria-label="Você" className="px-char px-me" style={{ left: v.pl.l, top: v.pl.t, zIndex: v.pl.z, width: v.pl.w, height: v.pl.h }} />
       </div>
 
       {v.celebrate && (

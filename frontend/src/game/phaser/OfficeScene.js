@@ -9,12 +9,13 @@
 import Phaser from 'phaser';
 import { charSprite, CW, CH } from '../pixel/characters.js';
 import { usedTilesets } from '../world/tmjWorld.js';
+import { pickZoom, tagScale, tagPos } from './zoom.js';
+
+export { pickZoom };
 
 const ABOVE = 1e6, UI = 2e6;
-const ROWS_IN_VIEW = 14;      // ~14 tiles de altura na tela define o zoom inteiro (referência: Gather)
 const LIME = 0xD5F45B, NAVY = 0x17234B;
 
-export function pickZoom(vhDev, tile) { return Math.max(1, Math.floor(vhDev / (ROWS_IN_VIEW * tile))); }
 
 class OfficeScene extends Phaser.Scene {
   constructor(opts) { super({ key: 'office' }); this.opts = opts; }
@@ -24,7 +25,7 @@ class OfficeScene extends Phaser.Scene {
     const max = this.renderer.getMaxTextureSize ? this.renderer.getMaxTextureSize() : 4096;
     this.sets = usedTilesets(tmj).filter((t) => {
       if (!urls[t.name]) { console.warn(`[pivoo] tileset sem arquivo: ${t.name}`); return false; }
-      if (t.imageheight > max || t.imagewidth > max) { console.warn(`[pivoo] ${t.name} (${t.imagewidth}x${t.imageheight}) passa do limite de textura (${max}); precisa de atlas (Fase 2b)`); return false; }
+      if (t.imageheight > max || t.imagewidth > max) { console.warn(`[pivoo] ${t.name} (${t.imagewidth}x${t.imageheight}) passa do limite de textura (${max})`); return false; }
       return true;
     });
     this.sets.forEach((t) => this.load.spritesheet(t.name, urls[t.name], { frameWidth: t.tilewidth, frameHeight: t.tileheight }));
@@ -65,13 +66,15 @@ class OfficeScene extends Phaser.Scene {
     const cam = this.cameras.main;
     cam.setRoundPixels(true);
     this.applyView();
+    // a fonte do nome pode chegar depois da cena: redesenha os nomes quando carregar
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => this.refreshFonts());
     if (this.opts.onReady) this.opts.onReady(this);
   }
 
   // Zoom inteiro em pixels do dispositivo e limites do mapa (centralizado quando o mapa é menor que a tela)
   applyView() {
     const cam = this.cameras.main; const { width, height } = this.scale;
-    const z = pickZoom(height, this.T);
+    const z = pickZoom(width, window.devicePixelRatio || 1);
     cam.setZoom(z);
     const vw = width / z, vh = height / z;
     const bw = Math.max(this.mapW, vw), bh = Math.max(this.mapH, vh);
@@ -80,15 +83,46 @@ class OfficeScene extends Phaser.Scene {
 
   texFor(canvas) {
     let key = this.texKeys.get(canvas);
-    if (!key) { key = 'ch' + (this.texN++); this.textures.addCanvas(key, canvas); this.texKeys.set(canvas, key); }
+    if (!key) {
+      key = 'ch' + (this.texN++);
+      const tex = this.textures.addCanvas(key, canvas);
+      if (tex) tex.setFilter(Phaser.Textures.FilterMode.NEAREST);
+      this.texKeys.set(canvas, key);
+    }
     return key;
   }
+
+  // Nome preso ao personagem: pill + texto num container, na mesma posição arredondada do sprite.
+  // O container tem escala dpr/zoom (como o --inv do CSS): tamanho constante na tela, com a pill desenhada em "px CSS".
+  makeTag(e) {
+    const bg = this.add.graphics();
+    const txt = this.add.text(0, 0, '', { fontFamily: 'Nunito Sans, system-ui, sans-serif', fontStyle: '800', fontSize: '11px', color: '#FFFFFF' })
+      .setOrigin(0.5, 0.5).setResolution(window.devicePixelRatio || 1);
+    txt.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
+    const box = this.add.container(0, 0, [bg, txt]).setDepth(UI + 1).setVisible(false);
+    e.tag = { box, bg, txt, label: null, lime: null };
+  }
+
+  setTag(e, label, lime) {
+    const g = e.tag; if (!g || (g.label === label && g.lime === lime)) return;
+    g.label = label; g.lime = lime;
+    g.txt.setText(label).setColor(lime ? '#17234B' : '#FFFFFF');
+    const w = Math.ceil((g.txt.width + 18) / 2) * 2, h = 21;
+    g.bg.clear();
+    g.bg.fillStyle(NAVY, 0.35).fillRoundedRect(-w / 2, -h + 2, w, h, 6);
+    g.bg.fillStyle(NAVY, 1).fillRoundedRect(-w / 2, -h, w, h, 6);
+    if (lime) g.bg.fillStyle(LIME, 1).fillRoundedRect(-w / 2 + 2, -h + 2, w - 4, h - 4, 4);
+    g.txt.setPosition(0, -h / 2);
+  }
+
+  refreshFonts() { if (this.chars) this.chars.forEach((e) => { if (e.tag) { const { label, lime } = e.tag; e.tag.label = null; this.setTag(e, label || '', lime); } }); }
 
   ensureChar(id) {
     let e = this.chars.get(id);
     if (!e) {
       e = { x: 0, y: 0, from: [0, 0], to: [0, 0], t0: -1, dur: 0.6, dir: 'down', init: false, idleSince: 0, blinkAt: 1 + Math.random() * 3, gaze: [0, 0], gazeAt: 0, alive: true };
       e.img = this.add.image(0, 0, '__DEFAULT').setOrigin(0.5, 23 / CH).setScale(this.S).setVisible(false);
+      this.makeTag(e);
       this.chars.set(id, e);
     }
     return e;
@@ -100,16 +134,18 @@ class OfficeScene extends Phaser.Scene {
     this.v = v;
     const T = this.T, S = this.S, now = (this.time.now - this.t0) / 1000;
     const seen = new Set();
-    const place = (id, c, look, dur) => {
+    const place = (id, c, look, dur, tag, lime) => {
       const e = this.ensureChar(id); seen.add(id);
+      this.setTag(e, tag, lime);
       const tx = (c.i + 0.5) * T, ty = (c.j + 1) * T - (c.seated ? 6 : 2) * S;
       if (!e.init) { e.x = tx; e.y = ty; e.from = [tx, ty]; e.to = [tx, ty]; e.init = true; }
       else if (e.to[0] !== tx || e.to[1] !== ty) { e.from = [e.x, e.y]; e.to = [tx, ty]; e.t0 = now; e.dur = c.teleport ? 0.01 : dur; }
       Object.assign(e, { look, anim: c.anim, seated: c.seated, face: c.face, need: c.need, work: c.work, foot: (c.j + 1) * T });
     };
-    v.chars.forEach((c) => place(c.id, c, c.look, 0.65));
-    place('__player', v.pl, v.look, v.pl.dur || 0.13);
-    this.chars.forEach((e, id) => { if (!seen.has(id)) { e.img.destroy(); this.chars.delete(id); } });
+    // dur dos agentes = AGENT_EVERY * TICK (App.jsx): 1 tile por passo lógico, sem o sprite chegar antes
+    v.chars.forEach((c) => place(c.id, c, c.look, v.agentDur || 0.65, c.tagText, !!c.near));
+    place('__player', v.pl, v.look, v.pl.dur || 0.13, 'Você', true);
+    this.chars.forEach((e, id) => { if (!seen.has(id)) { e.img.destroy(); e.tag.box.destroy(); this.chars.delete(id); } });
     if (!this.following) { const p = this.chars.get('__player'); this.cameras.main.startFollow(p.img, true, 0.12, 0.12); this.following = true; }
   }
 
@@ -145,7 +181,11 @@ class OfficeScene extends Phaser.Scene {
     const key = this.texFor(canvas);
     if (e.img.texture.key !== key) e.img.setTexture(key);
     // posição em pixels inteiros do sprite (CW x CH em escala S)
-    e.img.setPosition(Math.round(e.x), Math.round(e.y - lift * this.S)).setVisible(true);
+    const rx = Math.round(e.x), ry = Math.round(e.y - lift * this.S);
+    e.img.setPosition(rx, ry).setVisible(true);
+    // nome: mesmo frame, mesma posição arredondada; deslocamento constante acima da cabeça (topo do sprite = ry - 23 * S)
+    const inv = tagScale(this.cameras.main.zoom, window.devicePixelRatio || 1);
+    e.tag.box.setScale(inv).setPosition(...tagPos(rx, ry, this.S, inv)).setVisible(true);
     // y-sorting pelo pé; sentado fica na frente da própria cadeira (o pé da cadeira é a base do tile)
     e.img.setDepth(e.seated && !e.walking ? e.foot + 1 : e.y);
   }

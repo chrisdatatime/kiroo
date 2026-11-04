@@ -1,18 +1,18 @@
-# Sala de Edição (SPEC-VIS-001) — 14x8 tiles, só Room_Builder_Office + Modern_Office.
+# Sala de Edição (SPEC-VIS-001) — 10x9 tiles (externo), só Room_Builder_Office + Modern_Office + piso do Room_Builder.
 #
 # grid, um caractere por tile (tabela em tools/tiles.yaml, walls):
-#   F / B = parede norte: topo com tampa + face / face baixa com rodapé
-#   L / R = faixa lateral esquerda / direita      S = barra da parede sul
-#   < / > = cantos sul        ( / ) = batentes da porta      + = vão da porta      . = chão
-# Chão útil: 12x5. Três estações (mesa 3x3 + cadeira 1x2) ocupam a largura toda do lado esquerdo.
+#   F / B = parede horizontal: topo com tampa + face / face baixa com rodapé (2 tiles de face)
+#   L / R = faixa lateral esquerda / direita      . = chão (os vãos de porta são chão em F/B)
+# Piso útil: 8x5. Duas estações (mesa 3x3 + cadeira 1x2 sobreposta à frente da mesa), estante, planta e quadros.
+# Porta a oeste (linhas 5-6), para o corredor vertical; a fileira 5 fica livre para andar atrás das cadeiras.
 
 id: edicao
 nome: Edição
 agent: beto          # agente da sala (game/data.js); liga o retângulo room ao setor e ao estado
 tab: entrega
-size: [14, 8]
-origin: [2, 2]
-floor: piso_escritorio
+size: [10, 9]
+# origem vem de tools/layout.yaml (célula C3)
+floor: sala_amarelo
 
 # Fase 2 — objetos de jogo (coordenadas da sala, como os móveis):
 #   seats: assento = célula de baixo da cadeira (a que colide). kind agent|visitor|free; monitor: sentado aqui usa o monitor
@@ -21,21 +21,20 @@ floor: piso_escritorio
 seats:
   - { at: [2, 6], face: down, kind: agent, monitor: true }     # estação A: Beto
   - { at: [5, 6], face: down, kind: visitor, monitor: true }   # estação B
-  - { at: [8, 6], face: down, kind: free }                     # estação C
-monitor: [1, 2, 9, 3]
-entry: [7, 6]
-spawn: [7, 6]
-spots: [[11, 3], [3, 5], [9, 5]]
+monitor: [1, 2, 6, 3]
+entry: [1, 5]
+spots: [[3, 5], [6, 5], [8, 5]]
 
 grid: |
-  FFFFFFFFFFFFFF
-  BBBBBBBBBBBBBB
-  L............R
-  L............R
-  L............R
-  L............R
-  L............R
-  <SSSS(++)SSSS>
+  FFFFFFFFFF
+  BBBBBBBBBB
+  L........R
+  L........R
+  L........R
+  .........R
+  .........R
+  FFFFFFFFFF
+  BBBBBBBBBB
 
 objects:
   # estação A
@@ -49,23 +48,15 @@ objects:
   - { use: monitor_modern,  at: [5, 3] }
   - { use: keyboard,        at: [5, 4] }
   - { use: chair_swivel,    at: [5, 5] }
-  # estação C
-  - { use: desk_office,     at: [7, 2] }
-  - { use: monitor_modern,  at: [8, 3] }
-  - { use: keyboard,        at: [8, 4] }
-  - { use: chair_swivel,    at: [8, 5] }
-  - { use: desk_lamp,       at: [6, 3] }   # estação B, ponta direita
-  - { use: phone,           at: [9, 3] }   # estação C, ponta direita
+  - { use: desk_lamp,       at: [6, 3] }
 
-  # parede norte: quadros brancos, quadros, estante
+  # parede norte: quadro branco, quadros e estante
   - { use: whiteboard_chart, at: [1, 0] }
+  - { use: poster,           at: [3, 0] }
   - { use: whiteboard,       at: [4, 0] }
-  - { use: poster,           at: [7, 0] }
-  - { use: frame_wide,       at: [8, 0] }
-  - { use: shelf,            at: [10, 0] }
+  - { use: poster,           at: [6, 0] }
+  - { use: shelf,            at: [7, 0] }
 
-  # canto leste e fundo
-  - { use: water_cooler,    at: [12, 2] }
-  - { use: plant,           at: [10, 4] }
-  - { use: printer,         at: [11, 5] }
-  - { use: plant_small,     at: [12, 5] }
+  # canto leste
+  - { use: plant_small,     at: [8, 3] }
+  - { use: printer,         at: [7, 5] }

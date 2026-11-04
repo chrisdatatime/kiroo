@@ -176,7 +176,7 @@ export default class PixelOffice {
       else if (e.to[0] !== tx || e.to[1] !== ty) { e.from = [e.x, e.y]; e.to = [tx, ty]; e.t0 = now; e.dur = c.teleport ? 0.01 : dur; }
       Object.assign(e, { look, anim: c.anim, seated: c.seated, face: c.face, need: c.need, work: c.work });
     };
-    v.chars.forEach((c) => place(c.id, c, c.look, 0.65));
+    v.chars.forEach((c) => place(c.id, c, c.look, v.agentDur || 0.65));
     place('__player', v.pl, v.look, v.pl.dur || 0.13);
     const key = JSON.stringify(v.setup);
     if (key !== this.mineKey) { this.mineKey = key; this.mine = this.buildMine(v.setup || {}); }

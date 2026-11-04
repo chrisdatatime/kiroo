@@ -26,8 +26,25 @@ TILESETS = {
                             "firstgid": 26461, "source": "../tilesets/Room_Builder_Office_32x32.png",
                             "name": "Room_Builder_Office_32x32"},
 }
+ATLAS_FIRSTGID = 26685
+
+ATLAS = {"path": ROOT / "assets/tilesets/interiors_atlas.png", "columns": 16, "firstgid": ATLAS_FIRSTGID,
+         "source": "../tilesets/interiors_atlas.png", "name": "interiors_atlas"}
+# Atlas só com os tiles do Interiors usados no mapa (gerado por build_map.py; fora do git, como os demais).
+# Entra em TILESETS só quando o arquivo existe (register_atlas), depois do room_builder_office (termina em 26684).
 
 _cache: dict[str, Image.Image] = {}
+
+
+def register_atlas() -> None:
+    _cache.pop("interiors_atlas", None)
+    if ATLAS["path"].is_file():
+        TILESETS["interiors_atlas"] = ATLAS
+    else:
+        TILESETS.pop("interiors_atlas", None)
+
+
+register_atlas()
 
 
 def sheet(key: str) -> Image.Image:

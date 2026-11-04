@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Estado | Fase 1 entregue (pipeline + sala de Edição). Fase 2 entregue atrás da flag `?world=phaser` (só a Edição no mapa), aguardando validação. Fase 2b: demais salas + atlas. Ver HANDOFF.md. |
+| Estado | Fase 1 entregue (pipeline + sala de Edição). Fase 2 entregue atrás da flag `?world=phaser`, aguardando validação. Fase 2b-1 entregue: estrutura da sede inteira (sem mobília). Falta 2b-2 (mobília) e o atlas. Ver HANDOFF.md. |
 | Autor | Chris + Claude |
 | Criada | 2026-11-04 |
 | Substitui | Renderizador em Canvas 2D desenhado por código (`frontend/src/game/pixel/`) |
@@ -131,6 +131,23 @@ Dependências: `pillow` e `ruamel.yaml` (o PyYAML não tem wheel para o Python 3
 .venv\Scripts\python tools/preview.py --zoom 2 --crop 1,1,15,11
 ```
 
+## 7b. Layout da sede — "anel de produção" (Fase 2b-1)
+
+Fonte: `tools/layout.yaml`. Mapa 53×33 tiles, grade 3×3 de células com corredores de 2 tiles e chão contínuo.
+
+```
+y 0..7    A1 Planejamento | B1 Direção criativa | C1 Imagens
+y 8-9     corredor
+y 10..20  A2 Jogos e lazer | B2 Pátio (cabine "Meu escritório") | C2 Vídeos
+y 21-22   corredor
+y 23..30  A3 Entrada (spawn) | B3 Revisão | C3 Edição
+y 31-32   corredor só sob a Edição
+```
+Salas dos agentes numeradas no sentido horário: 1 Planejamento, 2 Direção criativa, 3 Imagens, 4 Vídeos, 5 Edição, 6 Revisão;
+cada uma com porta para o corredor mais próximo (a da Edição é ao sul por ser idêntica à sala da Fase 1/2). A trilha é um
+anel de piso claro (`room_builder_office`) nos corredores ao redor do pátio. As salas novas têm só chão, parede com face frontal,
+porta e colisão; a mobília é a 2b-2. Objects: um `room` por célula (+ `meu`), `spawn` na Entrada, `spot` no pátio e nos corredores.
+
 ## 8. Critérios de aceite
 
 **Fase 1 (pipeline, só a sala de Edição)**
@@ -146,3 +163,8 @@ Dependências: `pillow` e `ruamel.yaml` (o PyYAML não tem wheel para o Python 3
 - Os objetos `room` ligam às salas e estados que já existem.
 - Andar, sentar, monitores, agentes, treinamento e trilhas seguem funcionando.
 - `CREDITS.md` presente.
+
+**Fase 2b-1 (estrutura da sede)**
+- `layout.yaml` descreve células, portas, corredores, trilha, spawn e spots; `build_map.py` monta tudo em um único `office.tmj`.
+- Toda sala é alcançável a partir do spawn, sem sala bloqueada (`tests/tmj.test.mjs`).
+- Só `room_builder_office` e `modern_office`; nenhuma sala nova mobiliada.

@@ -76,7 +76,7 @@ Logos e padrão ficam em `src/assets/` (PNG transparentes enviados pelo Chris; n
 ## Sede em pixel art
 > **Migração em andamento (SPEC-VIS-001):** com `?world=phaser` (ou Minha conta → Sobre e créditos) o mundo vem de
 > `../assets/maps/office.tmj` no Phaser 3 (`game/world/tmjWorld.js`, `game/phaser/OfficeScene.js`, `ui/WorldPhaser.jsx`), tile de 32 px
-> e câmera seguindo o jogador; por enquanto só a sala de Edição. O padrão continua o renderizador abaixo. Veja `../docs/HANDOFF.md`.
+> e câmera seguindo o jogador; a estrutura da sede inteira (38×32, salas ~10×8, pisos coloridos, câmera zoom 1 em ≥ 1280 px, todas as salas mobiliadas; Interiors via `assets/tilesets/interiors_atlas.png`, gerado pelo build) vem de `../tools/layout.yaml`. O padrão continua o renderizador abaixo. Veja `../docs/HANDOFF.md`.
 > `node tests/tmj.test.mjs` confere o mapa novo. Crédito do tileset: `../CREDITS.md` e `ui/About.jsx`.
 
 - Mapa ortogonal 52x30 tiles em 16:9 (`game/map.js`), para a sede inteira caber na tela com tiles grandes (referência: Gather).
@@ -87,7 +87,7 @@ Logos e padrão ficam em `src/assets/` (PNG transparentes enviados pelo Chris; n
 - Desenho em Canvas 2D (`game/pixel/renderer.js`): chão/paredes pré-desenhados, sprites ordenados pela base (o personagem passa na
   frente ou atrás dos móveis), encosto da cadeira por cima de quem senta. A sede inteira fica sempre na tela, sem zoom nem câmera
   seguindo; como a escala quase nunca é inteira, o mundo é desenhado num buffer em escala inteira e reduzido com suavização.
-- Movimento fluido: `TICK` (130 ms) é o tempo de um passo e o desenho interpola exatamente esse tempo; `this.held` guarda as teclas
+- Movimento fluido: `TICK` (200 ms, agentes: 5 ticks por tile) é o tempo de um passo e o desenho interpola exatamente esse tempo; `this.held` guarda as teclas
   ainda pressionadas e o `tick` emenda o próximo passo antes de parar, então segurar a tecla anda sem picotar.
 - Interações: agente (conversar, ver trabalho, treinar), monitor (trabalho da sala), cadeira (sentar/levantar; a do agente é dele),
   Meu setup (personalizar), quadro, café, jogos e estante de trilhas na sala da Lia. Ao digitar em campos, os atalhos ficam suspensos.

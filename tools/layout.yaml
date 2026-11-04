@@ -1,0 +1,58 @@
+# Layout da sede (SPEC-VIS-001, Fase 2b-2): "anel de produção" compacto, grade 3x3 de células + corredores de 3 tiles.
+# Coordenadas em tiles, origem no canto superior esquerdo do mapa. Lido por tools/build_map.py.
+# O retângulo de cada célula é o EXTERNO: parede norte (2 tiles de face) + piso + parede sul (2 tiles de face).
+#
+#        x 0..9    10-12   13..24   25-27   28..37
+#   y 0..7    A1 Planejamento | B1 Direção criativa | C1 Imagens          (8 de altura: 4 de piso)
+#   y 8-10    ================ corredor ===============================
+#   y 11..19  A2 Jogos e lazer | B2 Pátio (+ cabine) | C2 Vídeos          (9 de altura: 5 de piso)
+#   y 20-22   ================ corredor ===============================
+#   y 23..31  A3 Entrada      | B3 Revisão          | C3 Edição           (9 de altura; Entrada e Revisão com porta ao norte, Edição ao oeste)
+#
+# Salas dos agentes, sentido horário: 1 Planejamento, 2 Direção criativa, 3 Imagens, 4 Vídeos, 5 Edição, 6 Revisão.
+# Todas mobiliadas em tools/rooms/<id>.yaml (2b-3a: salas dos agentes; 2b-3b: Entrada, Jogos e lazer, Pátio).
+# Os spots do pátio ficam em rooms/patio.yaml, os da Jogos em rooms/jogos.yaml.
+
+map: { width: 38, height: 32 }
+
+# Chão contínuo dos corredores: [x, y, largura, altura]
+corridors:
+  - [0, 8, 38, 3]      # norte (entre as linhas 1 e 2)
+  - [0, 20, 38, 3]     # sul (entre as linhas 2 e 3)
+  - [10, 0, 3, 32]     # oeste (entre as colunas A e B)
+  - [25, 0, 3, 32]     # leste (entre as colunas B e C)
+
+# Piso dos corredores e do pátio (madeira clara) e trilha viva: o anel de corredores ao redor do pátio.
+corridor_floor: madeira
+trail: { tile: trilha, rect: [10, 8, 18, 15], hole: [13, 11, 12, 9] }
+
+# Células. door: side (south|north|east|west) e at = posição da 1ª casa do vão de 2 tiles, relativa à célula
+# (padrão: centralizado). floor: chave de tiles.yaml (floors). room_file: sala já desenhada em tools/rooms/.
+cells:
+  - { id: planejamento, nome: Planejamento,    agent: nina, tab: produto, rect: [0, 0, 10, 8],   room_file: planejamento }   # porta sul
+  - { id: direcao,      nome: Direção criativa, agent: theo, tab: direcao, rect: [13, 0, 12, 8],  room_file: direcao }        # porta sul
+  - { id: imagens,      nome: Imagens,         agent: iris, tab: imagens, rect: [28, 0, 10, 8],  room_file: imagens }        # porta sul
+  - { id: videos,       nome: Vídeos,          agent: lia,  tab: videos,  rect: [28, 11, 10, 9], room_file: videos }         # porta oeste
+  - { id: edicao,       nome: Edição,          agent: beto, tab: entrega, rect: [28, 23, 10, 9], room_file: edicao }
+  - { id: revisao,      nome: Revisão,         agent: rui,  tab: revisao, rect: [13, 23, 12, 9],  room_file: revisao }       # porta norte
+  - { id: entrada,      nome: Entrada,         rect: [0, 23, 10, 9], room_file: entrada }                                  # porta norte, spawn (5,3)
+  - { id: jogos,        nome: Jogos e lazer,   rect: [0, 11, 10, 9], room_file: jogos }                                    # porta leste
+  # pátio central: sem paredes, chão contínuo com os corredores; a cabine fica no meio (divisórias em rooms/patio.yaml)
+  - { id: patio,        nome: Pátio,           rect: [13, 11, 12, 9], open: true, room_file: patio }
+
+# Salas dentro de outra célula: retângulo absoluto
+extra_rooms:
+  - { id: meu, nome: Meu escritório, rect: [15, 13, 8, 4], entry: [18, 14] }
+
+# Pontos de passeio dos agentes fora das salas (absolutos). Os da Edição ficam em rooms/edicao.yaml.
+spots:
+  - [14, 12]
+  - [23, 12]
+  - [19, 9]
+  - [19, 21]
+  - [11, 15]
+  - [26, 15]
+  - [5, 9]
+  - [32, 9]
+  - [5, 21]
+  - [32, 21]
