@@ -1,0 +1,34 @@
+{
+  "kind": "presenter",
+  "id": "bia",
+  "version": "v1",
+  "created": "2026-10-26",
+  "source": "ByteCerto_historico_para_outra_IA.md, seções 2 e 'Mãos e gestos'",
+  "authority_note": "A imagem de referência é a autoridade visual. As descrições textuais são auxiliares e não substituem a referência.",
+  "identity_description_pt": "Bia é uma personagem feminina adulta, de aproximadamente 25 anos (definição criativa), aparência fotográfica natural. Rosto oval de contornos suaves, olhos castanhos expressivos, sobrancelhas escuras bem definidas, lábios com batom nude rosado e sorriso acolhedor. Cabelo longo, liso, castanho-escuro, repartido ao meio. Óculos de armação translúcida castanho-acinzentada, levemente gatinho. Maquiagem discreta e textura de pele natural. Visual inicial: camiseta preta e jaqueta jeans azul.",
+  "behavior_pt": "Simpática, confiante, espontânea, humor leve, entusiasmo moderado. Não inventa experiências de uso, testes ou depoimentos.",
+  "modes": {
+    "hands_only": {
+      "prompt_block_en": "HANDS: only two adult female hands and part of the forearms. Fair skin with a warm undertone matching the skin-tone reference image, natural skin texture, anatomically correct proportional fingers. Well-groomed medium-short nails, soft almond shape, glossy pinkish-nude polish. No rings, bracelets or other jewelry. No face, no body beyond the forearms.",
+      "gesture_en": "Delicate, confident, everyday gestures; relaxed grip; slow movements; nothing theatrical.",
+      "creative_choices_note_pt": "Manicure e ausência de joias são direção de arte escolhida para o teste, não características verificadas na foto da Bia."
+    },
+    "bia_visible": {
+      "prompt_block_en": "PRESENTER: the woman from the presenter reference image. Preserve face proportions, skin tone, long straight dark-brown hair parted in the middle and translucent grey-brown slightly cat-eye glasses. Do not replace her with a merely similar person.",
+      "gesture_en": "Relaxed posture, small natural movements, direct look to camera, warm smile. No speech unless the format requires it."
+    },
+    "product_only": {
+      "prompt_block_en": "No people, no hands, no body parts in frame. Product only.",
+      "gesture_en": ""
+    }
+  },
+  "assets": [
+    {
+      "slot": "presenter_reference",
+      "file": "bia/PERFIL BIA.jpg",
+      "required_for": ["bia_visible"],
+      "recommended_for": ["hands_only"],
+      "usage_en": "Skin-tone reference only. Do not show her face or reproduce the background of this photo."
+    }
+  ]
+}

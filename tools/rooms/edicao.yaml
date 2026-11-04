@@ -1,0 +1,71 @@
+# Sala de Edição (SPEC-VIS-001) — 14x8 tiles, só Room_Builder_Office + Modern_Office.
+#
+# grid, um caractere por tile (tabela em tools/tiles.yaml, walls):
+#   F / B = parede norte: topo com tampa + face / face baixa com rodapé
+#   L / R = faixa lateral esquerda / direita      S = barra da parede sul
+#   < / > = cantos sul        ( / ) = batentes da porta      + = vão da porta      . = chão
+# Chão útil: 12x5. Três estações (mesa 3x3 + cadeira 1x2) ocupam a largura toda do lado esquerdo.
+
+id: edicao
+nome: Edição
+agent: beto          # agente da sala (game/data.js); liga o retângulo room ao setor e ao estado
+tab: entrega
+size: [14, 8]
+origin: [2, 2]
+floor: piso_escritorio
+
+# Fase 2 — objetos de jogo (coordenadas da sala, como os móveis):
+#   seats: assento = célula de baixo da cadeira (a que colide). kind agent|visitor|free; monitor: sentado aqui usa o monitor
+#   monitor: retângulo [x, y, w, h] das mesas que abrem o trabalho da sala
+#   entry: onde o "Ir para a sala" deixa o jogador · spawn: início do jogo (só uma sala define) · spots: passeio dos agentes
+seats:
+  - { at: [2, 6], face: down, kind: agent, monitor: true }     # estação A: Beto
+  - { at: [5, 6], face: down, kind: visitor, monitor: true }   # estação B
+  - { at: [8, 6], face: down, kind: free }                     # estação C
+monitor: [1, 2, 9, 3]
+entry: [7, 6]
+spawn: [7, 6]
+spots: [[11, 3], [3, 5], [9, 5]]
+
+grid: |
+  FFFFFFFFFFFFFF
+  BBBBBBBBBBBBBB
+  L............R
+  L............R
+  L............R
+  L............R
+  L............R
+  <SSSS(++)SSSS>
+
+objects:
+  # estação A
+  - { use: desk_office,     at: [1, 2] }
+  - { use: phone,           at: [1, 3] }
+  - { use: monitor_modern,  at: [2, 3] }
+  - { use: keyboard,        at: [2, 4] }
+  - { use: chair_swivel,    at: [2, 5] }
+  # estação B
+  - { use: desk_office,     at: [4, 2] }
+  - { use: monitor_modern,  at: [5, 3] }
+  - { use: keyboard,        at: [5, 4] }
+  - { use: chair_swivel,    at: [5, 5] }
+  # estação C
+  - { use: desk_office,     at: [7, 2] }
+  - { use: monitor_modern,  at: [8, 3] }
+  - { use: keyboard,        at: [8, 4] }
+  - { use: chair_swivel,    at: [8, 5] }
+  - { use: desk_lamp,       at: [6, 3] }   # estação B, ponta direita
+  - { use: phone,           at: [9, 3] }   # estação C, ponta direita
+
+  # parede norte: quadros brancos, quadros, estante
+  - { use: whiteboard_chart, at: [1, 0] }
+  - { use: whiteboard,       at: [4, 0] }
+  - { use: poster,           at: [7, 0] }
+  - { use: frame_wide,       at: [8, 0] }
+  - { use: shelf,            at: [10, 0] }
+
+  # canto leste e fundo
+  - { use: water_cooler,    at: [12, 2] }
+  - { use: plant,           at: [10, 4] }
+  - { use: printer,         at: [11, 5] }
+  - { use: plant_small,     at: [12, 5] }

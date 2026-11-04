@@ -1,0 +1,102 @@
+{
+  "kind": "format",
+  "id": "bia_3cenas_15s",
+  "version": "v2",
+  "created": "2026-10-28",
+  "source": "v1 sem o aviso gravado na tela.",
+  "description_pt": "Vertical 9:16, Bia aparece segurando o produto, sem fala, três cenas, ~15 s finais. Experimental: consistência do rosto não garantida.",
+  "aspect_ratio": "9:16",
+  "presenter_mode": "bia_visible",
+  "total_target_s": 15.0,
+  "duration_tolerance_s": 1.5,
+  "audio": "silent",
+  "prompt_language": "en",
+  "scenes": [
+    {
+      "index": 1,
+      "title": "Apresentadora com o produto",
+      "objective": "Bia apresenta o produto segurando-o na altura do peito, olhando para a câmera.",
+      "framing": "Plano médio vertical, da cintura para cima; produto inteiro visível.",
+      "references": [
+        "product:all",
+        "presenter:hands"
+      ],
+      "motion": "Bia levanta levemente o produto e sorri; sem fala.",
+      "target_duration_s": 5.0,
+      "image_prompt": "Create a vertical 9:16 photograph to be used as the first frame of a product video.\n\nREFERENCES: the official product photos exclusively define the product. The presenter reference image defines the woman's identity.\n\n$product_block\n\n$hands\nShe holds the product with both hands at chest height, fully visible, with a warm natural smile and eyes to the camera. Her mouth is closed or gently smiling; she is not speaking.\n\n$environment\n$lighting\n\nCOMPOSITION: medium shot from the waist up, product clearly visible and not covering her face.\n\nStill image. $camera\n$negative Do not beautify or modify the product.",
+      "animation_prompt": "Animate the attached image into a vertical 9:16 video. Preserve exactly the woman's face, hair, glasses, clothing, the product, setting and light.\n\nShe lifts the product a few centimeters, turning it slightly to show the front, smiles and keeps eye contact with the camera. She does not speak; lips stay closed or in a smile. Fixed camera.\n\nThe product stays rigid and identical. No new objects, speech, narration, music or on-screen text. Silent.",
+      "constraints": [
+        "sem fala",
+        "rosto igual à referência",
+        "sem texto na imagem"
+      ],
+      "approval_criteria": [
+        "Rosto, cabelo e óculos compatíveis com a referência da Bia",
+        "Produto fiel às fotos oficiais",
+        "Mãos anatomicamente corretas"
+      ]
+    },
+    {
+      "index": 2,
+      "title": "Detalhes nas mãos",
+      "objective": "Plano próximo das mãos da Bia mostrando os detalhes visíveis do produto.",
+      "framing": "Plano próximo das mãos e do produto.",
+      "references": [
+        "scene:1:image",
+        "product:all"
+      ],
+      "motion": "Giro suave de ~10° e retorno.",
+      "target_duration_s": 5.0,
+      "image_prompt": "Create a second vertical 9:16 photograph from the same session. Use the scene-1 image for continuity of hands, clothing, setting and light; the official photos define the product.\n\nClose-up of her hands holding the product, highlighting the visible details exactly as in the references. Her face is out of frame.\n\n$product_block\n\nSharp product and fingers, natural reflections. $camera\n$negative",
+      "animation_prompt": "Animate this photograph into a vertical 9:16 video. The hands gently rotate the product about 10 degrees and return. Fixed close-up camera.\n\nDo not deform the product or the fingers. No new objects, speech, music or text. Silent.",
+      "constraints": [
+        "sem fala",
+        "sem líquidos"
+      ],
+      "approval_criteria": [
+        "Mesmas mãos e roupa da cena 1",
+        "Detalhes fiéis às referências"
+      ]
+    },
+    {
+      "index": 3,
+      "title": "Fechamento",
+      "objective": "Bia coloca o produto na superfície e sorri para a câmera.",
+      "framing": "Plano médio com o produto em primeiro plano.",
+      "references": [
+        "scene:1:image",
+        "product:all",
+        "presenter:hands"
+      ],
+      "motion": "Bia apoia o produto e sorri; câmera fixa.",
+      "target_duration_s": 5.0,
+      "image_prompt": "Create the third vertical 9:16 photograph of the same session. Use the scene-1 image for her identity, clothing, setting and light; the official photos define the product.\n\nThe product stands on a surface in the foreground, whole and in focus; she is slightly behind it, smiling at the camera, not speaking.\n\n$product_block\n\n$hands\n\n$environment\n$lighting\n\n$camera\n$negative",
+      "animation_prompt": "Animate the starting image into a vertical 9:16 video. Preserve her face, the product, setting and light. She gives a small nod and smile to the camera without speaking. The product stays still.\n\nNo speech, music, text or new objects. Silent.",
+      "constraints": [
+        "sem fala",
+        "produto imóvel"
+      ],
+      "approval_criteria": [
+        "Rosto consistente com as cenas anteriores",
+        "Produto idêntico",
+        "Enquadramento adequado para capa"
+      ]
+    }
+  ],
+  "overlays": [],
+  "disclosure": {
+    "caption_text": "Publicidade · Link de afiliada · Apresentadora virtual e imagens geradas por IA.",
+    "status": "nao_revisado",
+    "note_pt": "Sem texto na tela (pedido do Chris em 28/10/2026). A identificação de publicidade e de imagens geradas por IA fica na legenda e deve ser marcada também na publicação da Shopee. Revise conforme as regras vigentes."
+  },
+  "caption": {
+    "hashtags": [
+      "#achadinhos",
+      "#shopee"
+    ],
+    "max_chars": 2200
+  },
+  "cover": {
+    "time_s": 13.0
+  }
+}

@@ -1,0 +1,1232 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pivoo</title>
+<style>
+:root {
+  --bg: #101216; --surface: #171a20; --surface2: #1e222a; --raise: #252a34; --line: #2a303b; --line2: #363d4a;
+  --text: #ecebe6; --muted: #9ba2ae; --faint: #6f7684;
+  --lime: #BEF264; --lime-ink: #142000; --lime-soft: #bef26414; --navy: #0B1730;
+  --ok: #4ade80; --warn: #facc15; --bad: #f87171; --info: #7dd3fc;
+  --floor: #ebe6dc; --wallL: #3b4252; --wallR: #2f3542; --wallTop: #555d70;
+  --r: 10px; --r-sm: 7px;
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text);
+  font: 14px/1.5 "Segoe UI", "Inter", system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+button, input, select, textarea { font: inherit; color: inherit; }
+a { color: var(--lime); }
+:focus-visible { outline: 2px solid var(--lime); outline-offset: 2px; border-radius: 4px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ---------- topo */
+.top { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: var(--s4); padding: 10px var(--s5);
+  background: #0c0e12; border-bottom: 1px solid var(--line); }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: .2px; white-space: nowrap; }
+.logo { width: 28px; height: 28px; border-radius: 7px; background: var(--navy); display: grid; place-items: center; color: #fff;
+  font-weight: 800; position: relative; flex: none; }
+.logo::after { content: "✓"; position: absolute; right: 1px; bottom: -2px; font-size: 11px; color: var(--lime); }
+.nav { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
+.nav button { background: none; border: 0; padding: 7px 12px; border-radius: var(--r-sm); color: var(--muted); cursor: pointer;
+  white-space: nowrap; position: relative; }
+.nav button:hover { color: var(--text); background: var(--surface2); }
+.nav button[aria-current="page"] { color: var(--text); background: var(--surface2); }
+.nav .badge-dot { display: inline-block; min-width: 18px; padding: 0 5px; margin-left: 6px; border-radius: 99px; background: var(--warn);
+  color: #1a1400; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; }
+.spacer { flex: 1; }
+.pill { font-size: 12.5px; padding: 3px 10px; border-radius: 99px; background: var(--surface2); border: 1px solid var(--line);
+  white-space: nowrap; font-variant-numeric: tabular-nums; }
+.pill.over { border-color: var(--bad); color: var(--bad); }
+.switch { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.switch .track { width: 36px; height: 20px; border-radius: 99px; background: #3a1418; position: relative; border: 1px solid #5b1d22; transition: .15s; }
+.switch .track::after { content: ""; position: absolute; width: 14px; height: 14px; left: 2px; top: 2px; border-radius: 50%; background: var(--bad); transition: .15s; }
+.switch input:checked + .track { background: #2f2808; border-color: #5c4a10; }
+.switch input:checked + .track::after { left: 18px; background: var(--warn); }
+.switch input:focus-visible + .track { outline: 2px solid var(--lime); outline-offset: 2px; }
+
+/* ---------- botões */
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: var(--r-sm); border: 1px solid var(--line2);
+  background: var(--surface2); cursor: pointer; font-weight: 600; font-size: 13.5px; }
+.btn:hover { border-color: #4a5262; }
+.btn.primary { background: var(--lime); color: var(--lime-ink); border-color: var(--lime); }
+.btn.primary:hover { filter: brightness(1.05); }
+.btn.ghost { background: none; border-color: transparent; color: var(--muted); }
+.btn.ghost:hover { color: var(--text); }
+.btn.danger { color: var(--bad); }
+.btn.lg { padding: 11px 18px; font-size: 14.5px; }
+.btn:disabled { opacity: .5; cursor: default; }
+.link { background: none; border: 0; padding: 0; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; font-size: 13px; }
+.link:hover { color: var(--text); }
+
+/* ---------- layout */
+main { padding: var(--s5); max-width: 1440px; margin: 0 auto; }
+.split { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: var(--s6); align-items: start; }
+.split.wide-aside { grid-template-columns: minmax(0, 1fr) 460px; }
+.split.no-aside { grid-template-columns: minmax(0, 1fr); }
+.sticky { position: sticky; top: 72px; }
+.eyebrow { color: var(--muted); font-size: 12.5px; letter-spacing: .3px; margin: 0 0 4px; }
+h1 { font-size: 24px; line-height: 1.25; margin: 0 0 6px; letter-spacing: -.2px; }
+h2 { font-size: 16px; margin: 0 0 var(--s2); }
+h3 { font-size: 14px; margin: 0 0 var(--s2); }
+.lead { color: var(--muted); margin: 0 0 var(--s5); max-width: 62ch; }
+.muted { color: var(--muted); }
+.small { font-size: 12.5px; }
+.section { padding: var(--s5) 0; border-top: 1px solid var(--line); }
+.section:first-of-type { border-top: 0; padding-top: 0; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: var(--s4) var(--s5); }
+.row { display: flex; gap: var(--s2); align-items: center; flex-wrap: wrap; }
+.stack > * + * { margin-top: var(--s3); }
+
+/* ---------- formulários */
+label.f { display: block; font-weight: 600; font-size: 13px; margin: var(--s4) 0 6px; }
+label.f .opt-tag, .opt-tag { font-weight: 400; color: var(--faint); margin-left: 6px; font-size: 12px; }
+.hint { color: var(--faint); font-size: 12.5px; margin: 4px 0 0; }
+input[type=text], input[type=url], input[type=number], select, textarea {
+  width: 100%; background: var(--surface2); border: 1px solid var(--line2); border-radius: var(--r-sm); padding: 9px 11px; }
+input:hover, select:hover, textarea:hover { border-color: #4a5262; }
+textarea { min-height: 72px; resize: vertical; }
+.err { color: var(--bad); font-size: 12.5px; margin: 4px 0 0; }
+.invalid { border-color: var(--bad) !important; }
+details > summary { cursor: pointer; color: var(--muted); list-style: none; display: inline-flex; gap: 6px; align-items: center; }
+details > summary::before { content: "▸"; transition: transform .15s; font-size: 11px; }
+details[open] > summary::before { transform: rotate(90deg); }
+details > summary::-webkit-details-marker { display: none; }
+
+/* ---------- etapas */
+.stepper { display: flex; gap: var(--s2); margin-bottom: var(--s5); flex-wrap: wrap; }
+.stepper button { display: flex; align-items: center; gap: 8px; background: none; border: 0; padding: 6px 10px 6px 6px; border-radius: 99px;
+  color: var(--muted); cursor: pointer; font-size: 13px; }
+.stepper button:disabled { cursor: default; opacity: .55; }
+.stepper .n { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; border: 1px solid var(--line2); font-size: 12px; font-weight: 700; }
+.stepper button[aria-current="step"] { color: var(--text); background: var(--surface2); }
+.stepper button[aria-current="step"] .n { background: var(--lime); color: var(--lime-ink); border-color: var(--lime); }
+.stepper button.done .n { border-color: var(--lime); color: var(--lime); }
+.step-actions { display: flex; gap: var(--s3); align-items: center; margin-top: var(--s5); padding-top: var(--s4); border-top: 1px solid var(--line); flex-wrap: wrap; }
+.saved { color: var(--faint); font-size: 12px; margin-left: auto; }
+
+/* ---------- sugestão */
+.suggest { background: linear-gradient(0deg, var(--lime-soft), var(--lime-soft)), var(--surface); border: 1px solid #3c4a1d; border-radius: var(--r);
+  padding: var(--s5); }
+.suggest .k { color: var(--lime); font-size: 12px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; margin: 0 0 6px; }
+.summary { font-size: 17px; line-height: 1.45; margin: 0 0 var(--s4); max-width: 60ch; }
+.summary.loading { opacity: .6; }
+.facets { display: flex; flex-wrap: wrap; gap: var(--s2); margin-bottom: var(--s3); }
+.facet { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 7px 12px; border-radius: var(--r-sm); background: var(--surface2);
+  border: 1px solid var(--line2); cursor: pointer; text-align: left; }
+.facet:hover { border-color: var(--lime); }
+.facet .fk { font-size: 11.5px; color: var(--muted); }
+.facet .fv { font-weight: 600; }
+.basis { color: var(--faint); font-size: 12px; margin: 0 0 var(--s4); }
+
+/* ---------- opções (cards de rádio) */
+fieldset { border: 0; padding: 0; margin: 0 0 var(--s5); min-width: 0; }
+legend { font-weight: 700; font-size: 15px; margin-bottom: var(--s3); padding: 0; }
+.opts { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: var(--s2); }
+.opts.compact { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.opt { position: relative; display: flex; flex-direction: column; gap: 3px; padding: 11px 13px; border-radius: var(--r-sm); border: 1px solid var(--line2);
+  background: var(--surface); cursor: pointer; transition: border-color .12s, background .12s; }
+.opt:hover { border-color: #4a5262; }
+.opt input { position: absolute; opacity: 0; pointer-events: none; }
+.opt .t { font-weight: 650; display: flex; gap: 8px; align-items: center; }
+.opt .t::before { content: ""; width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid var(--line2); flex: none; }
+.opt .d { color: var(--muted); font-size: 12.5px; }
+.opt .why { color: var(--lime); font-size: 12px; }
+.opt:has(input:checked) { border-color: var(--lime); background: var(--lime-soft); }
+.opt:has(input:checked) .t::before { border-color: var(--lime); background: radial-gradient(circle, var(--lime) 45%, transparent 50%); }
+.opt:has(input:focus-visible) { outline: 2px solid var(--lime); outline-offset: 2px; }
+.opt:has(input:disabled) { opacity: .5; cursor: not-allowed; }
+
+/* ---------- chips */
+.chips { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: var(--s2); }
+.chip { padding: 5px 11px; border-radius: 99px; border: 1px solid var(--line2); background: var(--surface2); cursor: pointer; font-size: 13px; }
+.chip:hover { border-color: #4a5262; }
+.chip[aria-pressed="true"] { border-color: var(--lime); color: var(--lime); background: var(--lime-soft); }
+.chip[aria-pressed="true"]::before { content: "✓ "; }
+.notice { font-size: 12.5px; border-radius: var(--r-sm); padding: 9px 12px; margin: var(--s3) 0; border: 1px solid; }
+.notice.warn { color: #fde68a; background: #2a2408; border-color: #4a3f10; }
+.notice.bad { color: #fecaca; background: #2a0d10; border-color: #5b1d22; }
+.notice.info { color: #cfe8f7; background: #0f2230; border-color: #1d3d52; }
+pre.code { white-space: pre-wrap; background: #0c0e12; border: 1px solid var(--line); border-radius: var(--r-sm); padding: var(--s3);
+  font: 12.5px/1.5 ui-monospace, Consolas, monospace; color: #cdd3dc; max-height: 280px; overflow: auto; margin: 6px 0 0; }
+
+/* ---------- prévia */
+.preview h2 { font-size: 15px; }
+.tag { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; color: var(--muted); margin: var(--s4) 0 6px; }
+.tag.lime { color: var(--lime); }
+.pv-ref { display: grid; grid-template-columns: 72px 1fr; gap: var(--s3); align-items: center; }
+.pv-ref .img { width: 72px; height: 96px; border-radius: var(--r-sm); background: var(--surface2); object-fit: cover; display: grid; place-items: center;
+  color: var(--faint); font-size: 11px; text-align: center; border: 1px dashed var(--line2); }
+.pv-ref img.img { border: 1px solid var(--line); }
+dl.kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 0; font-size: 13px; }
+dl.kv dt { color: var(--muted); }
+dl.kv dd { margin: 0; font-weight: 600; transition: background .6s; border-radius: 4px; }
+dl.kv dd.flash { background: var(--lime-soft); }
+.facts { margin: 0; padding-left: 18px; font-size: 13px; }
+.empty-gen { border: 1px dashed var(--line2); border-radius: var(--r-sm); padding: var(--s3); color: var(--faint); font-size: 12.5px; }
+
+/* ---------- arquivos */
+.drop { border: 1.5px dashed var(--line2); border-radius: var(--r); padding: var(--s5); text-align: center; cursor: pointer; color: var(--muted); }
+.drop:hover, .drop.over, .drop:focus-visible { border-color: var(--lime); color: var(--text); }
+.files { display: grid; gap: var(--s2); margin-top: var(--s3); }
+.file { display: grid; grid-template-columns: 56px 1fr auto; gap: var(--s3); align-items: center; background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r-sm); padding: 6px; }
+.file img, .file .ph { width: 56px; height: 74px; object-fit: cover; border-radius: 6px; background: #0c0e12; display: grid; place-items: center; font-size: 11px; color: var(--faint); }
+.file select { padding: 5px 8px; font-size: 12.5px; }
+.file .nm { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------- produção */
+.prod-head { display: flex; gap: var(--s4); align-items: flex-start; flex-wrap: wrap; margin-bottom: var(--s4); }
+.progress { display: flex; gap: 0; margin: var(--s3) 0 var(--s5); flex-wrap: wrap; }
+.progress li { list-style: none; display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--faint); padding-right: var(--s4); }
+.progress li::before { content: ""; width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--line2); }
+.progress li.done { color: var(--muted); }
+.progress li.done::before { background: var(--lime); border-color: var(--lime); }
+.progress li.now { color: var(--text); font-weight: 650; }
+.progress li.now::before { border-color: var(--lime); box-shadow: 0 0 0 3px var(--lime-soft); }
+.yourturn { border: 1px solid #5c4a10; background: #1f1a06; border-radius: var(--r); padding: var(--s4) var(--s5); margin-bottom: var(--s5); }
+.yourturn h2 { color: var(--warn); }
+.yourturn ul { margin: 0; padding: 0; list-style: none; }
+.yourturn li { display: flex; gap: var(--s3); align-items: center; justify-content: space-between; padding: 6px 0; border-top: 1px solid #3a3210; }
+.yourturn li:first-child { border-top: 0; }
+.scene { border: 1px solid var(--line); border-radius: var(--r); padding: var(--s4) var(--s5); margin-bottom: var(--s4); background: var(--surface); }
+.scene.attn { border-color: var(--warn); }
+.scene-head { display: flex; gap: var(--s3); align-items: baseline; flex-wrap: wrap; }
+.status { font-size: 12px; padding: 1px 9px; border-radius: 99px; background: var(--raise); color: var(--muted); white-space: nowrap; }
+.status.needs { background: #3b2f0a; color: var(--warn); }
+.status.okp { background: #143220; color: var(--ok); }
+.status.badp { background: #3a1216; color: var(--bad); }
+.media { display: grid; grid-template-columns: repeat(2, minmax(0, 220px)); gap: var(--s3); margin: var(--s3) 0; }
+.media figure { margin: 0; }
+.media img, .media video, .media .ph { width: 100%; aspect-ratio: 9/16; object-fit: cover; border-radius: var(--r-sm); background: #0c0e12; display: grid;
+  place-items: center; color: var(--faint); font-size: 12px; }
+.media figcaption { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.issues { margin: 6px 0 0; padding-left: 18px; font-size: 12.5px; color: #fcd34d; }
+.issue-b { color: var(--bad); }
+.bar { height: 6px; background: var(--raise); border-radius: 99px; overflow: hidden; margin: 6px 0; }
+.bar > div { height: 100%; background: var(--lime); }
+.refs { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.refs img { width: 48px; height: 64px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); }
+
+/* ---------- escritório */
+.office-card { background: radial-gradient(ellipse at 50% 30%, #232733, #12141a 75%); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+.office-card svg { display: block; width: 100%; height: auto; }
+.office-full svg { max-height: calc(100vh - 220px); }
+.agents-list { list-style: none; margin: var(--s3) 0 0; padding: 0; font-size: 12.5px; }
+.agents-list li { display: grid; grid-template-columns: 10px 110px 1fr; gap: 8px; align-items: baseline; padding: 4px 0; border-top: 1px solid var(--line); }
+.agents-list .msg { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; background: #6b7280; }
+.st-working { background: var(--ok); } .st-waiting_remote { background: var(--info); } .st-needs_you { background: var(--warn); }
+.st-blocked { background: var(--bad); } .st-done { background: var(--lime); }
+.legend { display: flex; gap: var(--s3); flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: var(--s3); }
+.legend span { display: flex; align-items: center; gap: 5px; }
+.agent { cursor: pointer; }
+.agent:focus { outline: none; }
+.agent:focus-visible .tag rect { stroke: var(--lime); stroke-width: 2; }
+.agent.working .body { animation: bob .9s ease-in-out infinite; }
+.agent.waiting_remote .body { animation: bob 2.4s ease-in-out infinite; }
+@keyframes bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-2.5px); } }
+.agent.sel .tag rect { stroke: var(--lime); stroke-width: 1.5; }
+.pulse { animation: pulse 1.2s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.15); } }
+@media (prefers-reduced-motion: reduce) { .agent .body, .pulse { animation: none !important; } }
+
+/* ---------- gastos / tabelas */
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--s3); margin-bottom: var(--s4); }
+.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: var(--s3) var(--s4); }
+.kpi .v { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.kpi .l { font-size: 12px; color: var(--muted); }
+table.t { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.t th, table.t td { text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--line); }
+table.t th { color: var(--muted); font-weight: 600; }
+table.t .n { text-align: right; font-variant-numeric: tabular-nums; }
+.chart { position: relative; }
+.tip { position: absolute; pointer-events: none; background: #0c0e12; border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; font-size: 12px; display: none; white-space: nowrap; }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s4); }
+
+/* ---------- feed */
+.feed { list-style: none; margin: 0; padding: 0; }
+.feed li { padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.feed .who { font-weight: 650; margin-right: 6px; }
+.feed time { color: var(--faint); font-size: 11.5px; display: block; }
+
+/* ---------- toast / modal */
+.toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: #0c0e12; border: 1px solid var(--line2);
+  padding: 9px 14px; border-radius: var(--r-sm); display: none; z-index: 30; max-width: 92vw; }
+.modal { position: fixed; inset: 0; background: #000b; display: grid; place-items: center; z-index: 40; padding: 16px; }
+.modal[hidden] { display: none; }
+.modal-box { background: var(--surface); border: 1px solid var(--line2); border-radius: 12px; padding: var(--s5); max-width: 480px; width: 100%; }
+
+/* ---------- responsivo */
+@media (max-width: 1080px) {
+  .split, .split.wide-aside { grid-template-columns: minmax(0, 1fr); }
+  .sticky { position: static; }
+  .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  main { padding: var(--s4); }
+  .top { padding: 8px var(--s4); gap: var(--s2); flex-wrap: wrap; }
+  .top .nav { order: 3; width: 100%; }
+  .brand span.name { display: none; }
+  h1 { font-size: 21px; }
+  .media { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid2 { grid-template-columns: 1fr; }
+  .file { grid-template-columns: 48px 1fr; }
+  .file .rm { grid-column: 2; justify-self: start; }
+  .agents-list li { grid-template-columns: 10px 90px 1fr; }
+  .step-actions .btn.lg { width: 100%; justify-content: center; }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand"><div class="logo" aria-hidden="true">P</div><span class="name">Pivoo</span></div>
+  <nav class="nav" id="nav" aria-label="Áreas do estúdio"></nav>
+  <div class="spacer"></div>
+  <span id="spendPill" class="pill" title="Gasto real do mês (estimado até conferir a fatura do Google)"></span>
+  <label class="switch" title="DEMO ligado: nada é cobrado, tudo é simulado">
+    <input type="checkbox" id="demoToggle" aria-describedby="demoLabel"><span class="track" aria-hidden="true"></span><span id="demoLabel">DEMO</span>
+  </label>
+</header>
+<main id="main" tabindex="-1"></main>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="modal" id="modal" hidden><div class="modal-box" id="modalBox" role="dialog" aria-modal="true" aria-labelledby="modalTitle"></div></div>
+
+<script>
+const TOKEN = "__STUDIO_TOKEN__";
+const STATUS_LABEL = { idle: "ocioso", working: "trabalhando", waiting_remote: "aguardando provedor", needs_you: "precisa de você",
+  blocked: "bloqueado", done: "concluído" };
+const STATUS_COLOR = { idle: "#6b7280", working: "#4ade80", waiting_remote: "#7dd3fc", needs_you: "#facc15", blocked: "#f87171", done: "#BEF264" };
+
+// ------------------------------------------------------------------ utilidades
+const $ = q => document.querySelector(q);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const usd = v => "US$ " + (v ?? 0).toFixed(2);
+const LS = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch { return false; } },
+  del(k) { try { localStorage.removeItem(k); } catch {} },
+};
+function toast(msg, ms = 3500) { const t = $("#toast"); t.textContent = msg; t.style.display = "block"; clearTimeout(t._h); t._h = setTimeout(() => t.style.display = "none", ms); }
+function ago(ts) { if (!ts) return ""; const s = (Date.now() - new Date(ts).getTime()) / 1000; if (s < 60) return `${Math.max(0, Math.round(s))}s`; if (s < 3600) return `${Math.round(s / 60)}min`; return `${Math.round(s / 3600)}h`; }
+async function post(path, body = {}) {
+  const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json", "X-Studio-Token": TOKEN }, body: JSON.stringify(body) });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+  return data;
+}
+function debounce(fn, ms) { let h; return (...a) => { clearTimeout(h); h = setTimeout(() => fn(...a), ms); }; }
+
+// ------------------------------------------------------------------ estado global
+let S = null, selectedPid = null, lastEventId = 0, firstLoad = true, selAgent = "orchestrator";
+let view = LS.get("bc.view", null);
+let officeOpen = LS.get("bc.officeOpen", window.innerWidth > 1080);
+const drafts = {};                 // notas digitadas nas cenas (preservadas entre atualizações)
+const openDetails = new Set();     // <details> abertos (preservados entre atualizações)
+let allEvents = [];
+const agentById = id => (S?.agents || []).find(a => a.id === id) || { name: id, color: "#888" };
+
+// ================================================================== navegação
+const VIEWS = [["new", "Nova produção"], ["prod", "Produção"], ["spend", "Gastos"], ["agents", "Agentes"], ["office", "Escritório"]];
+function pendingCount() {
+  const p = S?.production; if (!p) return 0;
+  let n = p.scenes.filter(s => ["awaiting_image_approval", "awaiting_video_approval", "blocked"].includes(s.status)).length;
+  if (["awaiting_references", "paused", "awaiting_final_review"].includes(p.status)) n++;
+  return n;
+}
+function renderNav() {
+  const pend = pendingCount();
+  $("#nav").innerHTML = VIEWS.map(([id, label]) => `<button data-view="${id}" ${view === id ? 'aria-current="page"' : ""}>${label}${id === "prod" && pend ? `<span class="badge-dot" aria-label="${pend} pendências">${pend}</span>` : ""}</button>`).join("");
+  $("#nav").querySelectorAll("button").forEach(b => b.addEventListener("click", () => go(b.dataset.view)));
+}
+async function go(v) {
+  view = v; LS.set("bc.view", v);
+  if (v === "new") await ensureOptions();
+  if (v === "spend") await loadSpend();
+  renderNav(); renderMain(true);
+  $("#main").focus({ preventScroll: true }); window.scrollTo(0, 0);
+}
+function renderHeader() {
+  const demo = S.settings.mode !== "real";
+  $("#demoToggle").checked = demo;
+  $("#demoLabel").textContent = demo ? "DEMO ligado" : "DEMO desligado · REAL";
+  const cap = S.settings.monthly_cap_usd, spent = S.settings.month_spend_usd;
+  const pill = $("#spendPill");
+  pill.textContent = `Mês ${usd(spent)}` + (cap ? ` / ${usd(cap)}` : " · sem teto");
+  pill.className = "pill" + (cap && spent >= cap * 0.8 ? " over" : "");
+}
+
+// ================================================================== render principal
+function busyEditing(root) {
+  const a = document.activeElement;
+  if (root.contains(a) && ["TEXTAREA", "INPUT", "SELECT"].includes(a.tagName) && a.type !== "radio" && a.type !== "checkbox") return true;
+  return [...root.querySelectorAll("video")].some(v => !v.paused);
+}
+function renderMain(force = false) {
+  const main = $("#main");
+  if (!force && view === "new") { renderPreview(); return; }   // o assistente não é redesenhado pela atualização automática
+  if (!force && busyEditing(main)) { refreshOfficeOnly(); return; }
+  const scroll = window.scrollY;
+  const html = view === "new" ? newView() : view === "prod" ? prodView() : view === "spend" ? spendView()
+    : view === "agents" ? agentsView() : officeView();
+  main.innerHTML = html;
+  main.querySelectorAll("details[data-k]").forEach(d => { if (openDetails.has(d.dataset.k)) d.open = true;
+    d.addEventListener("toggle", () => d.open ? openDetails.add(d.dataset.k) : openDetails.delete(d.dataset.k)); });
+  bindMain();
+  if (!force) window.scrollTo(0, scroll);
+  refreshOfficeOnly();
+}
+function refreshOfficeOnly() { document.querySelectorAll("svg.office").forEach(renderOffice); }
+
+// ================================================================== escritório (SVG)
+const T = 34, C = Math.cos(Math.PI / 6), OW = 16, OD = 11, WALL = 2.3, PAD = 30;
+const OX = OD * T * C + PAD, OY = WALL * T + PAD;
+function iso(x, y, z = 0) { return [OX + (x - y) * T * C, OY + (x + y) * T * 0.5 - z * T]; }
+function pts(arr) { return arr.map(p => iso(...p).map(v => v.toFixed(1)).join(",")).join(" "); }
+function poly(arr, fill, extra = "") { return `<polygon points="${pts(arr)}" fill="${fill}" ${extra}/>`; }
+function box(x, y, w, d, h, top, left, right, z = 0) {
+  return poly([[x, y + d, z], [x + w, y + d, z], [x + w, y + d, z + h], [x, y + d, z + h]], left) +
+    poly([[x + w, y, z], [x + w, y + d, z], [x + w, y + d, z + h], [x + w, y, z + h]], right) +
+    poly([[x, y, z + h], [x + w, y, z + h], [x + w, y + d, z + h], [x, y + d, z + h]], top);
+}
+const STATIONS = {
+  prep: { x: 1.8, y: 1.4 }, creative: { x: 5.3, y: 1.4 }, images: { x: 8.8, y: 1.4 }, review: { x: 12.6, y: 2.6 },
+  videos: { x: 12.6, y: 6.6 }, editor: { x: 9.4, y: 8.4 }, orchestrator: { x: 1.8, y: 5.4, big: true }, operator: { x: 4.6, y: 7.4, table: true },
+};
+function seat(id) { const s = STATIONS[id]; return s.table ? [s.x + 3.0, s.y + 1.4] : [s.x + 0.8, s.y + 1.45]; }
+function plant(x, y) {
+  const [px, py] = iso(x, y, 0);
+  return box(x - 0.2, y - 0.2, 0.4, 0.4, 0.35, "#8b6b4a", "#6f533a", "#7b5c40") +
+    `<circle cx="${px}" cy="${py - 26}" r="11" fill="#4d9b5a"/><circle cx="${px - 7}" cy="${py - 20}" r="7" fill="#3f8a4c"/><circle cx="${px + 7}" cy="${py - 21}" r="7" fill="#5aab66"/>`;
+}
+function staticLayer() {
+  let g = poly([[0, 0], [OW, 0], [OW, OD], [0, OD]], "var(--floor)");
+  for (let i = 1; i < OW; i++) g += `<line x1="${iso(i, 0)[0]}" y1="${iso(i, 0)[1]}" x2="${iso(i, OD)[0]}" y2="${iso(i, OD)[1]}" stroke="#d9d2c3" stroke-width=".6"/>`;
+  for (let j = 1; j < OD; j++) g += `<line x1="${iso(0, j)[0]}" y1="${iso(0, j)[1]}" x2="${iso(OW, j)[0]}" y2="${iso(OW, j)[1]}" stroke="#d9d2c3" stroke-width=".6"/>`;
+  g += poly([[0, 0, 0], [OW, 0, 0], [OW, 0, WALL], [0, 0, WALL]], "var(--wallR)");
+  g += poly([[0, 0, 0], [0, OD, 0], [0, OD, WALL], [0, 0, WALL]], "var(--wallL)");
+  g += poly([[0, -0.25, WALL], [OW, -0.25, WALL], [OW, 0, WALL], [0, 0, WALL]], "var(--wallTop)");
+  g += poly([[-0.25, 0, WALL], [0, 0, WALL], [0, OD, WALL], [-0.25, OD, WALL]], "var(--wallTop)");
+  for (const x of [3, 7, 11]) g += poly([[x, 0, 0.9], [x + 2.2, 0, 0.9], [x + 2.2, 0, 1.9], [x, 0, 1.9]], "#9cc7e6", 'opacity=".55"');
+  g += box(0.05, 8.6, 0.5, 1.8, 1.7, "#7a5a3c", "#5e442d", "#6c4f35");
+  g += plant(14.9, 0.6) + plant(0.7, 0.7) + plant(15, 10);
+  const o = STATIONS.operator;
+  g += poly([[o.x - 0.4, o.y - 0.3], [o.x + 3.2, o.y - 0.3], [o.x + 3.2, o.y + 3.0], [o.x - 0.4, o.y + 3.0]], "#d6cdb8");
+  return g;
+}
+function station(id) {
+  const s = STATIONS[id];
+  if (s.table) {
+    const [cx, cy] = iso(s.x + 1.4, s.y + 1.2, 0.75);
+    return `<ellipse cx="${cx}" cy="${cy + 10}" rx="${T * 1.5}" ry="${T * 0.75}" fill="#00000018"/><ellipse cx="${cx}" cy="${cy + 6}" rx="${T * 1.45}" ry="${T * 0.72}" fill="#8a6a49"/>` +
+      `<ellipse cx="${cx}" cy="${cy}" rx="${T * 1.45}" ry="${T * 0.72}" fill="#c89f74"/><text x="${cx}" y="${cy + 4}" font-size="10" fill="#5b4330" text-anchor="middle" font-weight="600">mesa de aprovação</text>`;
+  }
+  const w = s.big ? 2.2 : 1.6, d = 0.85;
+  let g = box(s.x, s.y, w, d, 0.72, "#f3efe7", "#b9b1a2", "#cfc7b8");
+  g += box(s.x + w / 2 - 0.35, s.y + 0.15, 0.7, 0.08, 0.5, "#2b2f3a", "#1c1f27", "#23262f", 0.72);
+  if (s.big) g += box(s.x + 0.2, s.y + 0.15, 0.45, 0.08, 0.4, "#2b2f3a", "#1c1f27", "#23262f", 0.72);
+  return g + box(s.x + w / 2 - 0.25, s.y + d + 0.35, 0.5, 0.45, 0.42, "#3b3f4c", "#2a2d37", "#32353f");
+}
+function character(id, a, st, bubbles) {
+  const [sx, sy] = seat(id), [px, py] = iso(sx, sy, 0);
+  const status = st?.status || "idle";
+  let g = `<g class="agent ${status}${selAgent === id ? " sel" : ""}" data-agent="${id}" tabindex="0" role="button" aria-label="${esc(a.name)}: ${STATUS_LABEL[status]}${st?.message ? ". " + esc(st.message) : ""}">`;
+  g += `<ellipse cx="${px}" cy="${py}" rx="11" ry="4.5" fill="#00000030"/><g class="body">`;
+  g += `<rect x="${px - 5}" y="${py - 12}" width="4" height="12" rx="1.5" fill="#2b2f3a"/><rect x="${px + 1}" y="${py - 12}" width="4" height="12" rx="1.5" fill="#2b2f3a"/>`;
+  g += `<rect x="${px - 8}" y="${py - 31}" width="16" height="21" rx="6" fill="${a.color}"/><circle cx="${px}" cy="${py - 38}" r="7.5" fill="${id === "operator" ? "#e8b993" : "#f1c7a5"}"/>`;
+  g += `<path d="M${px - 7.5} ${py - 39} a7.5 7.5 0 0 1 15 0 q-7 -3 -15 0z" fill="#3b2a20"/></g>`;
+  const name = a.name.length > 16 ? a.name.slice(0, 15) + "…" : a.name, tw = name.length * 6.1 + 22;
+  g += `<g class="tag"><rect x="${px - tw / 2}" y="${py + 6}" width="${tw}" height="17" rx="5" fill="#1d2130" stroke="#00000055"/>`;
+  g += `<circle cx="${px - tw / 2 + 9}" cy="${py + 14.5}" r="3.5" fill="${STATUS_COLOR[status]}" ${status === "working" ? 'class="pulse"' : ""}/>`;
+  g += `<text x="${px - tw / 2 + 16}" y="${py + 18.5}" font-size="10.5" fill="#eef0f4">${esc(name)}</text></g>`;
+  if (status === "needs_you") g += `<g class="pulse"><circle cx="${px + 11}" cy="${py - 46}" r="7" fill="#facc15"/><text x="${px + 11}" y="${py - 42}" font-size="10" text-anchor="middle" font-weight="800" fill="#111">!</text></g>`;
+  if (status === "blocked") g += `<circle cx="${px + 11}" cy="${py - 46}" r="7" fill="#f87171"/><text x="${px + 11}" y="${py - 42.5}" font-size="10" text-anchor="middle" font-weight="800" fill="#fff">×</text>`;
+  if (status === "waiting_remote") g += `<text x="${px + 12}" y="${py - 42}" font-size="12">⏳</text>`;
+  const recent = st?.since && (Date.now() - new Date(st.since).getTime()) < 20000;
+  if (bubbles && st?.message && (status !== "idle" || recent)) {
+    const msg = st.message.length > 40 ? st.message.slice(0, 39) + "…" : st.message;
+    const bw = Math.min(msg.length * 5.6 + 16, 240), bx = Math.max(6, px - bw / 2), by = py - 74;
+    g += `<g opacity=".96"><rect x="${bx}" y="${by}" width="${bw}" height="20" rx="6" fill="#fff" stroke="#00000022"/><path d="M${px - 4} ${by + 20} l4 6 l4 -6z" fill="#fff"/>`;
+    g += `<text x="${bx + 8}" y="${by + 13.5}" font-size="10" fill="#1f2430">${esc(msg)}</text></g>`;
+  }
+  return g + `</g>`;
+}
+function renderOffice(svg) {
+  if (!S) return;
+  const vw = (OW + OD) * T * C + PAD * 2, vh = (OW + OD) * T * 0.5 + WALL * T + PAD * 2;
+  svg.setAttribute("viewBox", `0 -40 ${vw.toFixed(0)} ${(vh + 40).toFixed(0)}`);
+  const bubbles = svg.dataset.bubbles !== "off";
+  const items = Object.keys(STATIONS).map(id => { const [sx, sy] = seat(id); return { id, depth: STATIONS[id].x + STATIONS[id].y, cdepth: sx + sy }; });
+  const layer = items.map(i => ({ d: i.depth, svg: station(i.id) }))
+    .concat(items.map(i => ({ d: i.cdepth, svg: character(i.id, agentById(i.id), S.agent_states?.[i.id], bubbles) })))
+    .sort((a, b) => a.d - b.d).map(i => i.svg).join("");
+  svg.innerHTML = `<g>${staticLayer()}</g><g>${layer}</g><g class="packets"></g>`;
+  svg.querySelectorAll(".agent").forEach(el => {
+    const open = () => { selAgent = el.dataset.agent; go("agents"); };
+    el.addEventListener("click", open);
+    el.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } });
+  });
+}
+const packetQueue = []; let animating = false;
+function queueHandoffs(events) {
+  let prev = null;
+  for (const e of events) { if (prev && prev !== e.agent) packetQueue.push([prev, e.agent]); prev = e.agent; }
+  while (packetQueue.length > 12) packetQueue.shift();
+  if (!animating) nextPacket();
+}
+function nextPacket() {
+  const job = packetQueue.shift();
+  const g = document.querySelector("svg.office .packets");
+  if (!job || !g || matchMedia("(prefers-reduced-motion: reduce)").matches) { animating = false; packetQueue.length = 0; return; }
+  animating = true;
+  const [a, b] = job.map(id => { const [x, y] = seat(id); return iso(x, y, 1.4); });
+  const el = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  el.innerHTML = `<rect x="-6" y="-8" width="12" height="15" rx="1.5" fill="#fff" stroke="#9aa0ae"/><line x1="-3" y1="-3" x2="3" y2="-3" stroke="#9aa0ae"/><line x1="-3" y1="0" x2="3" y2="0" stroke="#9aa0ae"/>`;
+  g.appendChild(el);
+  const t0 = performance.now(), dur = 750;
+  (function step(t) {
+    const k = Math.min((t - t0) / dur, 1), e = k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+    el.setAttribute("transform", `translate(${a[0] + (b[0] - a[0]) * e},${a[1] + (b[1] - a[1]) * e - Math.sin(Math.PI * k) * 40})`);
+    if (k < 1) requestAnimationFrame(step); else { el.remove(); setTimeout(nextPacket, 120); }
+  })(t0);
+}
+function agentsStatusList() {
+  return `<ul class="agents-list">${(S?.agents || []).map(a => { const st = S.agent_states?.[a.id] || {};
+    return `<li><i class="dot st-${st.status || "idle"}" aria-hidden="true"></i><span>${esc(a.name)}</span><span class="msg" title="${esc(st.message || "")}">${esc(STATUS_LABEL[st.status || "idle"])}${st.message ? " · " + esc(st.message) : ""}</span></li>`; }).join("")}</ul>`;
+}
+const LEGEND = `<div class="legend" aria-hidden="true"><span><i class="dot st-working"></i>trabalhando</span><span><i class="dot st-waiting_remote"></i>aguardando provedor</span><span><i class="dot st-needs_you"></i>precisa de você</span><span><i class="dot st-blocked"></i>bloqueado</span><span><i class="dot st-done"></i>concluído</span><span><i class="dot"></i>ocioso</span></div>`;
+
+// ================================================================== arquivos
+const ROLES = [["front", "Frente"], ["side", "Lateral"], ["back", "Traseira"], ["top", "Topo"], ["lid", "Tampa"], ["detail", "Detalhe"],
+  ["interior", "Interior"], ["scale", "Escala/medidas"], ["other", "Outra"]];
+const SOURCES = [["official_listing", "Foto oficial do anúncio"], ["own_photo", "Foto própria do produto"], ["other", "Outra origem"]];
+const ROLE_PT = Object.fromEntries(ROLES);
+const DEFAULT_ROLES = ["front", "side", "lid", "detail", "interior"];
+const fileState = { new: [], add: [] };
+const MAX_UPLOAD = 140 * 1024 * 1024;
+function readFiles(key, list) {
+  const state = fileState[key];
+  for (const file of list) {
+    if (!/\.(jpe?g|png|webp|mp4)$/i.test(file.name)) { toast(`Arquivo ignorado (use JPG, PNG, WEBP ou MP4): ${file.name}`); continue; }
+    const item = { name: file.name, size: file.size, isVideo: /\.mp4$/i.test(file.name),
+      role: DEFAULT_ROLES[state.filter(f => !f.isVideo).length] || "other", source: "official_listing", data: null };
+    state.push(item);
+    const r = new FileReader();
+    r.onload = () => { item.data = r.result; renderMain(true); };
+    r.onerror = () => { toast(`Não foi possível ler ${file.name}`); state.splice(state.indexOf(item), 1); renderMain(true); };
+    r.readAsDataURL(file);
+  }
+  renderMain(true);
+}
+function filesHtml(key) {
+  const opts = (arr, v) => arr.map(([k, l]) => `<option value="${k}" ${k === v ? "selected" : ""}>${l}</option>`).join("");
+  return `<div class="drop" data-drop="${key}" tabindex="0" role="button" aria-label="Enviar fotos: clique ou arraste">Clique ou arraste as fotos aqui<br><span class="small muted">JPG, PNG ou WEBP · vídeo MP4 só como contexto</span>
+      <input type="file" accept="image/jpeg,image/png,image/webp,video/mp4" multiple hidden></div>
+    <div class="files">${fileState[key].map((f, i) => `<div class="file">
+      ${f.isVideo ? '<div class="ph">vídeo</div>' : f.data ? `<img src="${f.data}" alt="Sua foto: ${esc(f.name)}">` : '<div class="ph">lendo…</div>'}
+      <div><div class="nm" title="${esc(f.name)}">${esc(f.name)} <span class="muted small">${(f.size / 1048576).toFixed(1)} MB</span></div>
+        ${f.isVideo ? '<div class="small muted">Só para entender o produto; nunca vai para o gerador.</div>' : `<div class="row" style="margin-top:4px">
+        <select data-frole="${key}:${i}" aria-label="O que a foto ${i + 1} mostra">${opts(ROLES, f.role)}</select>
+        <select data-fsrc="${key}:${i}" aria-label="Origem da foto ${i + 1}">${opts(SOURCES, f.source)}</select></div>`}</div>
+      <button class="btn ghost rm" data-frm="${key}:${i}" aria-label="Remover ${esc(f.name)}">Remover</button></div>`).join("")}</div>`;
+}
+function bindFiles(root) {
+  root.querySelectorAll("[data-drop]").forEach(d => {
+    const key = d.dataset.drop, input = d.querySelector("input");
+    d.addEventListener("click", e => { if (e.target !== input) input.click(); });
+    d.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); input.click(); } });
+    input.addEventListener("change", () => readFiles(key, input.files));
+    d.addEventListener("dragover", e => { e.preventDefault(); d.classList.add("over"); });
+    d.addEventListener("dragleave", () => d.classList.remove("over"));
+    d.addEventListener("drop", e => { e.preventDefault(); d.classList.remove("over"); readFiles(key, e.dataTransfer.files); });
+  });
+  const at = s => { const [k, i] = s.split(":"); return fileState[k][+i]; };
+  root.querySelectorAll("[data-frole]").forEach(el => el.addEventListener("change", () => { at(el.dataset.frole).role = el.value; renderPreview(); }));
+  root.querySelectorAll("[data-fsrc]").forEach(el => el.addEventListener("change", () => at(el.dataset.fsrc).source = el.value));
+  root.querySelectorAll("[data-frm]").forEach(el => el.addEventListener("click", () => { const [k, i] = el.dataset.frm.split(":"); fileState[k].splice(+i, 1); renderMain(true); }));
+}
+function filePayload(key) {
+  const st = fileState[key];
+  if (st.some(f => !f.data)) throw new Error("aguarde o carregamento das fotos");
+  if (st.reduce((a, f) => a + f.size, 0) > MAX_UPLOAD) throw new Error("arquivos somam mais de 140 MB");
+  return st.map(f => ({ name: f.name, data: f.data, role: f.role, source: f.source }));
+}
+
+// ================================================================== NOVA PRODUÇÃO (assistente)
+const WKEY = "bc.wizard.v1";
+const DEFAULT_CREATIVE = { presentation: "hands_only", proposal: "auto", environment: "cozinha", environment_custom: "", tone: "natural",
+  details: ["luz_natural", "movimentos_suaves"], details_text: "", manual_direction: null };
+const W = Object.assign({ step: 1, form: { budget: 5 }, creative: { ...DEFAULT_CREATIVE }, touched: false, customize: false, ideaIdx: 0, savedAt: null },
+  LS.get(WKEY, {}));
+W.history = []; W.preview = null; W.previewBusy = false; W.error = null; W.creating = false;
+let OPTS = null, optsKey = "";
+const saveDraft = debounce(() => {
+  const { step, form, creative, touched, customize, ideaIdx } = W;
+  if (LS.set(WKEY, { step, form, creative, touched, customize, ideaIdx, savedAt: new Date().toISOString() })) {
+    W.savedAt = new Date().toISOString(); const el = $("#savedNote"); if (el) el.textContent = savedText();
+  }
+}, 400);
+function savedText() {
+  if (!W.savedAt) return "";
+  return `Rascunho salvo neste navegador às ${new Date(W.savedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}` +
+    (fileState.new.length ? " · as fotos não ficam salvas se a página for recarregada" : "");
+}
+async function ensureOptions() {
+  const key = `${W.form.name || ""}|${W.form.category || ""}`;
+  if (OPTS && key === optsKey) return;
+  try {
+    const q = new URLSearchParams({ name: W.form.name || "", category: W.form.category || "" });
+    OPTS = await (await fetch("/api/creative/options?" + q)).json(); optsKey = key;
+    if (!W.touched && OPTS.ideas?.length) {
+      W.creative = { ...DEFAULT_CREATIVE, ...OPTS.ideas[0].choices, proposal: OPTS.ideas[0].choices.proposal, details_text: W.creative.details_text };
+      W.ideaIdx = 0;
+    }
+    schedulePreview();
+  } catch { OPTS = OPTS || null; }
+}
+const schedulePreview = debounce(loadPreview, 250);
+async function loadPreview() {
+  W.previewBusy = true; markSummaryBusy();
+  try {
+    const f = W.form;
+    W.preview = await post("/api/creative/preview", { name: f.name, variant: f.variant, category: f.category,
+      visual_attributes: f.visual_attributes, verified: f.verified, creative: W.creative });
+    W.error = null;
+  } catch (e) { W.previewError = e.message; }
+  W.previewBusy = false;
+  if (view === "new") { updateIdeaLive(); renderPreview(); }
+}
+function markSummaryBusy() { const el = $("#ideaSummary"); if (el) el.classList.add("loading"); }
+function changeCreative(mut, label) {
+  W.history.push(JSON.parse(JSON.stringify(W.creative))); if (W.history.length > 30) W.history.shift();
+  mut(W.creative); W.touched = true;
+  const allowed = allowedDetails(); W.creative.details = W.creative.details.filter(d => allowed.includes(d));
+  saveDraft(); schedulePreview();
+  W.lastChange = label;
+}
+function undoCreative() {
+  const prev = W.history.pop(); if (!prev) return;
+  W.creative = prev; saveDraft(); schedulePreview(); renderMain(true); toast("Mudança desfeita.");
+}
+function allowedDetails() {
+  const det = OPTS?.details || {};
+  return Object.entries(det).filter(([, d]) => (!d.envs || d.envs.includes(W.creative.environment)) &&
+    (!d.presentations || d.presentations.includes(W.creative.presentation))).map(([k]) => k);
+}
+const lbl = (group, id) => OPTS?.[group]?.[id]?.label || id;
+function proposalLabel() {
+  const p = W.creative.proposal;
+  if (p === "auto") return `Você decide (${lbl("proposals", OPTS?.recommended_proposal)})`;
+  return lbl("proposals", p);
+}
+function envLabel() {
+  return W.creative.environment === "outro" ? (W.creative.environment_custom.trim() || "Outro ambiente") : lbl("environments", W.creative.environment);
+}
+
+function stepValid(n) {
+  const f = W.form, errs = {};
+  if (n >= 1) {
+    if (!String(f.name || "").trim()) errs.name = "Informe o nome do produto.";
+    if (!String(f.variant || "").trim()) errs.variant = "Informe a cor ou variante que aparece nas fotos.";
+    if (!/^https:\/\/([a-z0-9-]+\.)*(shopee\.com\.br|shp\.ee|shope\.ee)\//i.test(String(f.affiliate_link || "").trim()))
+      errs.affiliate_link = "Cole o link de afiliado da Shopee (começa com https://).";
+  }
+  if (n >= 2 && !fileState.new.some(f => !f.isVideo)) errs.photos = "Envie pelo menos uma foto do produto.";
+  if (n >= 3 && W.creative.environment === "outro" && !W.creative.environment_custom.trim()) errs.env = "Descreva o ambiente ou escolha uma opção.";
+  return errs;
+}
+function fieldHtml(id, label, { type = "text", ph = "", opt = false, hint = "", area = false, extra = "" } = {}, errs = {}) {
+  const v = esc(W.form[id] ?? ""), e = errs[id];
+  const attrs = `id="f-${id}" data-f="${id}" ${e ? 'aria-invalid="true" class="invalid"' : ""} aria-describedby="h-${id}" placeholder="${esc(ph)}" ${extra}`;
+  return `<label class="f" for="f-${id}">${label}${opt ? '<span class="opt-tag">Opcional</span>' : ""}</label>` +
+    (area ? `<textarea ${attrs}>${v}</textarea>` : `<input type="${type}" value="${v}" ${attrs}>`) +
+    `<p class="hint" id="h-${id}">${hint}</p>${e ? `<p class="err" role="alert">${esc(e)}</p>` : ""}`;
+}
+const STEPS = ["Produto", "Fotos", "Ideia do vídeo", "Revisão e orçamento"];
+function stepperHtml() {
+  return `<nav aria-label="Etapas"><div class="stepper">${STEPS.map((s, i) => {
+    const n = i + 1, reachable = n <= W.step || Object.keys(stepValid(n - 1)).length === 0;
+    return `<button data-step="${n}" ${W.step === n ? 'aria-current="step"' : ""} class="${n < W.step ? "done" : ""}" ${reachable ? "" : "disabled"}><span class="n">${n < W.step ? "✓" : n}</span>${s}</button>`;
+  }).join("")}</div></nav>`;
+}
+function newView() {
+  const errs = W.showErrors ? stepValid(W.step) : {};
+  let body = "";
+  if (W.step === 1) body = `
+    <p class="eyebrow">Etapa 1 de 4</p><h1>Qual produto vamos mostrar?</h1>
+    <p class="lead">Só o essencial. Essas informações aparecem na ficha e no link da publicação.</p>
+    ${fieldHtml("name", "Nome do produto", { ph: "Ex.: Copo com alça e canudo", hint: "Evite números do anúncio (como 900ml): só entram na legenda se estiverem nas informações comprovadas." }, errs)}
+    ${fieldHtml("variant", "Cor ou variante", { ph: "Ex.: azul-claro", hint: "A mesma que aparece nas fotos." }, errs)}
+    ${fieldHtml("affiliate_link", "Link de afiliado Shopee", { type: "url", ph: "https://s.shopee.com.br/…", hint: "Guardamos exatamente como você colar." }, errs)}
+    ${fieldHtml("category", "Categoria", { opt: true, ph: "Ex.: garrafas e copos", hint: "Ajuda a sugerir ambientes que combinam com o produto." }, errs)}
+    <details data-k="facts" style="margin-top:var(--s5)"><summary>Informações do anúncio <span class="opt-tag">Opcional</span></summary>
+      ${fieldHtml("verified", "Informações comprovadas", { area: true, opt: true, ph: "cor: azul-claro", hint: "Uma por linha. Só estas podem aparecer na legenda." }, errs)}
+      ${fieldHtml("seller_claims", "Alegações do vendedor, não verificadas", { area: true, opt: true, ph: "capacidade: 900 ml", hint: "Ficam registradas, mas não são afirmadas no vídeo nem na legenda." }, errs)}
+      ${fieldHtml("seller_text", "Texto do anúncio", { area: true, opt: true, ph: "Cole a descrição do anúncio", hint: "Guardado só como dado de consulta." }, errs)}
+    </details>`;
+  if (W.step === 2) body = `
+    <p class="eyebrow">Etapa 2 de 4</p><h1>Envie as fotos oficiais</h1>
+    <p class="lead">Elas definem cor, forma e detalhes. Frente, tampa e detalhe costumam bastar. Use só fotos desta variante.</p>
+    ${filesHtml("new")}${errs.photos ? `<p class="err" role="alert">${esc(errs.photos)}</p>` : ""}
+    ${fieldHtml("visual_attributes", "O que aparece nas fotos", { area: true, opt: true, ph: "canudo: atravessa a tampa\ninscrição: texto vertical no corpo", hint: "Um item por linha. Ajuda a não perder detalhes como canudo, tampa ou inscrições." }, errs)}`;
+  if (W.step === 3) body = ideaStep(errs);
+  if (W.step === 4) body = reviewStep();
+  const nextLabel = W.step === 1 ? "Continuar para as fotos" : W.step === 2 ? "Continuar para a ideia do vídeo" : "";
+  const actions = W.step < 3 ? `<div class="step-actions">
+      ${W.step > 1 ? '<button class="btn" data-back>Voltar</button>' : ""}
+      <button class="btn primary lg" data-next>${nextLabel}</button><span class="saved" id="savedNote">${esc(savedText())}</span></div>` : "";
+  return `<div class="split">
+    <div>${stepperHtml()}<section aria-live="polite">${body}</section>${actions}</div>
+    <aside class="sticky" aria-labelledby="pvTitle"><div class="panel preview" id="previewBox">${previewHtml()}</div></aside></div>`;
+}
+
+function ideaStep(errs) {
+  const c = W.creative, o = OPTS;
+  if (!o) return `<p class="eyebrow">Etapa 3 de 4</p><h1>Monte a ideia do seu vídeo</h1><p class="notice warn">Não foi possível carregar as opções. <button class="link" data-reloadopts>Tentar de novo</button></p>`;
+  const sum = W.preview?.summary || "Preparando a sugestão…";
+  const facet = (k, label, value) => `<button class="facet" data-facet="${k}" aria-label="${label}: ${esc(value)}. Alterar"><span class="fk">${label}</span><span class="fv">${esc(value)}</span></button>`;
+  const allowed = allowedDetails();
+  const chips = allowed.map(id => `<button class="chip" data-chip="${id}" aria-pressed="${c.details.includes(id)}">${esc(lbl("details", id))}</button>`).join("");
+  const warns = (W.preview?.warnings || []).map(w => `<p class="notice warn">${esc(w)}</p>`).join("");
+  return `
+    <p class="eyebrow">Etapa 3 de 4</p><h1>Monte a ideia do seu vídeo</h1>
+    <p class="lead">Preparamos uma direção com base no seu produto. Você pode usar assim ou ajustar.</p>
+    <section class="suggest" aria-labelledby="sugTitle">
+      <p class="k" id="sugTitle">Nossa sugestão para este produto</p>
+      <p class="summary${W.previewBusy ? " loading" : ""}" id="ideaSummary" aria-live="polite">${esc(sum)}</p>
+      <div class="facets">
+        ${facet("presentation", "Participação", lbl("presentations", c.presentation))}
+        ${facet("proposal", "Proposta", proposalLabel())}
+        ${facet("environment", "Ambiente", envLabel())}
+        ${facet("tone", "Tom", lbl("tones", c.tone))}
+      </div>
+      <p class="basis">${esc(o.basis)}</p>
+      <div class="row">
+        <button class="btn primary lg" data-useidea>Usar esta ideia e continuar</button>
+        <button class="btn" data-customize aria-expanded="${W.customize}" aria-controls="customPanel">${W.customize ? "Fechar personalização" : "Personalizar"}</button>
+        <button class="link" data-otheridea>Sugerir outra ideia</button>
+        ${W.history.length ? '<button class="link" data-undo>Desfazer última mudança</button>' : ""}
+      </div>
+    </section>
+    <div id="customPanel" ${W.customize ? "" : "hidden"}>${W.customize ? customizeHtml(errs) : ""}</div>
+    <section class="section" style="border-top:0">
+      <label class="f" for="detailsText">Tem algum detalhe que você faz questão?<span class="opt-tag">Opcional</span></label>
+      <textarea id="detailsText" data-fid="detailsText" maxlength="600" placeholder="Ex.: bancada clara, unhas bem cuidadas e enquadramento próximo do produto.">${esc(c.details_text)}</textarea>
+      <div class="chips" role="group" aria-label="Sugestões de detalhes">${chips}</div>
+      <p class="hint">Descreva a cena, não o produto: características como capacidade ou material só valem se estiverem nas informações comprovadas.</p>
+      ${warns}
+    </section>
+    <details data-k="adv" class="section"><summary>Ver instruções de geração</summary>${advancedHtml()}</details>
+    <div class="step-actions"><button class="btn" data-back>Voltar</button>
+      <button class="btn primary lg" data-next>Continuar para revisão e orçamento</button><span class="saved" id="savedNote">${esc(savedText())}</span></div>`;
+}
+function optCard(group, value, title, desc, why = "", disabled = false) {
+  const checked = W.creative[group] === value;
+  return `<label class="opt"><input type="radio" name="${group}" value="${value}" ${checked ? "checked" : ""} ${disabled ? "disabled" : ""} data-fid="${group}:${value}">
+    <span class="t">${esc(title)}</span><span class="d">${esc(desc)}</span>${why ? `<span class="why">${esc(why)}</span>` : ""}</label>`;
+}
+function customizeHtml(errs) {
+  const o = OPTS, c = W.creative;
+  const pres = Object.entries(o.presentations).map(([k, p]) => optCard("presentation", k, p.label,
+    k === "presenter" && !o.presenter_available ? "Precisa da foto da Bia em assets/bia." : p.desc,
+    k === "hands_only" ? `Sugerido: ${o.presentation_reason}` : "", k === "presenter" && !o.presenter_available)).join("");
+  const rec = o.recommended_proposal;
+  const props = ["practice", "details", "routine"].map(k => optCard("proposal", k, o.proposals[k].label, o.proposals[k].desc,
+    k === rec ? `Sugerido: ${o.proposal_reason}` : "")).join("") +
+    optCard("proposal", "auto", "Você decide por mim", `Usaremos “${o.proposals[rec].label}”.`);
+  const envIds = [...new Set([...o.suggested_environments, c.environment !== "outro" ? c.environment : null].filter(Boolean)), "outro"];
+  const envs = envIds.map(k => optCard("environment", k, o.environments[k].label, o.environments[k].desc)).join("");
+  const tones = Object.entries(o.tones).map(([k, t]) => optCard("tone", k, t.label, "", k === "natural" ? `Sugerido: ${o.tone_reason}` : "")).join("");
+  return `<div class="section" style="border-top:0">
+    <fieldset id="g-presentation"><legend>Como você quer apresentar?</legend><div class="opts">${pres}</div>
+      ${c.presentation === "presenter" ? '<p class="notice info">A Bia aparece com as características do perfil salvo (foto de referência e descrição). O Google pode recusar fotos de pessoas reconhecíveis; se acontecer, a cena fica bloqueada para você decidir.</p>' : ""}</fieldset>
+    <fieldset id="g-proposal"><legend>Qual é a proposta?</legend><div class="opts">${props}</div></fieldset>
+    <fieldset id="g-environment"><legend>Onde acontece?</legend><div class="opts">${envs}</div>
+      ${c.environment === "outro" ? `<label class="f" for="envCustom">Descreva o ambiente</label><input type="text" id="envCustom" data-fid="envCustom" maxlength="300" value="${esc(c.environment_custom)}" placeholder="Ex.: varanda com plantas e mesa de madeira" ${errs.env ? 'aria-invalid="true" class="invalid"' : ""}>${errs.env ? `<p class="err" role="alert">${esc(errs.env)}</p>` : ""}` : ""}
+      <p class="hint">Descrições de cenário, não fotos: nada aqui é imagem gerada.</p></fieldset>
+    <fieldset id="g-tone"><legend>Qual é o tom?</legend><div class="opts compact">${tones}</div></fieldset></div>`;
+}
+function advancedHtml() {
+  const pv = W.preview, manual = W.creative.manual_direction != null;
+  if (!pv) return `<p class="muted small">Carregando…</p>`;
+  return `<p class="hint">O sistema monta as instruções em inglês (o modelo de vídeo funciona melhor assim) a partir de: fotos de referência, dados do produto, perfil da Bia, ambiente, restrições da produção e suas escolhas. Nenhuma IA é chamada nesta tela.</p>
+    <label class="f" for="manualDir">Direção criativa (bloco acrescentado a todas as cenas)</label>
+    ${manual ? '<p class="notice warn">Você editou este texto. As escolhas acima não alteram mais este bloco. <button class="link" data-restore>Restaurar instruções automáticas</button></p>' : ""}
+    <textarea id="manualDir" data-fid="manualDir" style="min-height:130px;font-family:ui-monospace,Consolas,monospace;font-size:12.5px">${esc(manual ? W.creative.manual_direction : pv.auto_direction)}</textarea>
+    <p class="hint">Perfis usados: ${esc(Object.values(pv.profiles).join(" · "))}</p>
+    ${pv.scenes.map(s => `<details data-k="scn${s.index}" style="margin-top:8px"><summary>Cena ${s.index} — ${esc(s.title)}</summary>
+      <p class="small muted" style="margin:8px 0 0">Imagem</p><pre class="code">${esc(s.image_prompt)}</pre>
+      <p class="small muted" style="margin:8px 0 0">Animação</p><pre class="code">${esc(s.animation_prompt)}</pre></details>`).join("")}`;
+}
+function updateIdeaLive() {
+  const el = $("#ideaSummary");
+  if (el && W.preview) { el.textContent = W.preview.summary; el.classList.remove("loading"); }
+  const adv = document.querySelector('details[data-k="adv"]');
+  if (adv && adv.open && document.activeElement?.id !== "manualDir") {
+    const keep = [...adv.querySelectorAll("details[data-k]")].filter(d => d.open).map(d => d.dataset.k);
+    adv.innerHTML = `<summary>Ver instruções de geração</summary>${advancedHtml()}`;
+    adv.querySelectorAll("details[data-k]").forEach(d => { if (keep.includes(d.dataset.k)) d.open = true; });
+    bindAdvanced(adv);
+  }
+  const wbox = document.querySelectorAll("#main .section .notice.warn");
+  if (W.preview && wbox.length !== (W.preview.warnings || []).length && view === "new" && W.step === 3 && document.activeElement?.id !== "detailsText") renderMain(true);
+}
+function reviewStep() {
+  const f = W.form, real = S?.settings.mode === "real", photos = fileState.new.filter(x => !x.isVideo).length;
+  const budget = +f.budget || 0;
+  return `<p class="eyebrow">Etapa 4 de 4</p><h1>Revise e defina o orçamento</h1>
+    <p class="lead">Ao criar, os agentes preparam o roteiro de 3 cenas e geram a imagem da cena 1 para você aprovar. Nada é publicado.</p>
+    ${real ? `<p class="notice bad">DEMO desligado: esta produção é REAL e gera custo na sua conta Google, limitado pelo orçamento abaixo e pelo teto do mês.</p>`
+      : `<p class="notice warn">DEMO ligado: a produção será simulada, com imagens de exemplo e sem custo.</p>`}
+    <dl class="kv" style="margin:var(--s4) 0">
+      <dt>Produto</dt><dd>${esc(f.name || "—")} · ${esc(f.variant || "—")} <button class="link" data-step="1">Editar</button></dd>
+      <dt>Fotos</dt><dd>${photos} foto(s) <button class="link" data-step="2">Editar</button></dd>
+      <dt>Ideia</dt><dd>${esc(W.preview?.summary || "—")} <button class="link" data-step="3">Editar</button></dd>
+    </dl>
+    <label class="f" for="f-budget">Orçamento desta produção (US$)</label>
+    <input type="number" id="f-budget" data-f="budget" min="0" step="0.05" value="${esc(f.budget ?? 5)}" style="max-width:160px">
+    <p class="hint">Uma produção de 3 cenas sem refações custa cerca de US$ 3,20. Com US$ 0,10, só a imagem da cena 1 é gerada e a produção pausa — bom para um primeiro teste.</p>
+    ${W.error ? `<p class="notice bad" role="alert">Não foi possível criar: ${esc(W.error)}. Seus dados continuam aqui; corrija e tente de novo.</p>` : ""}
+    <div class="step-actions"><button class="btn" data-back>Voltar</button>
+      <button class="btn primary lg" data-create ${W.creating ? "disabled" : ""}>${W.creating ? "Enviando fotos…" : real ? `Criar produção e gerar a cena 1 (até ${usd(budget)})` : "Criar produção simulada"}</button>
+      <span class="saved" id="savedNote">${esc(savedText())}</span></div>`;
+}
+function previewHtml() {
+  const f = W.form, c = W.creative, ref = fileState.new.find(x => !x.isVideo && x.data);
+  const facts = String(f.verified || "").split("\n").map(s => s.trim()).filter(Boolean);
+  return `<h2 id="pvTitle">Como seu vídeo vai ficar</h2>
+    <span class="tag">Referência · sua foto</span>
+    <div class="pv-ref">${ref ? `<img class="img" src="${ref.data}" alt="Foto de referência enviada">` : '<div class="img">sem foto ainda</div>'}
+      <div><strong>${esc(f.name || "Produto sem nome")}</strong><div class="muted small">${esc(f.variant || "variante não informada")}</div>
+      <div class="muted small">Vertical 9:16 · 3 cenas · ~15 s · sem fala</div></div></div>
+    <span class="tag lime">Resumo da proposta</span>
+    <dl class="kv" id="pvKv">
+      <dt>Apresentação</dt><dd data-kv="presentation">${esc(lbl("presentations", c.presentation))}</dd>
+      <dt>Proposta</dt><dd data-kv="proposal">${esc(proposalLabel())}</dd>
+      <dt>Ambiente</dt><dd data-kv="environment">${esc(envLabel())}</dd>
+      <dt>Tom</dt><dd data-kv="tone">${esc(lbl("tones", c.tone))}</dd>
+      <dt>Detalhes</dt><dd data-kv="details">${esc([...c.details.map(d => lbl("details", d)), c.details_text.trim() ? "seu detalhe" : null].filter(Boolean).join(", ") || "—")}</dd>
+    </dl>
+    <span class="tag">Fatos do produto · confirmados por você</span>
+    ${facts.length ? `<ul class="facts">${facts.map(x => `<li>${esc(x)}</li>`).join("")}</ul>` : '<p class="small muted" style="margin:0">Nenhum. A legenda não vai citar características do produto.</p>'}
+    <span class="tag">Conteúdo gerado</span>
+    <div class="empty-gen">Ainda não existe. Depois de criar, a imagem da cena 1 aparece na aba Produção para sua aprovação.</div>`;
+}
+let lastKv = {};
+function renderPreview() {
+  const box = $("#previewBox"); if (!box || view !== "new") return;
+  box.innerHTML = previewHtml();
+  box.querySelectorAll("[data-kv]").forEach(dd => {   // destaca o que mudou
+    if (lastKv[dd.dataset.kv] !== undefined && lastKv[dd.dataset.kv] !== dd.textContent) { dd.classList.add("flash"); setTimeout(() => dd.classList.remove("flash"), 900); }
+    lastKv[dd.dataset.kv] = dd.textContent;
+  });
+}
+function bindAdvanced(root) {
+  const md = root.querySelector("#manualDir");
+  if (md) md.addEventListener("input", () => {
+    const auto = W.preview?.auto_direction || "";
+    W.creative.manual_direction = md.value.trim() === auto.trim() ? null : md.value;
+    W.touched = true; saveDraft(); schedulePreview();
+  });
+  const rs = root.querySelector("[data-restore]");
+  if (rs) rs.addEventListener("click", () => { changeCreative(c => c.manual_direction = null, "restaurar"); renderMain(true); toast("Instruções automáticas restauradas."); });
+}
+function bindNew(root) {
+  root.querySelectorAll("[data-f]").forEach(el => el.addEventListener("input", () => {
+    W.form[el.dataset.f] = el.value; saveDraft(); renderPreview();
+    if (["name", "category"].includes(el.dataset.f)) { optsKey = ""; debouncedOptions(); }
+  }));
+  root.querySelectorAll("[data-step]").forEach(b => b.addEventListener("click", () => { W.step = +b.dataset.step; W.showErrors = false; saveDraft(); renderMain(true); }));
+  root.querySelectorAll("[data-back]").forEach(b => b.addEventListener("click", () => { W.step--; W.showErrors = false; saveDraft(); renderMain(true); window.scrollTo(0, 0); }));
+  root.querySelectorAll("[data-next], [data-useidea]").forEach(b => b.addEventListener("click", async () => {
+    const errs = stepValid(W.step);
+    if (Object.keys(errs).length) {
+      const firstBad = [1, 2, 3].find(n => n <= W.step && Object.keys(stepValid(n)).length);  // ex.: fotos perdidas ao recarregar
+      if (firstBad && firstBad < W.step) { W.step = firstBad; toast(firstBad === 2 ? "Reenvie as fotos: elas não ficam salvas se a página for recarregada." : "Complete esta etapa antes de seguir."); }
+      W.showErrors = true; renderMain(true); root.querySelector("[aria-invalid=true], .err")?.scrollIntoView({ block: "center" }); const first = $("#main [aria-invalid=true]"); if (first) first.focus(); return; }
+    W.showErrors = false; W.step++; if (W.step === 3) await ensureOptions();
+    saveDraft(); renderMain(true); window.scrollTo(0, 0);
+  }));
+  root.querySelectorAll("[data-reloadopts]").forEach(b => b.addEventListener("click", async () => { optsKey = ""; await ensureOptions(); renderMain(true); }));
+  root.querySelectorAll("[data-customize]").forEach(b => b.addEventListener("click", () => { W.customize = !W.customize; saveDraft(); renderMain(true);
+    if (W.customize) $("#g-presentation input:checked")?.focus(); }));
+  root.querySelectorAll("[data-facet]").forEach(b => b.addEventListener("click", () => {
+    W.customize = true; renderMain(true);
+    const g = $(`#g-${b.dataset.facet}`); g?.scrollIntoView({ block: "center" }); (g?.querySelector("input:checked") || g?.querySelector("input"))?.focus();
+  }));
+  root.querySelectorAll("[data-otheridea]").forEach(b => b.addEventListener("click", () => {
+    if (!OPTS?.ideas?.length) return;
+    W.ideaIdx = (W.ideaIdx + 1) % OPTS.ideas.length;
+    const idea = OPTS.ideas[W.ideaIdx].choices;
+    changeCreative(c => Object.assign(c, { ...idea, details_text: c.details_text, manual_direction: c.manual_direction }), "ideia");
+    renderMain(true); toast(`Nova ideia: ${OPTS.ideas[W.ideaIdx].summary}`, 5000);
+  }));
+  root.querySelectorAll("[data-undo]").forEach(b => b.addEventListener("click", undoCreative));
+  root.querySelectorAll('input[type=radio][name]').forEach(r => r.addEventListener("change", () => {
+    const g = r.name, v = r.value;
+    changeCreative(c => { c[g] = v; }, g);
+    const fid = r.dataset.fid; renderMain(true); document.querySelector(`[data-fid="${fid}"]`)?.focus();
+  }));
+  const ec = root.querySelector("#envCustom");
+  if (ec) ec.addEventListener("input", () => { W.creative.environment_custom = ec.value; W.touched = true; saveDraft(); schedulePreview(); renderPreview(); });
+  const dt = root.querySelector("#detailsText");
+  if (dt) dt.addEventListener("input", () => { W.creative.details_text = dt.value; W.touched = true; saveDraft(); schedulePreview(); renderPreview(); });
+  root.querySelectorAll("[data-chip]").forEach(b => b.addEventListener("click", () => {
+    const id = b.dataset.chip, on = W.creative.details.includes(id);
+    changeCreative(c => { c.details = on ? c.details.filter(x => x !== id) : [...c.details, id]; }, "detalhe");
+    b.setAttribute("aria-pressed", String(!on)); renderPreview();
+    const undo = $("[data-undo]"); if (!undo) { renderMain(true); document.querySelector(`[data-chip="${id}"]`)?.focus(); }
+  }));
+  bindAdvanced(root);
+  root.querySelectorAll("[data-create]").forEach(b => b.addEventListener("click", createProduction));
+}
+const debouncedOptions = debounce(async () => { await ensureOptions(); }, 700);
+async function createProduction() {
+  const errs = stepValid(3); if (Object.keys(errs).length) { W.step = Math.min(...[1, 2, 3].filter(n => Object.keys(stepValid(n)).length)); W.showErrors = true; renderMain(true); return; }
+  const real = S?.settings.mode === "real", f = W.form;
+  if (real && !confirm(`Criar produção REAL com orçamento de ${usd(+f.budget || 0)}? Isso gera custo na sua conta Google.`)) return;
+  W.creating = true; W.error = null; renderMain(true);
+  try {
+    const r = await post("/api/productions", { ...f, budget: +f.budget || 0, creative: W.creative, files: filePayload("new") });
+    fileState.new = []; LS.del(WKEY);
+    Object.assign(W, { step: 1, form: { budget: 5 }, creative: { ...DEFAULT_CREATIVE }, touched: false, customize: false, ideaIdx: 0, savedAt: null, history: [], preview: null });
+    OPTS = null; optsKey = "";
+    selectedPid = r.pid; lastEventId = 0; allEvents = []; firstLoad = false;
+    W.creating = false; toast("Produção criada. Os agentes começaram o roteiro.");
+    await refresh(); go("prod");
+  } catch (e) { W.creating = false; W.error = e.message; renderMain(true); }
+}
+
+// ================================================================== PRODUÇÃO
+function progressSteps(p) {
+  const s = p.status, sc = p.scenes;
+  const imgsOk = sc.length && sc.every(x => x.approved_image), vidsOk = sc.length && sc.every(x => x.status === "video_approved");
+  let now = 0;
+  if (["validated", "scripted"].includes(s)) now = 1;
+  if (s === "producing" || s === "paused") now = !imgsOk ? 2 : !vidsOk ? 3 : 4;
+  if (s === "editing") now = 4;
+  if (s === "awaiting_final_review") now = 5;
+  if (s === "completed") now = 6;
+  return ["Ficha", "Roteiro", "Imagens", "Vídeos", "Montagem", "Revisão final"].map((l, i) => ({ l, cls: i < now ? "done" : i === now ? "now" : "" }));
+}
+function yourTurn(p) {
+  const items = [];
+  if (p.status === "awaiting_references") items.push(["Faltam referências: envie fotos válidas na ficha.", "sheet"]);
+  if (p.status === "paused") items.push([`Produção pausada: ${p.reason || ""}`, "controls"]);
+  for (const s of p.scenes) {
+    if (s.status === "awaiting_image_approval") items.push([`Aprovar a imagem da cena ${s.idx}`, `scene-${s.idx}`]);
+    if (s.status === "awaiting_video_approval") items.push([`Aprovar o vídeo da cena ${s.idx}`, `scene-${s.idx}`]);
+    if (s.status === "blocked") items.push([`Cena ${s.idx} bloqueada: decida como seguir`, `scene-${s.idx}`]);
+  }
+  if (p.status === "awaiting_final_review") items.push(["Revisar o vídeo final", "delivery"]);
+  if (!items.length) return "";
+  return `<section class="yourturn" aria-labelledby="ytTitle"><h2 id="ytTitle">Sua vez (${items.length})</h2><ul>${items.map(([t, id]) =>
+    `<li><span>${esc(t)}</span><button class="btn" data-goto="${id}">Ver</button></li>`).join("")}</ul></section>`;
+}
+function attemptFigure(att, label, kind) {
+  if (!att) return `<figure><div class="ph">—</div><figcaption>${label}: ainda não gerado</figcaption></figure>`;
+  let media = `<div class="ph">${esc(att.status === "submitted" ? "gerando…" : att.status)}</div>`;
+  if (att.url && kind === "image") media = `<a href="${att.url}" target="_blank" rel="noopener"><img src="${att.url}" alt="Conteúdo gerado: ${label} da tentativa ${att.no}"></a>`;
+  if (att.url && kind === "video") media = `<video src="${att.url}" controls muted loop playsinline preload="metadata" aria-label="Conteúdo gerado: take ${att.no}"></video>`;
+  return `<figure>${media}<figcaption>Conteúdo gerado · ${label} #${att.no}${att.simulated ? " · simulado" : ""}</figcaption></figure>`;
+}
+function reviewsHtml(att) {
+  if (!att?.reviews?.length) return "";
+  return att.reviews.map(r => {
+    const cls = r.decision === "approved" ? "okp" : r.decision === "rejected" ? "badp" : "";
+    const who = r.reviewer.startsWith("auto:") ? "Revisão automática (auxiliar)" : r.reviewer === "human" ? "Você" : r.reviewer;
+    const dec = { approved: "aprovado", rejected: "reprovado", inconclusive: "inconclusivo" }[r.decision] || r.decision;
+    return `<div class="small" style="margin-top:6px"><span class="status ${cls}">${esc(dec)}</span> <span class="muted">${esc(who)}${r.note ? " — " + esc(r.note) : ""}</span>
+      ${r.issues.length ? `<ul class="issues">${r.issues.map(i => `<li>${esc(i)}</li>`).join("")}</ul>` : ""}</div>`;
+  }).join("");
+}
+function sceneCard(sc, p) {
+  const stage = sc.status === "awaiting_image_approval" ? "image" : sc.status === "awaiting_video_approval" ? "video" : sc.status === "blocked" ? (sc.approved_image ? "video" : "image") : null;
+  const key = `${p.id}-${sc.idx}`;
+  const st = sc.status === "video_approved" ? "okp" : stage ? "needs" : "";
+  let actions = "";
+  if (stage && !p.running) actions = `<label class="f" for="note-${key}">O que corrigir? <span class="opt-tag">obrigatório só para reprovar</span></label>
+    <textarea id="note-${key}" data-draft="${key}" placeholder="Ex.: faltou o canudo atravessando a tampa">${esc(drafts[key] || "")}</textarea>
+    <div class="row" style="margin-top:8px"><button class="btn primary" data-act="approve" data-scene="${sc.idx}" data-stage="${stage}">Aprovar ${stage === "image" ? "imagem" : "vídeo"}</button>
+      <button class="btn danger" data-act="reject" data-scene="${sc.idx}" data-stage="${stage}">Reprovar e pedir correção</button>
+      ${stage === "video" ? `<label class="small muted"><input type="checkbox" data-redo="${key}"> refazer a imagem também</label>` : ""}</div>`;
+  return `<article class="scene${stage ? " attn" : ""}" id="scene-${sc.idx}" aria-labelledby="sc-${sc.idx}">
+    <div class="scene-head"><h3 id="sc-${sc.idx}">Cena ${sc.idx} · ${esc(sc.title)}</h3><span class="status ${st}">${esc(sc.label)}</span></div>
+    <p class="small muted" style="margin:0">${esc(sc.motion)} · ${sc.target_duration_s}s · tentativas: ${sc.image_attempts} imagem, ${sc.video_attempts} vídeo</p>
+    <div class="media">${attemptFigure(sc.image, "Imagem", "image")}${attemptFigure(sc.video, "Take", "video")}</div>
+    ${reviewsHtml(stage === "video" ? sc.video : sc.image)}
+    ${stage ? `<details data-k="crit-${key}" style="margin-top:8px"><summary>Critérios de aprovação</summary><ul class="small">${sc.criteria.map(c => `<li>${esc(c)}</li>`).join("")}</ul></details>` : ""}
+    ${actions}</article>`;
+}
+function sheetCard(p) {
+  const sh = p.sheet || {};
+  const issues = (sh.issues || []).map(i => `<li class="${i.blocking ? "issue-b" : ""}">${i.blocking ? "Bloqueia: " : "Atenção: "}${esc(i.message)}</li>`).join("");
+  const refs = (sh.references || []).filter(r => r.url && !/\.mp4/i.test(r.url)).map(r => `<a href="${r.url}" target="_blank" rel="noopener" title="${esc(ROLE_PT[r.role] || r.role)}"><img src="${r.url}" alt="Referência: ${esc(ROLE_PT[r.role] || r.role)}"></a>`).join("");
+  const canEdit = !["completed", "cancelled", "failed"].includes(p.status) && !p.running;
+  const attrs = drafts["attrs-" + p.id] ?? Object.entries(p.visual_attributes || {}).map(([k, v]) => `${k}: ${v}`).join("\n");
+  return `<details data-k="sheet-${p.id}" class="section" id="sheet" ${p.status === "awaiting_references" ? "open" : ""}><summary><strong>Ficha e referências</strong> ${issues ? '<span class="status needs">alertas</span>' : ""}</summary>
+    ${refs ? `<div class="refs">${refs}</div>` : '<p class="small muted">Nenhuma foto válida ainda.</p>'}
+    ${issues ? `<ul class="issues">${issues}</ul>` : ""}
+    ${sh.unknown_fields?.length ? `<p class="small muted">Desconhecidos (não serão afirmados): ${sh.unknown_fields.map(esc).join(", ")}</p>` : ""}
+    ${canEdit ? `<h3 style="margin-top:var(--s4)">Atualizar ficha</h3>${filesHtml("add")}
+      <label class="small muted"><input type="checkbox" id="replaceRefs"> substituir as fotos atuais (as antigas ficam no histórico)</label>
+      <label class="f" for="attrs-${p.id}">O que aparece nas fotos</label><textarea id="attrs-${p.id}" data-draft="attrs-${p.id}">${esc(attrs)}</textarea>
+      <label class="f" for="ctx-${p.id}">Detalhe que você faz questão</label><textarea id="ctx-${p.id}" data-draft="ctx-${p.id}">${esc(drafts["ctx-" + p.id] ?? p.video_context ?? "")}</textarea>
+      <div class="row" style="margin-top:8px"><button class="btn primary" data-addrefs>Salvar ficha e revalidar</button></div>
+      <p class="hint">Mudar referências ou detalhes refaz só as cenas afetadas.</p>` : ""}</details>`;
+}
+function prodView() {
+  const p = S?.production;
+  const office = officeAside();
+  if (!p) return `<div class="split ${officeOpen ? "wide-aside" : "no-aside"}"><div><h1>Nenhuma produção ainda</h1><p class="lead">Comece pelo assistente: produto, fotos e ideia do vídeo.</p>
+    <button class="btn primary lg" data-gonew>Criar produção</button> <button class="btn" data-example>Ver exemplo simulado</button></div>${office}</div>`;
+  const c = p.costs, pct = c.budget_usd ? Math.min(100, c.committed_usd / c.budget_usd * 100) : 0;
+  const sel = `<select id="prodSelect" aria-label="Escolher produção" style="max-width:360px">${S.productions.map(x => `<option value="${x.id}" ${x.id === S.selected ? "selected" : ""}>${esc(x.name || x.id)} · ${esc(x.label)}${x.mode === "simulated" ? " · simulada" : ""}</option>`).join("")}</select>`;
+  const d = p.delivery || {};
+  const delivery = d["final.mp4"] ? `<section class="section" id="delivery"><h2>Entrega final ${p.status === "awaiting_final_review" ? '<span class="status needs">revisão final</span>' : '<span class="status okp">concluída</span>'}</h2>
+      <div class="media"><figure><video src="${d["final.mp4"]}" controls playsinline preload="metadata" aria-label="Vídeo final"></video><figcaption>Conteúdo gerado · final.mp4</figcaption></figure>
+      <figure><img src="${d["cover.jpg"]}" alt="Capa gerada"><figcaption>Conteúdo gerado · capa</figcaption></figure></div>
+      <div class="row small">${["final.mp4", "cover.jpg", "caption.txt", "product.json", "script.md", "review_report.md", "cost_report.md"].map(n => `<a href="${d[n]}" target="_blank" rel="noopener" download>${n}</a>`).join(" · ")}</div>
+      ${p.status === "awaiting_final_review" && !p.running ? `<label class="f" for="final-${p.id}">Observação <span class="opt-tag">Opcional</span></label><textarea id="final-${p.id}" data-draft="final-${p.id}">${esc(drafts["final-" + p.id] || "")}</textarea>
+        <div class="row" style="margin-top:8px"><button class="btn primary" data-act="final" data-decision="approve">Aprovar vídeo final</button><button class="btn danger" data-act="final" data-decision="reject">Remontar</button></div>` : ""}</section>` : "";
+  return `<div class="split ${officeOpen ? "wide-aside" : "no-aside"}"><div>
+    <div class="prod-head"><div style="flex:1;min-width:240px"><p class="eyebrow">${p.mode === "simulated" ? "Produção simulada" : "Produção real"} · ${esc(p.product.variant)}</p>
+      <h1>${esc(p.product.name)}</h1>
+      <div class="row"><span class="status ${["paused", "awaiting_references", "awaiting_final_review"].includes(p.status) ? "needs" : p.status === "completed" ? "okp" : p.status === "failed" ? "badp" : ""}">${esc(p.label)}</span>
+        ${p.running ? '<span class="status okp">agentes trabalhando…</span>' : ""}</div></div>
+      <div class="row">${sel}<button class="btn primary" data-run ${p.running ? "disabled" : ""}>▶ Avançar</button>${officeOpen ? "" : '<button class="btn" data-office>Mostrar escritório</button>'}</div></div>
+    <ol class="progress" aria-label="Progresso">${progressSteps(p).map(s => `<li class="${s.cls}" ${s.cls === "now" ? 'aria-current="step"' : ""}>${s.l}</li>`).join("")}</ol>
+    ${p.mode === "simulated" ? '<p class="notice warn">Produção simulada: imagens e vídeos são exemplos. Não comprovam integração real nem qualidade visual.</p>' : ""}
+    ${p.error ? `<p class="notice bad">${esc(p.error)}</p>` : ""}
+    ${yourTurn(p)}
+    ${p.scenes.map(s => sceneCard(s, p)).join("")}
+    ${delivery}
+    ${sheetCard(p)}
+    <details data-k="controls-${p.id}" class="section" id="controls" ${p.status === "paused" ? "open" : ""}><summary><strong>Orçamento e controles</strong> <span class="muted small">${usd(c.committed_usd)} de ${usd(c.budget_usd)}</span></summary>
+      ${p.reason ? `<p class="small muted">${esc(p.reason)}</p>` : ""}
+      <div class="bar" role="progressbar" aria-valuenow="${pct.toFixed(0)}" aria-valuemin="0" aria-valuemax="100" aria-label="Orçamento usado"><div style="width:${pct}%"></div></div>
+      <p class="small muted">${p.mode === "simulated" ? "Equivalente estimado; nada foi gasto." : `Real confirmado ${usd(c.confirmed_real_usd)} · a confirmar ${usd(c.real_unconfirmed_estimate_usd)}`}</p>
+      <div class="row"><label for="budgetInput" class="small">Orçamento (US$)</label><input type="number" step="0.05" min="0" id="budgetInput" value="${c.budget_usd}" style="width:110px">
+        <button class="btn" data-act="budget">Definir</button>
+        ${p.status === "paused" ? '<button class="btn primary" data-act="resume">Retomar</button>' : '<button class="btn" data-act="pause">Pausar</button>'}
+        <button class="btn danger" data-act="cancel">Cancelar produção</button></div>
+      <p class="small muted">Link preservado: ${esc(p.product.link)}</p></details>
+  </div>${office}</div>`;
+}
+function officeAside() {
+  if (!officeOpen) return "";
+  const feed = allEvents.slice(-6).reverse();
+  return `<aside class="sticky" aria-labelledby="ofTitle"><div class="row" style="justify-content:space-between;margin-bottom:8px"><h2 id="ofTitle" style="margin:0">Escritório</h2>
+    <div class="row"><button class="link" data-goview="office">Ampliar</button><button class="link" data-office>Recolher</button></div></div>
+    <div class="office-card"><svg class="office" data-bubbles="off" role="img" aria-label="Escritório com os agentes"></svg></div>
+    ${agentsStatusList()}
+    ${feed.length ? `<h3 style="margin-top:var(--s4)">Últimos eventos</h3><ul class="feed">${feed.map(feedItem).join("")}</ul><button class="link" data-goview="agents">Ver todos</button>` : ""}</aside>`;
+}
+function bindProd(root) {
+  root.querySelectorAll("[data-draft]").forEach(t => t.addEventListener("input", () => drafts[t.dataset.draft] = t.value));
+  root.querySelectorAll("[data-goto]").forEach(b => b.addEventListener("click", () => { const el = document.getElementById(b.dataset.goto);
+    if (el?.tagName === "DETAILS") el.open = true; el?.scrollIntoView({ behavior: "smooth", block: "start" }); (el?.querySelector("[data-act=approve], [data-act=final], [data-act=resume], [data-addrefs]") || el?.querySelector("button, textarea, summary"))?.focus({ preventScroll: true }); }));
+  root.querySelectorAll("[data-office]").forEach(b => b.addEventListener("click", () => { officeOpen = !officeOpen; LS.set("bc.officeOpen", officeOpen); renderMain(true); }));
+  root.querySelectorAll("[data-goview]").forEach(b => b.addEventListener("click", () => go(b.dataset.goview)));
+  root.querySelectorAll("[data-gonew]").forEach(b => b.addEventListener("click", () => go("new")));
+  root.querySelectorAll("[data-example]").forEach(b => b.addEventListener("click", createExample));
+  const ps = root.querySelector("#prodSelect");
+  if (ps) ps.addEventListener("change", () => { selectedPid = ps.value; lastEventId = 0; allEvents = []; firstLoad = true; refresh(true); });
+  root.querySelectorAll("[data-run]").forEach(b => b.addEventListener("click", async () => { try { await post(`/api/productions/${S.production.id}/run`); toast("Agentes trabalhando…"); } catch (e) { toast("Erro: " + e.message, 6000); } refresh(true); }));
+  root.querySelectorAll("button[data-act]").forEach(b => b.addEventListener("click", async () => {
+    const act = b.dataset.act, pid = S.production.id, body = {};
+    if (b.dataset.scene) {
+      const key = `${pid}-${b.dataset.scene}`;
+      Object.assign(body, { scene: +b.dataset.scene, stage: b.dataset.stage, note: drafts[key] || "" });
+      body.redo_image = !!root.querySelector(`[data-redo="${key}"]`)?.checked;
+      if (act === "reject" && !body.note.trim()) { toast("Descreva a correção antes de reprovar."); document.getElementById(`note-${key}`)?.focus(); return; }
+    }
+    if (act === "final") Object.assign(body, { decision: b.dataset.decision, note: drafts[`final-${pid}`] || "" });
+    if (act === "budget") body.value = +$("#budgetInput").value;
+    if (act === "cancel" && !confirm("Cancelar esta produção? Novas etapas deixam de ser executadas.")) return;
+    b.disabled = true;
+    try {
+      await post(`/api/productions/${pid}/${act}`, body);
+      if (b.dataset.scene) delete drafts[`${pid}-${b.dataset.scene}`];
+      toast({ approve: "Aprovado. Os agentes seguem para a próxima etapa.", reject: "Correção enviada para nova tentativa.", budget: "Orçamento atualizado.", resume: "Produção retomada." }[act] || "Feito.");
+    } catch (err) { toast("Erro: " + err.message, 7000); b.disabled = false; return; }
+    refresh(true);
+  }));
+  root.querySelectorAll("[data-addrefs]").forEach(btn => btn.addEventListener("click", async () => {
+    const pid = S.production.id, replace = $("#replaceRefs")?.checked;
+    if (replace && !fileState.add.some(f => !f.isVideo)) return toast("Para substituir, escolha as novas fotos.");
+    btn.disabled = true; btn.textContent = "Enviando…";
+    try {
+      const body = { files: filePayload("add"), replace };
+      if (drafts["attrs-" + pid] !== undefined) body.visual_attributes = drafts["attrs-" + pid];
+      if (drafts["ctx-" + pid] !== undefined) body.video_context = drafts["ctx-" + pid];
+      await post(`/api/productions/${pid}/references`, body);
+      fileState.add = []; delete drafts["attrs-" + pid]; delete drafts["ctx-" + pid];
+      toast("Ficha atualizada. Revalidando…");
+    } catch (err) { toast("Erro: " + err.message, 8000); btn.disabled = false; btn.textContent = "Tentar de novo"; return; }
+    refresh(true);
+  }));
+}
+async function createExample() {
+  try { const r = await post("/api/demo", { budget: 5 }); selectedPid = r.pid; lastEventId = 0; allEvents = []; firstLoad = false; toast("Exemplo simulado criado."); await refresh(); go("prod"); }
+  catch (e) { toast("Erro: " + e.message, 6000); }
+}
+
+// ================================================================== ESCRITÓRIO / AGENTES
+function officeView() {
+  return `<div class="split"><div><h1>Escritório dos agentes</h1><p class="lead">Cada agente na sua mesa, com a última ação registrada. Clique em um agente para configurá-lo.</p>
+    <div class="office-card office-full"><svg class="office" role="img" aria-label="Escritório com os agentes"></svg></div>${LEGEND}</div>
+    <aside><h2>Agora</h2>${agentsStatusList()}</aside></div>`;
+}
+function feedItem(e) {
+  const a = agentById(e.agent);
+  return `<li><span class="who" style="color:${a.color}">${esc(a.name)}</span>${e.scene ? `<span class="status">cena ${e.scene}</span> ` : ""}${esc(e.say || e.message || e.type)}
+    <time datetime="${esc(e.ts)}">${new Date(e.ts).toLocaleTimeString("pt-BR")} · há ${ago(e.ts)}</time></li>`;
+}
+function agentsView() {
+  const a = agentById(selAgent), st = S.agent_states?.[selAgent] || {}, opts = S.field_options, vals = S.settings.values;
+  const fields = (a.fields || []).map(f => {
+    const o = opts[f], v = vals[f];
+    const input = o.type === "select" ? `<select id="cfg-${f}" data-field="${f}">${(o.choices || o.choices_by[vals[o.depends_on]] || []).map(c => `<option ${c === v ? "selected" : ""}>${esc(c)}</option>`).join("")}</select>`
+      : `<input id="cfg-${f}" data-field="${f}" type="number" min="${o.min}" max="${o.max}" step="${o.type === "int" ? 1 : 0.5}" value="${v}">`;
+    return `<label class="f" for="cfg-${f}">${esc(o.label)}</label>${input}`;
+  }).join("");
+  const evs = allEvents.filter(e => e.agent === selAgent).slice(-12).reverse();
+  const all = allEvents.slice(-150).reverse();
+  return `<div class="split"><div>
+    <div class="row" role="tablist" aria-label="Agentes" style="margin-bottom:var(--s4)">${S.agents.map(x => { const s = S.agent_states?.[x.id]?.status || "idle";
+      return `<button class="chip" role="tab" aria-selected="${x.id === selAgent}" aria-pressed="${x.id === selAgent}" data-agent="${x.id}"><i class="dot st-${s}" aria-hidden="true"></i> ${esc(x.name)}</button>`; }).join("")}</div>
+    <h1>${esc(a.name)} <span class="status">${esc(STATUS_LABEL[st.status || "idle"])}</span></h1>
+    <p class="lead">${esc(a.role)}</p>
+    <p class="small muted">${a.uses_ai ? "Usa IA pelo provedor configurado." : "Sem IA: regras e ferramentas determinísticas."}${st.message ? ` Última ação: “${esc(st.message)}”` : ""}</p>
+    <section class="section"><h2>Configurar</h2>
+      <label class="f" for="agName">Nome exibido</label><input type="text" id="agName" maxlength="24" value="${esc(a.name)}">
+      <label class="f" for="agColor">Cor</label><input type="color" id="agColor" value="${a.color}" style="height:36px;width:80px;padding:2px">
+      ${fields || '<p class="hint">Este agente não tem parâmetros técnicos ajustáveis.</p>'}
+      <div class="row" style="margin-top:var(--s4)"><button class="btn primary" data-saveagent>Salvar</button></div>
+      <p class="hint">Vale para as próximas chamadas. Cada tentativa registra o modelo usado. Modo real, gastos e chaves só mudam no .env ou na chave DEMO.</p></section>
+    <section class="section"><h2>Atividade deste agente</h2><ul class="feed">${evs.map(feedItem).join("") || '<li class="muted">Sem atividade nesta produção.</li>'}</ul></section>
+  </div><aside><h2>Todos os eventos</h2><ul class="feed">${all.map(feedItem).join("") || '<li class="muted">Sem eventos.</li>'}</ul></aside></div>`;
+}
+function bindAgents(root) {
+  root.querySelectorAll("[data-agent]").forEach(b => b.addEventListener("click", () => { selAgent = b.dataset.agent; renderMain(true); }));
+  const save = root.querySelector("[data-saveagent]");
+  if (save) save.addEventListener("click", async () => {
+    const settings = {}; root.querySelectorAll("[data-field]").forEach(el => settings[el.dataset.field] = el.value);
+    try { await post("/api/config", { settings, agents: { [selAgent]: { name: $("#agName").value, color: $("#agColor").value } } }); toast("Configuração salva."); }
+    catch (err) { toast("Erro: " + err.message, 6000); }
+    refresh(true);
+  });
+  root.querySelectorAll("select[data-field]").forEach(sel => sel.addEventListener("change", () => {
+    for (const [f, o] of Object.entries(S.field_options)) if (o.depends_on === sel.dataset.field) {
+      const dep = root.querySelector(`[data-field="${f}"]`); if (dep) dep.innerHTML = (o.choices_by[sel.value] || []).map(c => `<option>${esc(c)}</option>`).join("");
+    }
+  }));
+}
+
+// ================================================================== GASTOS
+let SPEND = null;
+async function loadSpend() { try { SPEND = await (await fetch("/api/spend")).json(); } catch { SPEND = null; } }
+function niceMax(max) { const e = Math.pow(10, Math.floor(Math.log10(max))), m = max / e; return e * (m > 5 ? 10 : m > 2 ? 5 : m > 1 ? 2 : 1); }
+function dailyChart(daily) {
+  const Wd = 640, H = 170, pl = 40, pb = 22, pt = 8, n = daily.length, top = niceMax(Math.max(...daily.map(d => d.usd), 0.01));
+  const bw = (Wd - pl) / n, y = v => pt + (H - pt - pb) * (1 - v / top);
+  let g = "";
+  for (const t of [0, top / 2, top]) g += `<line x1="${pl}" x2="${Wd}" y1="${y(t)}" y2="${y(t)}" stroke="#2a303b"/><text x="${pl - 6}" y="${y(t) + 4}" font-size="11" fill="#9ba2ae" text-anchor="end">${t === 0 ? "0" : t < 0.1 ? t.toFixed(3) : t < 1 ? t.toFixed(2) : t.toFixed(0)}</text>`;
+  daily.forEach((d, i) => {
+    const x = pl + i * bw + 1, w = Math.max(bw - 2, 1), yt = y(d.usd), base = y(0), h = base - yt;
+    if (d.usd > 0) { const r = Math.min(4, w / 2, h); g += `<path d="M${x} ${base} V${yt + r} Q${x} ${yt} ${x + r} ${yt} H${x + w - r} Q${x + w} ${yt} ${x + w} ${yt + r} V${base} Z" fill="var(--lime)"/>`; }
+    g += `<rect x="${x - 1}" y="${pt}" width="${bw}" height="${H - pt - pb}" fill="transparent" data-tip="${d.day.slice(8, 10)}/${d.day.slice(5, 7)}: ${usd(d.usd)}"/>`;
+    if (i % 7 === 0 && i < n - 3 || i === n - 1) g += `<text x="${x + w / 2}" y="${H - 5}" font-size="11" fill="#9ba2ae" text-anchor="middle">${d.day.slice(8, 10)}/${d.day.slice(5, 7)}</text>`;
+  });
+  return `<div class="chart"><svg viewBox="0 0 ${Wd} ${H}" width="100%" role="img" aria-label="Gasto real por dia nos últimos 30 dias">${g}</svg><div class="tip"></div></div>`;
+}
+function table(head, rows) { return rows.length ? `<table class="t"><tr>${head.map(h => `<th class="${h[1] || ""}">${h[0]}</th>`).join("")}</tr>${rows.join("")}</table>` : '<p class="small muted">Nada ainda.</p>'; }
+function spendView() {
+  if (!SPEND) return '<p class="muted">Carregando…</p>';
+  const sp = SPEND, cap = sp.monthly_cap_usd, pct = cap ? Math.min(100, sp.month_total_usd / cap * 100) : 0;
+  return `<h1>Gastos</h1><p class="lead">${esc(sp.note)}</p>
+    <div class="kpis">
+      <div class="kpi"><div class="l">Gasto real no mês</div><div class="v">${usd(sp.month_total_usd)}</div><div class="l">confirmado ${usd(sp.month_confirmed_usd)} · estimado ${usd(sp.month_unconfirmed_estimate_usd)}</div></div>
+      <div class="kpi"><div class="l">Teto mensal</div><div class="v">${cap ? usd(cap) : "—"}</div><div class="l">${cap ? `restam ${usd(sp.month_remaining_usd)}` : "sem teto: chamadas pagas bloqueadas"}</div></div>
+      <div class="kpi"><div class="l">Total real desde o início</div><div class="v">${usd(sp.all_time_real_usd)}</div></div>
+      <div class="kpi"><div class="l">Simulações (não gasto)</div><div class="v muted">${usd(sp.simulated_equivalent_usd)}</div><div class="l">equivalente se fosse real</div></div></div>
+    ${cap ? `<div class="bar" role="progressbar" aria-valuenow="${pct.toFixed(0)}" aria-valuemin="0" aria-valuemax="100" aria-label="Teto mensal usado"><div style="width:${pct}%;background:${pct >= 80 ? "var(--bad)" : "var(--lime)"}"></div></div>` : ""}
+    <div class="row" style="margin:var(--s4) 0"><label for="capInput" class="small">Teto mensal (US$)</label><input type="number" id="capInput" min="0" step="1" value="${cap || ""}" placeholder="ex.: 20" style="width:110px"><button class="btn" data-cap>Salvar teto</button>
+      <span class="hint">Ao atingir o teto, a produção pausa antes da próxima chamada paga.</span></div>
+    <section class="section"><h2>Gasto real por dia (30 dias)</h2>${dailyChart(sp.daily)}</section>
+    <div class="grid2"><section class="section"><h2>Por tipo</h2>${table([["Tipo"], ["Chamadas", "n"], ["Falhas", "n"], ["US$", "n"]], sp.by_kind.map(k => `<tr><td>${esc(k.kind)}</td><td class="n">${k.count}</td><td class="n">${k.failed}</td><td class="n">${k.usd.toFixed(4)}</td></tr>`))}</section>
+      <section class="section"><h2>Por produção</h2>${table([["Produção"], ["Orçamento", "n"], ["US$", "n"]], sp.by_production.map(p => `<tr><td>${esc(p.name)}</td><td class="n">${p.budget_usd?.toFixed(2) ?? "—"}</td><td class="n">${p.usd.toFixed(4)}</td></tr>`))}</section>
+      <section class="section"><h2>Por modelo</h2>${table([["Modelo"], ["Chamadas", "n"], ["US$", "n"]], sp.by_model.map(m => `<tr><td>${esc(m.model)}</td><td class="n">${m.count}</td><td class="n">${m.usd.toFixed(4)}</td></tr>`))}</section>
+      <section class="section"><h2>Últimas chamadas pagas</h2>${table([["Quando"], ["O quê"], ["Estim.", "n"], ["Conf.", "n"]], sp.recent.map(r => `<tr title="${esc(r.source || "")}"><td>${new Date(r.ts).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</td><td>${esc(r.kind)}${r.scene ? " · cena " + r.scene : ""} <span class="muted">${esc(r.status)}</span></td><td class="n">${(r.estimated_usd ?? 0).toFixed(4)}</td><td class="n">${r.confirmed_usd == null ? "—" : r.confirmed_usd.toFixed(4)}</td></tr>`))}</section></div>`;
+}
+function bindSpend(root) {
+  const chart = root.querySelector(".chart");
+  if (chart) { const tip = chart.querySelector(".tip");
+    chart.querySelectorAll("[data-tip]").forEach(r => {
+      r.addEventListener("mouseenter", () => { tip.textContent = r.dataset.tip; tip.style.display = "block"; });
+      r.addEventListener("mousemove", e => { const b = chart.getBoundingClientRect(); tip.style.left = Math.min(e.clientX - b.left + 10, b.width - 120) + "px"; tip.style.top = (e.clientY - b.top - 30) + "px"; });
+      r.addEventListener("mouseleave", () => tip.style.display = "none"); }); }
+  const cb = root.querySelector("[data-cap]");
+  if (cb) cb.addEventListener("click", async () => { try { await post("/api/runtime", { monthly_cap_usd: +$("#capInput").value || 0 }); toast("Teto mensal salvo."); await loadSpend(); refresh(true); } catch (e) { toast("Erro: " + e.message, 6000); } });
+}
+setInterval(async () => { if (view === "spend" && !busyEditing($("#main"))) { await loadSpend(); renderMain(); } }, 5000);
+
+function bindMain() {
+  const root = $("#main");
+  bindFiles(root);
+  if (view === "new") bindNew(root);
+  if (view === "prod") bindProd(root);
+  if (view === "agents") bindAgents(root);
+  if (view === "spend") bindSpend(root);
+}
+
+// ================================================================== DEMO / modal
+function openModal(html) { $("#modalBox").innerHTML = html; $("#modal").hidden = false; $("#modalBox").querySelector("input, button")?.focus(); }
+function closeModal() { $("#modal").hidden = true; $("#demoToggle").focus(); }
+$("#modal").addEventListener("click", e => { if (e.target.id === "modal") closeModal(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("#modal").hidden) closeModal(); });
+$("#demoToggle").addEventListener("change", async e => {
+  if (e.target.checked) { try { await post("/api/runtime", { mode: "simulated" }); toast("DEMO ligado: nada será cobrado. Produções reais ficam paradas."); } catch (err) { toast("Erro: " + err.message); } return refresh(true); }
+  e.target.checked = true;
+  const st = S.settings;
+  openModal(`<h2 id="modalTitle">Desligar o DEMO e produzir de verdade?</h2>
+    <p class="muted">As próximas gerações chamam a API do Google e geram custo na sua conta.</p>
+    <p class="small">${st.api_key_defined ? "✅ Chave da Gemini API configurada" : "❌ Chave da Gemini API ausente no .env"}</p>
+    <p class="small">⚠️ O faturamento do projeto não pode ser verificado daqui; a primeira geração confirma.</p>
+    <label class="f" for="modalCap">Teto de gastos do mês (US$)</label><input type="number" id="modalCap" min="1" step="1" value="${st.monthly_cap_usd || 10}">
+    <p class="hint">Cada produção também tem seu orçamento. Ao atingir qualquer limite, a produção pausa.</p>
+    <div class="row" style="margin-top:var(--s4);justify-content:flex-end"><button class="btn" id="modalCancel">Manter DEMO</button>
+    <button class="btn primary" id="modalOk" ${st.api_key_defined ? "" : "disabled"}>Desligar DEMO</button></div>`);
+  $("#modalCancel").onclick = closeModal;
+  $("#modalOk").onclick = async () => {
+    const cap = +$("#modalCap").value; if (!(cap > 0)) return toast("Defina um teto maior que zero.");
+    try { await post("/api/runtime", { monthly_cap_usd: cap, mode: "real" }); closeModal(); toast("DEMO desligado. Novas produções serão reais."); } catch (err) { toast("Erro: " + err.message, 8000); }
+    refresh(true);
+  };
+});
+
+// ================================================================== atualização
+async function refresh(force = false) {
+  try {
+    const q = new URLSearchParams({ since: lastEventId }); if (selectedPid) q.set("pid", selectedPid);
+    const r = await fetch("/api/state?" + q), data = await r.json();
+    if (!r.ok) throw new Error(data.error);
+    if (data.selected !== S?.selected) { allEvents = []; }
+    S = data; selectedPid = data.selected;
+    allEvents = allEvents.concat(data.events);
+    if (!firstLoad && data.events.length) queueHandoffs(data.events);
+    firstLoad = false;
+    lastEventId = data.last_event_id || lastEventId;
+    if (view === null) view = data.productions.length ? "prod" : "new";
+    renderHeader(); renderNav(); renderMain(force);
+  } catch (err) { toast("Sem conexão com o servidor local: " + err.message); }
+}
+(async () => { await refresh(); if (view === "new") { await ensureOptions(); renderMain(true); } if (view === "spend") { await loadSpend(); renderMain(true); } })();
+setInterval(refresh, 1500);
+</script>
+</body>
+</html>

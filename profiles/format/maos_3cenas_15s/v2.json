@@ -1,0 +1,119 @@
+{
+  "kind": "format",
+  "id": "maos_3cenas_15s",
+  "version": "v2",
+  "created": "2026-10-27",
+  "source": "v1 generalizado: cenas sem referência fixa à cozinha, para funcionar com qualquer ambiente escolhido.",
+  "description_pt": "Vertical 9:16, apenas mãos da Bia, sem rosto, sem fala, três cenas, ~15 s finais.",
+  "aspect_ratio": "9:16",
+  "presenter_mode": "hands_only",
+  "total_target_s": 15.0,
+  "duration_tolerance_s": 1.5,
+  "audio": "silent",
+  "prompt_language": "en",
+  "prompt_language_note": "Prompts de geração em inglês: a documentação do Gemini Omni Flash indica suporte completo apenas a inglês.",
+  "scenes": [
+    {
+      "index": 1,
+      "title": "Levantar e mostrar",
+      "objective": "Apresentar o produto inteiro e estabelecer cenário, luz e mãos que servirão de referência de continuidade.",
+      "framing": "Produto inteiro em três quartos, câmera na altura do centro do produto, produto ocupando ~2/3 da altura útil.",
+      "references": [
+        "product:all",
+        "presenter:hands"
+      ],
+      "motion": "Mãos levantam o produto poucos centímetros e giram ~15° para mostrar frente e alça; pausa breve. Câmera fixa.",
+      "target_duration_s": 5.0,
+      "image_prompt": "Create a vertical 9:16 photograph to be used as the first frame of a product video.\n\nREFERENCES: the official product photos exclusively define the product. The skin-tone reference only guides the skin tone of the hands; never show that person's face or reproduce that photo's background.\n\n$product_block\n\n$environment\n$lighting\n\n$hands\nThe right hand holds the product by its handle (or its most natural grip point) and the left hand lightly supports its base. Plausible, relaxed grip.\n\nCOMPOSITION: product closed and fully inside the frame, seen in three-quarter view. Its base still touches the countertop. Camera at the height of the product's center. The product fills about two thirds of the usable height, with room for movement.\n\nStill image. $camera\n$negative Do not beautify or modify the product.",
+      "animation_prompt": "Animate the attached image into a vertical 9:16 video. Preserve exactly the setting, light, product, skin tone and manicure of the starting frame.\n\nThe hands keep their grip, lift the product just a few centimeters and make a small rotation of about 15 degrees to show the front and the handle. Delicate, natural movement followed by a brief pause. Fixed camera; the whole product stays visible throughout.\n\nThe product remains closed and rigid; lid and handle never change. Fingers keep consistent contact and never pass through surfaces or multiply. Do not add new objects. No face or body, no speech, narration, music, sound effects or on-screen text. Silent.",
+      "constraints": [
+        "sem rosto",
+        "sem fala",
+        "sem texto na imagem",
+        "produto fechado",
+        "não adicionar acessórios"
+      ],
+      "approval_criteria": [
+        "Cor, variante, forma e proporções iguais às fotos oficiais",
+        "Tampa, alça, acabamento e acessórios corretos",
+        "Mãos anatomicamente corretas (5 dedos, sem fusões)",
+        "Manicure e tom de pele conforme perfil",
+        "Cozinha conforme direção de arte, sem textos ou logos inventados"
+      ]
+    },
+    {
+      "index": 2,
+      "title": "Detalhes",
+      "objective": "Plano mais próximo destacando tampa, borda e junção da alça.",
+      "framing": "Plano próximo, ângulo levemente superior, produto na vertical.",
+      "references": [
+        "scene:1:image",
+        "product:all"
+      ],
+      "motion": "Giro suave de ~10° e retorno; tampa fechada; câmera fixa.",
+      "target_duration_s": 5.0,
+      "image_prompt": "Create a second vertical 9:16 photograph from the same session, using the scene-1 image as the continuity reference and the official photos for product fidelity.\n\nPreserve exactly the same product, setting, surface, light direction and the softly blurred lived-in background.\n\nCloser shot from a slightly higher angle, highlighting the closed lid, the rim and where the handle joins the body. The right hand holds the handle and the left hand supports the body. The product stays upright. Do not open the lid.\n\n$product_block\n\n$hands Same hands as in the first image.\n\nProduct, lid and fingers sharp, with natural reflections. Do not invent mechanisms, straws, inscriptions or accessories. $camera\n$negative",
+      "animation_prompt": "Animate this photograph into a vertical 9:16 video, keeping exactly the hands, manicure, product, lid, materials, surface, setting and lighting.\n\nThe hands gently rotate the product only about 10 degrees and return to the starting position, revealing the rim and lid design. The lid stays closed; no mechanism is operated. Fixed close-up camera, stable focus, subtle reflections.\n\nCareful everyday gestures. Do not squeeze, stretch or deform the product. Do not change the handle shape, add fingers or let fingers pass through the product. No liquids, steam, ice, face, body or new objects. No speech, music, narration or text. Silent.",
+      "constraints": [
+        "tampa fechada",
+        "sem líquidos",
+        "sem rosto",
+        "sem fala"
+      ],
+      "approval_criteria": [
+        "Mesmo produto e variante da cena 1 e das fotos oficiais",
+        "Detalhes de tampa/borda/alça fiéis às referências",
+        "Mesmas mãos, manicure e cozinha da cena 1"
+      ]
+    },
+    {
+      "index": 3,
+      "title": "Fechamento",
+      "objective": "Produto apoiado na bancada; mão solta e sai; aproximação discreta para o fechamento.",
+      "framing": "Produto inteiro apoiado na bancada em três quartos, com folga para aproximação.",
+      "references": [
+        "scene:1:image",
+        "product:all"
+      ],
+      "motion": "Mão direita solta e sai pela direita; câmera aproxima muito lentamente; pausa final no produto.",
+      "target_duration_s": 5.0,
+      "image_prompt": "Create the third vertical 9:16 photograph of the same product session. Use the scene-1 image as the main reference for setting, light, color and hands. The official photos define the exact product design.\n\nThe product is closed, whole and resting on the same surface as in scene 1, seen in three-quarter view. The right hand lightly holds the handle (or the side of the product); the left hand is out of frame.\n\n$product_block\n\n$hands\n\n$environment\n$lighting\nLeave room above, below and on the sides of the product for a subtle camera push-in.\n\n$camera\n$negative",
+      "animation_prompt": "Animate the starting image into a vertical 9:16 video. Preserve the same closed product, color, lid, handle, surface, setting, lighting and manicure.\n\nThe product stays still on the surface. The right hand gently lets go and leaves the frame to the right, with natural fingers and wrist. Then the camera makes a very subtle, slow push-in, keeping the whole product visible. End with a brief pause on the product.\n\nThe product must not rotate by itself, float or change size. Do not crop the lid or the base. No face, body, speech, music, narration, text or new objects. Silent.",
+      "constraints": [
+        "produto imóvel",
+        "sem cortar tampa/base",
+        "sem fala"
+      ],
+      "approval_criteria": [
+        "Produto idêntico às cenas anteriores",
+        "Saída da mão natural, sem deformações",
+        "Enquadramento final limpo, adequado para capa"
+      ]
+    }
+  ],
+  "overlays": [
+    {
+      "text": "Publicidade • Imagens ilustrativas geradas por IA",
+      "start_s": 0.0,
+      "end_s": 15.0,
+      "position": "top",
+      "font_size": 34
+    }
+  ],
+  "disclosure": {
+    "caption_text": "Publicidade · Link de afiliada · Imagens ilustrativas geradas por IA.",
+    "status": "nao_revisado",
+    "note_pt": "Texto genérico inicial. Revise conforme as regras vigentes da Shopee Vídeo, do CONAR e da legislação aplicável antes de publicar; não é garantia de conformidade."
+  },
+  "caption": {
+    "hashtags": [
+      "#achadinhos",
+      "#shopee",
+      "#casa"
+    ],
+    "max_chars": 2200
+  },
+  "cover": {
+    "time_s": 13.0
+  }
+}

@@ -1,0 +1,20 @@
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+
+# Segredos
+.env
+.env.*
+!.env.example
+
+# Dados de produção e referências pessoais (fotos, vídeos gerados)
+data/
+/assets/bia/
+
+# Tilesets LimeZu: licença comercial, não versionar (o mapa em /assets/maps/ e os logos em frontend/src/assets/ vão para o git)
+/assets/tilesets/
+
+# saída das ferramentas de mapa (SPEC-VIS-001)
+tools/out/

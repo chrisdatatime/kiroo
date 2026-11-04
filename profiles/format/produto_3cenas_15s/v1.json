@@ -1,0 +1,75 @@
+{
+  "kind": "format",
+  "id": "produto_3cenas_15s",
+  "version": "v1",
+  "created": "2026-10-27",
+  "source": "Variante sem pessoas do formato de 3 cenas: o movimento vem da câmera.",
+  "description_pt": "Vertical 9:16, só o produto, sem pessoas, sem fala, três cenas, ~15 s finais.",
+  "aspect_ratio": "9:16",
+  "presenter_mode": "product_only",
+  "total_target_s": 15.0,
+  "duration_tolerance_s": 1.5,
+  "audio": "silent",
+  "prompt_language": "en",
+  "scenes": [
+    {
+      "index": 1,
+      "title": "Apresentação",
+      "objective": "Mostrar o produto inteiro e estabelecer cenário e luz, que servem de referência para as cenas seguintes.",
+      "framing": "Produto inteiro em três quartos, apoiado na superfície, ocupando ~2/3 da altura útil.",
+      "references": ["product:all"],
+      "motion": "Câmera faz um arco lento de ~15° ao redor do produto parado.",
+      "target_duration_s": 5.0,
+      "image_prompt": "Create a vertical 9:16 photograph to be used as the first frame of a product video.\n\nREFERENCES: the official product photos exclusively define the product.\n\n$product_block\n\n$environment\n$lighting\n\n$hands\n\nCOMPOSITION: product closed and fully inside the frame, standing on the surface, seen in three-quarter view, filling about two thirds of the usable height, with room around it for a slow camera move.\n\nStill image. $camera\n$negative Do not beautify or modify the product.",
+      "animation_prompt": "Animate the attached image into a vertical 9:16 video. Preserve exactly the setting, light and product of the starting frame.\n\nThe product stays completely still. The camera makes a slow, smooth arc of about 15 degrees around it, keeping the whole product visible, then holds briefly.\n\nThe product never moves, deforms or changes shape, color, lid or handle. No people, hands, new objects, speech, narration, music or on-screen text. Silent.",
+      "constraints": ["sem pessoas", "sem fala", "sem texto na imagem", "produto imóvel"],
+      "approval_criteria": [
+        "Cor, variante, forma e proporções iguais às fotos oficiais",
+        "Tampa, alça, acabamento, acessórios e inscrições corretos",
+        "Cenário conforme a direção escolhida, sem textos ou logos inventados"
+      ]
+    },
+    {
+      "index": 2,
+      "title": "Detalhes",
+      "objective": "Plano próximo destacando os detalhes visíveis do produto.",
+      "framing": "Plano próximo, ângulo levemente superior.",
+      "references": ["scene:1:image", "product:all"],
+      "motion": "Aproximação muito lenta da câmera sobre o detalhe.",
+      "target_duration_s": 5.0,
+      "image_prompt": "Create a second vertical 9:16 photograph from the same session, using the scene-1 image as the continuity reference and the official photos for product fidelity.\n\nPreserve exactly the same product, setting, surface and light direction.\n\nCloser shot from a slightly higher angle, highlighting the visible details (lid, rim, handle, finish) exactly as they appear in the references.\n\n$product_block\n\n$hands\n\nSharp product, natural reflections. Do not invent mechanisms, inscriptions or accessories. $camera\n$negative",
+      "animation_prompt": "Animate this photograph into a vertical 9:16 video. The product stays still. The camera pushes in very slowly and smoothly on the detail, with stable focus.\n\nThe product never moves, deforms or changes. No people, hands, liquids, steam, new objects, speech, music or text. Silent.",
+      "constraints": ["sem pessoas", "sem líquidos", "sem fala"],
+      "approval_criteria": [
+        "Mesmo produto e variante da cena 1 e das fotos oficiais",
+        "Detalhes fiéis às referências"
+      ]
+    },
+    {
+      "index": 3,
+      "title": "Fechamento",
+      "objective": "Plano final limpo do produto, adequado para capa.",
+      "framing": "Produto inteiro, centralizado, com folga ao redor.",
+      "references": ["scene:1:image", "product:all"],
+      "motion": "Câmera se afasta lentamente; pausa final no produto.",
+      "target_duration_s": 5.0,
+      "image_prompt": "Create the third vertical 9:16 photograph of the same product session. Use the scene-1 image as the reference for setting, light and color; the official photos define the exact product.\n\nThe product is closed, whole and centered on the same surface, with generous space around it.\n\n$product_block\n\n$environment\n$lighting\n\n$hands\n\n$camera\n$negative",
+      "animation_prompt": "Animate the starting image into a vertical 9:16 video. The product stays still. The camera pulls back very slowly, keeping the whole product visible, and ends with a brief pause.\n\nThe product must not move, float or change size. Do not crop the lid or the base. No people, hands, speech, music, text or new objects. Silent.",
+      "constraints": ["produto imóvel", "sem cortar tampa/base", "sem pessoas"],
+      "approval_criteria": [
+        "Produto idêntico às cenas anteriores",
+        "Enquadramento final limpo, adequado para capa"
+      ]
+    }
+  ],
+  "overlays": [
+    {"text": "Publicidade • Imagens ilustrativas geradas por IA", "start_s": 0.0, "end_s": 15.0, "position": "top", "font_size": 34}
+  ],
+  "disclosure": {
+    "caption_text": "Publicidade · Link de afiliada · Imagens ilustrativas geradas por IA.",
+    "status": "nao_revisado",
+    "note_pt": "Texto genérico inicial. Revise conforme as regras vigentes antes de publicar."
+  },
+  "caption": {"hashtags": ["#achadinhos", "#shopee"], "max_chars": 2200},
+  "cover": {"time_s": 13.0}
+}

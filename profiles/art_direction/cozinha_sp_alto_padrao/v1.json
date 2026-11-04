@@ -1,0 +1,12 @@
+{
+  "kind": "art_direction",
+  "id": "cozinha_sp_alto_padrao",
+  "version": "v1",
+  "created": "2026-10-26",
+  "source": "ByteCerto_historico_para_outra_IA.md, roteiro do copo com alça",
+  "description_pt": "Cozinha realista de apartamento de família de alta renda em São Paulo. Elegância discreta, casa habitada. Ilha em quartzito claro com veios bege discretos, armários de madeira natural, eletrodomésticos embutidos, luz suave de janela lateral. Fruteira pequena e pano de prato dobrado ao fundo. Sem cara de showroom ou mármore exagerado.",
+  "environment_en": "SETTING: realistic kitchen of an upper-income family apartment in São Paulo, Brazil. Light quartzite island countertop with subtle beige veining, natural wood cabinets and built-in appliances softly blurred in the background. A small fruit bowl and a neatly folded dish towel make it look lived-in and tidy. Discreet elegance; not a showroom, no exaggerated marble.",
+  "lighting_en": "LIGHT: soft natural window light coming from the left.",
+  "camera_en": "CAMERA LOOK: realistic footage from a good-quality smartphone, natural colors, focus on the product, no 3D-render plastic look.",
+  "negative_en": "No text, captions, prices, logos, watermarks, user-interface elements, notifications or third-party names in the image."
+}

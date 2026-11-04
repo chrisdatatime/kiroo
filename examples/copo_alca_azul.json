@@ -1,0 +1,25 @@
+{
+  "name": "Copo com alça",
+  "variant": "azul-claro",
+  "affiliate_link": "https://br.shp.ee/us6a5c9l?fromSource=copy_link&smtt=0.0.9",
+  "category": "casa/cozinha",
+  "references": [
+    {"path": "assets/produtos/copo_alca/frente.jpg", "role": "front", "source": "official_listing", "note": "foto oficial do anúncio"},
+    {"path": "assets/produtos/copo_alca/lateral.jpg", "role": "side", "source": "official_listing"},
+    {"path": "assets/produtos/copo_alca/tampa.jpg", "role": "lid", "source": "official_listing"}
+  ],
+  "visual_attributes": {
+    "cor": "azul-claro",
+    "alça": "lateral",
+    "borda": "metálica",
+    "tampa": "transparente com parte escura",
+    "base": "mais estreita que o corpo"
+  },
+  "claims": [
+    {"field": "cor", "text": "Cor azul-claro", "kind": "verified", "source": "fotos oficiais do anúncio"},
+    {"field": "capacidade", "text": "", "kind": "unknown", "source": "não informado/verificado"},
+    {"field": "conservação térmica", "text": "", "kind": "unknown", "source": "não verificado"}
+  ],
+  "seller_text": null,
+  "notes": "Atributos visuais vêm da gravação de tela descrita no histórico; confirmar com as fotos oficiais antes de rodar."
+}
