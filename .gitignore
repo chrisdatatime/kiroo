@@ -18,3 +18,12 @@ data/
 
 # saída das ferramentas de mapa (SPEC-VIS-001)
 tools/out/
+
+# Personagens LimeZu: arte licenciada, não versionar
+/assets/characters/
+
+# Imagens da home geradas da arte LimeZu (tools/render_home.py)
+/frontend/src/assets/home/
+
+# Configuração local do editor
+/.vscode/
