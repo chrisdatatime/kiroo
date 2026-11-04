@@ -5,6 +5,7 @@ import { buildWorld, usedTilesets } from '../src/game/world/tmjWorld.js';
 import { ROOMS as META, tilesOf } from '../src/game/map.js';
 import { bfs } from '../src/game/geometry.js';
 import { pickZoom, tagScale, tagPos } from '../src/game/phaser/zoom.js';
+import { initialAgent, stepSeated } from '../src/game/agentLife.js';
 
 const tmj = JSON.parse(readFileSync(new URL('../../assets/maps/office.tmj', import.meta.url), 'utf-8'));
 const { GRID, ROOMS, CHAIRS, BLOCKED, SPOTS, SPAWN } = buildWorld(tmj, META);
@@ -77,7 +78,23 @@ assert.ok(seatsIn('videos', 'visitor').length === 1, 'vídeos tem cadeira de vis
 assert.equal(new Set(CHAIRS.map((c) => c.id)).size, CHAIRS.length, 'assentos com ids únicos');
 const agentSeat = CHAIRS.find((c) => c.kind === 'agent' && c.agent === 'beto');
 assert.ok(agentSeat, 'cadeira do Beto');
-SPOTS.forEach((s) => assert.ok(reach(s, [agentSeat.x, agentSeat.y], (u, v) => pass(u, v) || (u === agentSeat.x && v === agentSeat.y)), `Beto volta de ${s}`));
+// Fase 6: agentes fixos. Cada um fica sempre na cadeira (kind agent) da própria sala, em qualquer estado e por muitos passos;
+// spots de corredor/pátio não são mais usados por agente (só o jogador navega).
+const inRoom = (r, i, j) => i >= r.x0 && i <= r.x1 && j >= r.y0 && j <= r.y1;
+let seed = 7; const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+Object.entries(SETORES).forEach(([id, agent]) => {
+  const r = ROOMS.find((q) => q.id === id);
+  assert.ok(r.seat && inRoom(r, r.seat[0], r.seat[1]), `cadeira de ${agent} dentro de ${id}`);
+  const chair = CHAIRS.find((c) => c.kind === 'agent' && c.agent === agent);
+  assert.ok(chair && chair.room === id && chair.x === r.seat[0] && chair.y === r.seat[1], `${agent}: assento do mapa = estação`);
+  let st = initialAgent(r.seat, rand);
+  for (let k = 0; k < 400; k++) {
+    st = stepSeated(r.seat, st, ['idle', 'work', 'need'][Math.floor(rand() * 3)], rand);
+    assert.ok(st.i === r.seat[0] && st.j === r.seat[1] && !st.path.length && !st.moving, `${agent} saiu da cadeira no passo ${k}`);
+    assert.ok(inRoom(r, st.i, st.j), `${agent} fora de ${id}`);
+    assert.ok(!SPOTS.some((s) => s[0] === st.i && s[1] === st.j), `${agent} num spot`);
+  }
+});
 
 // Fase 2b-2: escala compacta (salas ~10x8, corredores de 3 tiles) e câmera 1x em telas largas
 assert.ok(GRID.C <= 40 && GRID.R <= 32, `mapa compacto (${GRID.C}x${GRID.R})`);
