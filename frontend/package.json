@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "brand:assets": "node scripts/brand-assets.mjs"
+    "brand:assets": "node scripts/brand-assets.mjs",
+    "check:brand": "node scripts/check-brand.mjs",
+    "test": "node scripts/run-tests.mjs"
   },
   "dependencies": {
     "@fontsource/geist-mono": "^5.2.7",
