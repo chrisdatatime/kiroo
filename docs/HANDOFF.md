@@ -1,7 +1,38 @@
 # HANDOFF — migração visual do Kiroo (SPEC-VIS-001)
 
+> Antes: Pivoo (renomeado para Kiroo em 2026-11)
+
+## Marca Kiroo (rebrand 2026-11, branch `chore/rebrand-kiroo`)
+- **Arquivos oficiais:** `src/img/` (wordmark, ícone de app, símbolo, avatar social, favicon; PNG e `svg/`). Não redesenhar: usar como estão.
+  Faltam e não foram improvisadas: wordmark monocromático em SVG para fundo laranja (só existe PNG `com-fundo`) e versões para e-mail em HTML.
+- **Ícones gerados por script:** `cd frontend && npm run brand:assets` (`scripts/brand-assets.mjs`, usa `@resvg/resvg-js`). Lê `src/img/svg/` e
+  regrava `frontend/public/` (favicon.svg com `prefers-color-scheme`, favicon.ico 16+32, apple-touch-icon 180, icon-192/512, icon-maskable-512,
+  og-image 1200x630) e copia os SVG usados pela interface para `frontend/src/assets/brand/`. O servidor Python entrega esses arquivos da raiz do
+  `dist` por lista fechada (`BRAND_FILES` em `web/server.py`); `manifest.webmanifest` está em `frontend/public/`.
+- **Uso:** wordmark (`wordmark-preto-laranja.svg`) no painel do app com 22 px de altura, login, home, Sobre e boas-vindas do tour; versão
+  `branco-laranja` só sobre `#0E0E10` (rodapé da home, painel antigo `/painel`). Ícone de app no trilho; cabeça no favicon e no estado dos agentes.
+  O laranja do logo é só a cabeça. Logotipo nunca digitado em outra fonte.
+- **Tokens** (`frontend/src/styles.css`, `:root`): `--kiroo-ink #0E0E10`, `--kiroo-orange #FF5B2E`, `--kiroo-paper #FAFAF8`,
+  `--kiroo-canvas #E9E8E4`, `--surface #FFFFFF`, `--border-color #E7E7E4`, `--muted-bg #F2F2EF`, `--text-muted #77777C`, `--text-faint #9A9AA0`,
+  `--idle #C9C9C4`, `--dark-border #2A2A2E`. shadcn: background = papel, foreground = tinta, primary = tinta com texto papel, border/input = borda,
+  muted = muted-bg, ring = laranja. Tema escuro definido em `.kiroo-dark`, **não ativado**. `shell.css` (`.pv`), `--pw-*` (mundo Phaser),
+  `--ob-*`, `--au-*` e a home (`.lp`) apontam para os mesmos valores; `game/phaser/theme.js` espelha para o canvas.
+- **Regra do laranja:** só agente ativo, foco e "precisa de você". Nunca em áreas grandes. Laranja sobre branco dá ~3:1: nada de texto pequeno
+  laranja sobre fundo claro (só ícone ou texto grande/negrito). Texto sobre laranja é sempre tinta (~6:1). Botão primário é tinta.
+- **Estado dos agentes:** cabeça de 12 px (`shell/AgentHead.jsx`: `AgentHead`, `AgentStatus`), laranja = trabalhando/precisa de você,
+  `#C9C9C4` = livre/pausa. Usada na Central, Equipe, painel lateral e hover cards/chat do mundo. Rótulo do futuro botão de criar agente:
+  **"Contratar agente"** (ainda não existe botão; entra na 7.3).
+- **Fontes:** Instrument Sans 400–700 e Geist Mono 400–500 via `@fontsource` (auto-hospedadas; nada de Google Fonts em runtime). O Phaser
+  espera `document.fonts.load` antes de redesenhar as pills de nome.
+- **Fundo do mundo** fora do mapa: `#E9E8E4` (padrão). `?world=phaser&fundo=menta` mostra o menta antigo para comparar
+  (`docs/fundo-E9E8E4.jpg` × `docs/fundo-menta.jpg`). Decisão pendente do Chris; depois disso, apagar a opção `fundo=menta`.
+- **Guard:** `npm run check:brand` (`frontend/scripts/check-brand.mjs`) falha se o nome antigo aparecer em arquivo versionado (conteúdo, bytes de
+  binário ou nome de arquivo). Allowlist: só a nota acima. `npm test` roda o guard + testes node; `.github/workflows/check.yml` roda no CI.
+- **O que não mudou de propósito:** chaves `bc.*` do localStorage (nome antigo ByteCerto, sem a marca), cookies `studio_session`/`studio_oauth`,
+  tabelas do banco, slugs dos agentes, pasta `shopee-video-studio` e o pacote Python `studio`. Nada persistido tinha o nome antigo, então não houve migração.
+
 > **2026-11-04 — reavaliação de produto:** diagnóstico, visão e plano em [VISAO_PRODUTO.md](VISAO_PRODUTO.md). Fase 0 entregue: shell com Central, Missão, Equipe e Escritório
-> (`frontend/src/shell/`). Pendente: validar no seu navegador; `tests/minigames.test.mjs` segue falhando (já falhava antes).
+> (`frontend/src/shell/`). Pendente: validar no seu navegador; `tests/minigames.test.mjs` precisa do caminho do módulo como argumento: rode os testes com `npm test` (frontend).
 
 ## Arte licenciada fora do git: como chega ao deploy (2026-11-04)
 Três pastas **não estão no git** (licença LimeZu) e entram no **build**, não no servidor:

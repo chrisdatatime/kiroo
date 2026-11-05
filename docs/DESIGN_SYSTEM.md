@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-O Design System separa a interface SaaS do universo visual do escritório sem criar dois produtos. O shell administrativo usa superfícies precisas, tipografia Geist, densidade moderada e movimento discreto. O escritório preserva a pixel art e os componentes `g-*` durante a migração.
+O Design System separa a interface SaaS do universo visual do escritório sem criar dois produtos. O shell administrativo usa superfícies precisas, tipografia Instrument Sans, densidade moderada e movimento discreto. O escritório preserva a pixel art e os componentes `g-*` durante a migração.
 
 ## Auditoria inicial
 
@@ -21,35 +21,40 @@ O Design System separa a interface SaaS do universo visual do escritório sem cr
 - O alias `@/*` aponta para `frontend/src/*`.
 - Components shadcn são código do produto: devem ser revisados e personalizados, não tratados como dependência visual fechada.
 
-## Tokens
+## Tokens (marca Kiroo, 2026-11)
 
-| Papel | Token | Valor inicial |
+| Papel | Token | Valor |
 | --- | --- | --- |
-| Marca/estrutura | `--primary`, `--kiroo-ink` | `#17234B` |
-| Ação prioritária | `--kiroo-lime` | `#D5F45B` |
-| Canvas SaaS | `--background` | `#F6F7FA` |
-| Superfície | `--card` | `#FFFFFF` |
-| Texto secundário | `--muted-foreground` | `#626B87` |
-| Linha | `--border` | `#DDE1EA` |
-| Foco | `--ring` | `#9AB52F` |
-| Sidebar | `--sidebar` | `#111A38` |
+| Tinta (texto, primário) | `--kiroo-ink`, `--primary`, `--foreground` | `#0E0E10` |
+| Laranja (agente ativo, foco, atenção) | `--kiroo-orange`, `--ring` | `#FF5B2E` |
+| Papel (fundo) | `--kiroo-paper`, `--background` | `#FAFAF8` |
+| Canvas (fundo do mundo) | `--kiroo-canvas` | `#E9E8E4` |
+| Superfície | `--surface`, `--card` | `#FFFFFF` |
+| Linha | `--border-color`, `--border`, `--input` | `#E7E7E4` |
+| Fundo neutro | `--muted-bg`, `--muted` | `#F2F2EF` |
+| Texto secundário | `--text-muted`, `--muted-foreground` | `#77777C` |
+| Texto apagado | `--text-faint` | `#9A9AA0` |
+| Agente livre | `--idle` | `#C9C9C4` |
+| Borda no escuro | `--dark-border` | `#2A2A2E` |
 
 Regras:
 
-- Lima indica ação prioritária, seleção ou atenção; não é cor decorativa ampla.
-- Marinho sustenta navegação, texto e ações institucionais.
-- Estados nunca dependem apenas de cor: usam texto e ícone.
+- Laranja só para agente ativo, foco e "precisa de você"; nunca em áreas grandes. Texto sobre laranja é sempre tinta (~6:1);
+  laranja sobre branco dá ~3:1, então nada de texto pequeno laranja sobre fundo claro.
+- Botão primário é tinta com texto papel ("Contratar agente", "Nova missão").
+- Estados nunca dependem apenas de cor: usam texto e ícone (a cabeça do agente de 12 px para estado de agente).
 - Raios base partem de 12 px; cards principais usam 14–16 px.
 - Sombras são leves e reservadas para elevação real, como menus e command palette.
 - Alvos interativos principais devem ter no mínimo 40 px; navegação usa 44 px ou mais.
+- Só o tema claro está ativo; os tokens escuros ficam em `.kiroo-dark`.
 
 ## Tipografia e ícones
 
-- Interface SaaS: Geist Variable.
-- Escritório e legado: Nunito Sans até a migração de cada componente.
+- Instrument Sans (400–700) para tudo, inclusive textos desenhados no Phaser; Geist Mono (400–500) para rótulos e números.
+  Ambas auto-hospedadas via `@fontsource`.
 - Títulos usam peso 600–650 e tracking negativo discreto.
 - Lucide usa normalmente 16 px, `strokeWidth={1.8}` na navegação e alinhamento central óptico.
-- Emojis não substituem ícones de interface.
+- Emojis não substituem ícones de interface. Logotipo só como imagem (`src/assets/brand/`).
 
 ## Componentes adotados na primeira entrega
 

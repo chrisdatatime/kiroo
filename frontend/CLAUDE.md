@@ -12,6 +12,7 @@ andar e conversar com os agentes é opcional.
 ```bash
 npm install
 npm run build        # gera dist/, servido pelo Python em http://127.0.0.1:8765/
+npm test             # guard da marca (check:brand) + testes node
 npm run dev          # desenvolvimento: Vite em :5173 com proxy de /api e /media para :8765 (BC_API muda o alvo)
 ```
 O servidor Python precisa estar no ar (`studio ui` na raiz do repositório). O painel administrativo antigo fica em `/painel`.
@@ -98,10 +99,11 @@ A importação automática de fotos pelo link **não existe**: as fotos vêm do 
 - Acessibilidade: elementos interativos são `<button>`/`<a>`, foco visível, alvos ≥ 44 px, estados não dependem só de cor.
 
 ## Identidade visual
-Interface (Fase 4b): tema claro, primário índigo `#3B44E6`, texto `#1F2430`, linha `#E3E7EE`, fonte Geist; lima fica só para "precisa de você" (!).
-As classes `g-*` foram redesenhadas com esses tokens. Marca **Kiroo**, assinatura "Seu estúdio ganha vida." Marinho `#17234B`, lima `#D5F45B` (próxima ação, seleção, "!"), creme `#FFF8EC`,
-preto `#111111`, azul-céu `#8ED8F8`. Fonte Nunito Sans. Os **olhos** são o centro da identidade e mudam com o humor do personagem.
-Logos e padrão ficam em `src/assets/` (PNG transparentes enviados pelo Chris; não são vetores). Apoio da pixel art: lavanda `#B8B4DE`. Sem emojis como ícones, sem gradientes roxos.
+Marca **Kiroo** (detalhes e regras em `../docs/HANDOFF.md`, seção "Marca Kiroo"). Tema claro: tinta `#0E0E10` (primário, texto), papel `#FAFAF8`,
+linha `#E7E7E4`, muted `#F2F2EF`; laranja `#FF5B2E` só para agente ativo, foco e "precisa de você" (texto sobre laranja é tinta; nunca texto
+pequeno laranja sobre claro). Fontes Instrument Sans e Geist Mono auto-hospedadas (`@fontsource`). Estado dos agentes: cabeça de 12 px
+(`src/shell/AgentHead.jsx`). Logos em `src/assets/brand/` (SVG oficiais de `../src/img`); ícones e favicon em `public/`, gerados por
+`npm run brand:assets`. `npm run check:brand` barra o nome antigo. A pixel art dos personagens e móveis mantém a paleta própria. Sem emojis como ícones.
 
 ## Sede em pixel art
 > **Migração em andamento (SPEC-VIS-001):** com `?world=phaser` (ou Minha conta → Sobre e créditos) o mundo vem de
