@@ -7,6 +7,7 @@ import wordmark from '../assets/brand/wordmark-preto-laranja.svg';
 import wordmarkOnDark from '../assets/brand/wordmark-branco-laranja.svg';
 import agentHead from '../assets/brand/simbolo-laranja.svg';
 import { ART, AGENT_PINS } from './art.js';
+import { AgentHead } from '../shell/AgentHead.jsx';
 import './landing.css';
 
 // Home pública (antes do login). Estrutura inspirada em escritórios virtuais, com o conteúdo do Kiroo:
@@ -28,13 +29,25 @@ const HERO_TABS = [
   { id: 'conversa', label: 'Conversa', icon: MessageCircle },
 ];
 
-// recortes da sede (em % do mapa) para a seção "Veja a equipe trabalhando"
+// "Acompanhe cada agente": recortes da sede (x, y, largura, em % do mapa) e o texto de cada foco.
+// short = rótulo dos botões compactos no celular.
 const FOCUS = [
-  { id: 'todos', icon: Eye, title: 'Veja quem está em quê', text: 'Cada sala é uma etapa. Quem trabalha fica no monitor; quem espera por você levanta a mão.', box: [0, 0, 100, 100] },
-  { id: 'conversar', icon: MessageCircle, title: 'Puxe conversa com um agente', text: 'Clique na Iris e pergunte da luz da cena 2. Ela explica; quem decide é você.', box: [70, 0, 30, 30] },
-  { id: 'aprovar', icon: Hand, title: 'Aprove no ponto certo', text: 'Direção, gasto e revisão final param e esperam você. O resto anda sozinho, se você quiser.', box: [0, 0, 30, 30] },
-  { id: 'entrega', icon: FileVideo, title: 'Baixe o vídeo montado', text: 'O Beto entrega o vídeo vertical e uma versão sem música para você usar um som em alta.', box: [70, 70, 30, 30] },
+  { id: 'todos', icon: Eye, short: 'Equipe', title: 'Acompanhe cada agente', text: 'Cada sala é uma etapa da produção. Quem está trabalhando aparece com a cabeça laranja; quem precisa de você mostra um “!”.', box: [0, 0, 100, 100] },
+  { id: 'conversar', icon: MessageCircle, short: 'Conversar', title: 'Converse com um agente', text: 'Clique na Iris e pergunte sobre a luz da cena 2. Ela explica; quem decide é você.', box: [70, 0, 30, 30] },
+  { id: 'aprovar', icon: Hand, short: 'Aprovar', title: 'Aprove nos pontos certos', text: 'Direção, gastos e revisão final esperam por você. O resto segue sozinho, se você quiser.', box: [0, 0, 30, 30] },
+  { id: 'entrega', icon: FileVideo, short: 'Baixar', title: 'Baixe o vídeo pronto', text: 'O Beto entrega o vídeo vertical e uma versão sem música, para você usar um som em alta.', box: [70, 70, 30, 30] },
 ];
+
+// Agentes na demonstração: sala = etapa. align: etiqueta presa pela ponta perto das bordas da sede. state: work | need | idle (mesma leitura do app: cabeça laranja = ativo).
+const CREW = [
+  { id: 'nina', name: 'Nina', step: 'Ficha', state: 'need', align: 'start' },
+  { id: 'theo', name: 'Theo', step: 'Direção', state: 'idle' },
+  { id: 'iris', name: 'Iris', step: 'Imagens', state: 'work' },
+  { id: 'lia', name: 'Lia', step: 'Vídeos', state: 'work', align: 'end' },
+  { id: 'rui', name: 'Rui', step: 'Revisão', state: 'idle' },
+  { id: 'beto', name: 'Beto', step: 'Edição', state: 'idle' },
+];
+const STATE_LABEL = { work: 'trabalhando', need: 'precisa de você', idle: 'livre' };
 
 const PILOT = [
   { id: 'manual', label: 'Manual', line: 'Você aprova cada passo.', text: 'Direção, cada etapa paga e cada imagem passam por você. Se o Rui achar um problema, ele avisa em vez de refazer.' },
@@ -136,57 +149,108 @@ function HeroScene() {
   );
 }
 
+function useNarrow(q = '(max-width: 640px)') {
+  const get = () => typeof window !== 'undefined' && !!window.matchMedia && window.matchMedia(q).matches;
+  const [n, setN] = React.useState(get);
+  React.useEffect(() => {
+    if (!window.matchMedia) return undefined;
+    const m = window.matchMedia(q), h = () => setN(m.matches);
+    if (m.addEventListener) m.addEventListener('change', h); else m.addListener(h);
+    return () => { if (m.removeEventListener) m.removeEventListener('change', h); else m.removeListener(h); };
+  }, [q]);
+  return n;
+}
+
+// Etiqueta de um agente na sede. Fica dentro da camada com zoom: --inv devolve o tamanho real na tela.
+function CrewPin({ a, dim }) {
+  const p = AGENT_PINS[a.id];
+  return (
+    <span className={'lp-crew' + (a.align ? ' is-' + a.align : '') + (dim ? ' is-dim' : '')} data-state={a.state} style={{ left: p.x + '%', top: p.y + '%' }}>
+      <span className="lp-crew-tag">
+        <AgentHead active={a.state !== 'idle'} size={12} />
+        <strong>{a.name}</strong><span className="lp-crew-step">{a.step}</span>
+        {a.state === 'need' && <b className="lp-crew-need" aria-hidden="true">!</b>}
+      </span>
+    </span>
+  );
+}
+
 function FocusScene() {
   const [k, setK] = React.useState(0);
+  const narrow = useNarrow();
   const f = FOCUS[k];
   const [x, y, w] = f.box;
   const scale = 100 / w;
+  // no celular, a visão geral não encolhe a sede inteira: ela fica maior e rola na horizontal
+  const pan = narrow && f.id === 'todos';
+  const viewRef = React.useRef(null);
+  React.useEffect(() => { if (viewRef.current) viewRef.current.scrollLeft = 0; }, [pan]);
+  const onKey = (e) => {
+    const d = e.key === 'ArrowDown' || e.key === 'ArrowRight' ? 1 : e.key === 'ArrowUp' || e.key === 'ArrowLeft' ? -1 : 0;
+    if (!d) return;
+    e.preventDefault();
+    const n = (k + d + FOCUS.length) % FOCUS.length;
+    setK(n);
+    const btn = e.currentTarget.querySelectorAll('button')[n];
+    if (btn) btn.focus();
+  };
   return (
     <div className="lp-focus">
-      <ul className="lp-focus-list">
+      <ul className="lp-focus-list" aria-label="O que ver na demonstração" onKeyDown={onKey}>
         {FOCUS.map((it, i) => {
-          const Icon = it.icon;
+          const Icon = it.icon, on = k === i;
           return (
             <li key={it.id}>
-              <button type="button" className="lp-focus-btn" aria-pressed={k === i} onClick={() => setK(i)}>
-                <span className="lp-focus-ic"><Icon size={20} strokeWidth={1.8} aria-hidden="true" /></span>
-                <span><strong>{it.title}</strong>{k === i && <span className="lp-focus-txt">{it.text}</span>}</span>
+              <button type="button" className="lp-focus-btn" aria-pressed={on} aria-label={it.title} onClick={() => setK(i)}>
+                <span className="lp-focus-ic"><Icon size={18} strokeWidth={1.8} aria-hidden="true" /></span>
+                <span className="lp-focus-body">
+                  <strong><span className="lp-focus-long">{it.title}</span><span className="lp-focus-short">{it.short}</span></strong>
+                  <span className="lp-focus-more" aria-hidden={!on}><span className="lp-focus-txt">{it.text}</span></span>
+                </span>
               </button>
             </li>
           );
         })}
       </ul>
-      <div className="lp-focus-view" aria-live="polite">
-        <Sede className="lp-zoom" style={{ transform: `scale(${scale}) translate(${-x}%, ${-y}%)` }} />
-        {f.id === 'conversar' && (
-          <div className="lp-card lp-float lp-float-r">
-            <p className="lp-bubble is-me">Que luz você vai usar na cena 2?</p>
-            <p className="lp-bubble">Luz de janela, da esquerda, igual à cena 1.</p>
-          </div>
-        )}
-        {f.id === 'aprovar' && (
-          <div className="lp-card lp-float lp-float-r">
-            <div className="lp-card-kicker"><b className="lp-need is-inline">!</b> Nina precisa de você</div>
-            <div className="lp-card-title">Liberar as imagens</div>
-            <p className="lp-small">3 imagens · estimativa de 12 créditos. Seu limite nesta produção é 40.</p>
-            <div className="lp-row"><span className="lp-fake-btn is-lime">Liberar</span><span className="lp-fake-btn">Ajustar antes</span></div>
-          </div>
-        )}
-        {f.id === 'entrega' && (
-          <div className="lp-card lp-float lp-float-l">
-            <div className="lp-card-kicker">Entrega pronta</div>
-            <div className="lp-file"><FileVideo size={18} aria-hidden="true" /><span>video-final.mp4</span><em>9:16</em></div>
-            <div className="lp-file"><Music2 size={18} aria-hidden="true" /><span>video-sem-musica.mp4</span><em>9:16</em></div>
-          </div>
-        )}
-        {f.id === 'todos' && (
-          <div className="lp-legend">
-            <span><span className="lp-dot is-work" />trabalhando</span>
-            <span><span className="lp-dot is-need" />precisa de você</span>
-            <span><span className="lp-dot" />livre</span>
-          </div>
-        )}
-      </div>
+      <figure className="lp-focus-stage">
+        <div className={'lp-focus-view' + (pan ? ' is-pan' : '')} ref={viewRef} aria-live="polite">
+          <Sede className="lp-zoom" style={pan ? undefined : { transform: `scale(${scale}) translate(${-x}%, ${-y}%)`, '--inv': 1 / scale }}>
+            <div className="lp-crew-layer">
+              {CREW.map((a) => <CrewPin key={a.id} a={a} dim={f.id !== 'todos'} />)}
+            </div>
+          </Sede>
+          {f.id === 'conversar' && (
+            <div className="lp-card lp-float lp-float-r">
+              <p className="lp-bubble is-me">Que luz você vai usar na cena 2?</p>
+              <p className="lp-bubble">Luz de janela, da esquerda, igual à cena 1.</p>
+            </div>
+          )}
+          {f.id === 'aprovar' && (
+            <div className="lp-card lp-float lp-float-r">
+              <div className="lp-card-kicker"><b className="lp-need is-inline">!</b> Nina precisa de você</div>
+              <div className="lp-card-title">Liberar as imagens</div>
+              <p className="lp-small">3 imagens · estimativa de 12 créditos. Seu limite nesta produção é 40.</p>
+              <div className="lp-row"><span className="lp-fake-btn is-lime">Liberar</span><span className="lp-fake-btn">Ajustar antes</span></div>
+            </div>
+          )}
+          {f.id === 'entrega' && (
+            <div className="lp-card lp-float lp-float-l">
+              <div className="lp-card-kicker">Entrega pronta</div>
+              <div className="lp-file"><FileVideo size={18} aria-hidden="true" /><span>video-final.mp4</span><em>9:16</em></div>
+              <div className="lp-file"><Music2 size={18} aria-hidden="true" /><span>video-sem-musica.mp4</span><em>9:16</em></div>
+            </div>
+          )}
+        </div>
+        <figcaption className="lp-focus-cap">
+          <p className="lp-focus-note">{f.text}</p>
+          <ul className="lp-legend" aria-label="Legenda">
+            {['work', 'need', 'idle'].map((st) => (
+              <li key={st}><AgentHead active={st !== 'idle'} size={12} />{st === 'need' && <b className="lp-crew-need is-sm" aria-hidden="true">!</b>}{STATE_LABEL[st]}</li>
+            ))}
+            {pan && <li className="lp-legend-hint">Arraste para ver as salas</li>}
+          </ul>
+        </figcaption>
+      </figure>
     </div>
   );
 }
@@ -252,7 +316,7 @@ export default function Landing({ onEnter, signupOpen }) {
           <div className="lp-head">
             <p className="lp-kicker">Escritório virtual</p>
             <h2 className="lp-h2">Veja a equipe trabalhando</h2>
-            <p className="lp-sub">Nada de tela de "processando". Cada etapa tem uma sala, cada sala tem alguém, e você sabe onde o seu vídeo está.</p>
+            <p className="lp-sub">Nada de tela de “processando”. Cada etapa tem uma sala, cada sala tem um agente, e você sempre sabe onde está o seu vídeo.</p>
           </div>
           <FocusScene />
         </section>
