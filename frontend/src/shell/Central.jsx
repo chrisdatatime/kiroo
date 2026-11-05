@@ -63,7 +63,7 @@ export default function Central({ v }) {
               {n ? (n === 1 ? 'Há uma decisão aguardando sua análise.' : `Há ${n} decisões aguardando sua análise.`) : v.hasProd ? 'Nada precisa de você agora. A equipe segue trabalhando.' : 'Sua equipe está pronta para transformar um produto em uma nova missão.'}
             </p>
           </div>
-          {!v.hasProd && <Button className="h-10 bg-[var(--pivoo-ink)] px-4 text-white hover:bg-[#22305f]" onClick={() => { v.setView('missao'); v.newProd(); }}><Plus />Criar primeira missão</Button>}
+          {!v.hasProd && <Button className="h-10 bg-[var(--kiroo-ink)] px-4 text-white hover:bg-[#22305f]" onClick={() => { v.setView('missao'); v.newProd(); }}><Plus />Criar primeira missão</Button>}
         </header>
 
         <section aria-label="Visão geral" data-tour="overview" className="grid gap-3 sm:grid-cols-3">
@@ -82,7 +82,7 @@ export default function Central({ v }) {
         </section>
 
         <section aria-labelledby="central-attention" data-tour="needs-you" className="space-y-3">
-          <SectionHeading eyebrow="Prioridades" title="Precisa de você" description="Aprovações, liberações de gasto e decisões da equipe aparecem aqui." action={n > 0 ? <Badge className="bg-[var(--pivoo-lime)] text-[var(--pivoo-ink)]">{n} {n === 1 ? 'pendência' : 'pendências'}</Badge> : null} />
+          <SectionHeading eyebrow="Prioridades" title="Precisa de você" description="Aprovações, liberações de gasto e decisões da equipe aparecem aqui." action={n > 0 ? <Badge className="bg-[var(--kiroo-lime)] text-[var(--kiroo-ink)]">{n} {n === 1 ? 'pendência' : 'pendências'}</Badge> : null} />
           <Card className="gap-0 py-0">
             {n === 0 && (
               <div className="flex min-h-32 items-center gap-4 px-5 py-6">
@@ -95,7 +95,7 @@ export default function Central({ v }) {
               <div key={a.id} className={`flex flex-col gap-4 px-5 py-4 sm:flex-row sm:items-center ${index ? 'border-t border-border' : ''}`}>
                 {a.room ? <Avatar look={a.room.look} /> : <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-amber-50 text-amber-700"><AlertCircle className="size-5" /></span>}
                 <div className="min-w-0 flex-1"><div className="font-semibold">{a.title}{a.who ? ` · ${a.who}` : ''}</div><p className="mt-1 text-sm leading-relaxed text-muted-foreground">{a.text}</p></div>
-                <Button className="h-9 shrink-0 bg-[var(--pivoo-lime)] text-[var(--pivoo-ink)] hover:bg-[var(--pivoo-lime-strong)]" onClick={a.room ? a.room.work : v.goNext}>{a.room ? 'Resolver' : 'Ver pausa'}<ArrowRight /></Button>
+                <Button className="h-9 shrink-0 bg-[var(--kiroo-lime)] text-[var(--kiroo-ink)] hover:bg-[var(--kiroo-lime-strong)]" onClick={a.room ? a.room.work : v.goNext}>{a.room ? 'Resolver' : 'Ver pausa'}<ArrowRight /></Button>
               </div>
             ))}
           </Card>
@@ -114,7 +114,7 @@ export default function Central({ v }) {
                 <CardContent className="flex flex-1 flex-col justify-between gap-6">
                   <div><div className="mb-2 flex items-center justify-between text-xs font-medium text-muted-foreground"><span>Progresso da missão</span><span>{pl.progress}%</span></div><Progress value={pl.progress} className="h-2" /></div>
                   <div className="rounded-xl border border-border bg-muted/45 p-4"><div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-[.08em] text-muted-foreground"><Sparkles className="size-3.5" />Próxima ação</div><div className="font-medium">{v.nextLong || 'A equipe está trabalhando sem depender de você.'}</div></div>
-                  <div className="flex flex-wrap gap-2">{v.nextLabel && <Button className="bg-[var(--pivoo-lime)] text-[var(--pivoo-ink)] hover:bg-[var(--pivoo-lime-strong)]" onClick={v.goNext}>{v.nextLabel}<ArrowRight /></Button>}<Button variant="outline" onClick={() => v.setView('missao')}><Play />Ver fluxo</Button></div>
+                  <div className="flex flex-wrap gap-2">{v.nextLabel && <Button className="bg-[var(--kiroo-lime)] text-[var(--kiroo-ink)] hover:bg-[var(--kiroo-lime-strong)]" onClick={v.goNext}>{v.nextLabel}<ArrowRight /></Button>}<Button variant="outline" onClick={() => v.setView('missao')}><Play />Ver fluxo</Button></div>
                 </CardContent>
               </>) : (
                 <CardContent className="flex flex-1 flex-col items-center justify-center py-12 text-center"><span className="mb-3 grid size-11 place-items-center rounded-xl bg-muted text-muted-foreground"><Sparkles className="size-5" /></span><div className="font-semibold">Sem missão aberta</div><p className="mt-1 max-w-sm text-sm text-muted-foreground">Comece com o produto; o Kiroo organiza direção, geração, revisão e entrega.</p><Button className="mt-5" onClick={() => { v.setView('missao'); v.newProd(); }}><Plus />Começar missão</Button></CardContent>

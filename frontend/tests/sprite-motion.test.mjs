@@ -20,15 +20,15 @@ const tag = { setScale: () => tag, setPosition: () => tag, setVisible: () => tag
 scene.cameras = { main: { zoom: 1 } }; scene.T = 32;
 const agent = { sheet: 'sheet', img: image, tag: { box: tag }, x: 100, y: 100,
   dir: 'left', dist: 16, walking: true, seated: true, work: true, anim: 'type', foot: 104 };
-scene.drawPivoo(agent, 1);
+scene.drawKiroo(agent, 1);
 assert.equal(Math.floor(image.setFrameArgs[0] / 16), 6, 'caminhar (esquerda) tem prioridade sobre trabalho/sentado');
 agent.walking = false; agent.seated = false; agent.dir = 'down';
-scene.drawPivoo(agent, 0); assert.equal(image.setFrameArgs[0], 320);
-scene.drawPivoo(agent, 0.1); assert.equal(image.setFrameArgs[0], 320, 'trabalho a 8 fps');
-scene.drawPivoo(agent, 0.13); assert.equal(image.setFrameArgs[0], 321);
+scene.drawKiroo(agent, 0); assert.equal(image.setFrameArgs[0], 320);
+scene.drawKiroo(agent, 0.1); assert.equal(image.setFrameArgs[0], 320, 'trabalho a 8 fps');
+scene.drawKiroo(agent, 0.13); assert.equal(image.setFrameArgs[0], 321);
 agent.work = false; agent.anim = 'idle';
-scene.drawPivoo(agent, 0); assert.equal(image.setFrameArgs[0], 0);
-scene.drawPivoo(agent, 0.21); assert.equal(image.setFrameArgs[0], 1, 'espera a 5 fps');
+scene.drawKiroo(agent, 0); assert.equal(image.setFrameArgs[0], 0);
+scene.drawKiroo(agent, 0.21); assert.equal(image.setFrameArgs[0], 1, 'espera a 5 fps');
 
 Object.assign(agent, { init: true, from: [100, 100], to: [132, 100], t0: 0, dur: 1,
   x: 100, y: 100, moveDir: 'right', anim: 'walk', idleSince: 0 });

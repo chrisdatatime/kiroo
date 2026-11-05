@@ -12,7 +12,7 @@ import { charSprite, CW, CH } from '../pixel/characters.js';
 import { usedTilesets } from '../world/tmjWorld.js';
 import { pickZoom, pickLevel, deviceZoom, clampLevel, anchorScroll, snapScroll, tagScale, tagPos, tagPosTop } from './zoom.js';
 import { PW } from './theme.js';
-import { CHARACTER_SHEETS, FW, FH, HEAD, PIVOO_HEAD, PIVOO_FOOT, PIVOO_SCALE, STAND_DY, SIT_DY, characterSheetSpec, pivooFrame, idleFrame, walkFrame, sitFrame, sitSide, phoneFrame, walkPhase, SEAT, seatMode } from './sprites.js';
+import { CHARACTER_SHEETS, FW, FH, HEAD, KIROO_HEAD, KIROO_FOOT, KIROO_SCALE, STAND_DY, SIT_DY, characterSheetSpec, kirooFrame, idleFrame, walkFrame, sitFrame, sitSide, phoneFrame, walkPhase, SEAT, seatMode } from './sprites.js';
 
 export { pickZoom };
 
@@ -26,8 +26,8 @@ class OfficeScene extends Phaser.Scene {
     const { tmj, urls } = this.opts;
     const max = this.renderer.getMaxTextureSize ? this.renderer.getMaxTextureSize() : 4096;
     this.sets = usedTilesets(tmj).filter((t) => {
-      if (!urls[t.name]) { console.warn(`[pivoo] tileset sem arquivo: ${t.name}`); return false; }
-      if (t.imageheight > max || t.imagewidth > max) { console.warn(`[pivoo] ${t.name} (${t.imagewidth}x${t.imageheight}) passa do limite de textura (${max})`); return false; }
+      if (!urls[t.name]) { console.warn(`[kiroo] tileset sem arquivo: ${t.name}`); return false; }
+      if (t.imageheight > max || t.imagewidth > max) { console.warn(`[kiroo] ${t.name} (${t.imagewidth}x${t.imageheight}) passa do limite de textura (${max})`); return false; }
       return true;
     });
     this.sets.forEach((t) => this.load.spritesheet(t.name, urls[t.name], { frameWidth: t.tilewidth, frameHeight: t.tileheight }));
@@ -235,7 +235,7 @@ class OfficeScene extends Phaser.Scene {
     const place = (id, c, look, dur, tag, lime) => {
       const e = this.ensureChar(id); seen.add(id);
       this.setTag(e, tag, lime);
-      const compact = this.sheetKinds[id] === 'pivoo';
+      const compact = this.sheetKinds[id] === 'kiroo';
       const tx = (c.i + 0.5) * T, ty = (c.j + 1) * T - (c.seated && !compact ? 6 : 2) * S;
       // A direção vem do passo lógico, não de resíduos de interpolação ou da altura ao sentar.
       const di = c.i - (e.tileI ?? c.i), dj = c.j - (e.tileJ ?? c.j);
@@ -330,22 +330,22 @@ class OfficeScene extends Phaser.Scene {
   }
 
   // Agentes Kiroo: folha 16x48 de quadros 32x32 (ver sprites.js). Não tem as faixas da folha LimeZu.
-  drawPivoo(e, t) {
+  drawKiroo(e, t) {
     const inv = tagScale(this.cameras.main.zoom, window.devicePixelRatio || 1);
     const action = e.walking ? 'walk' : (e.work || e.anim === 'type' ? 'work' : 'idle');
     // caminhada: 16 quadros = 2 passos = 2 tiles; espera 8 quadros a ~5 fps; trabalho 16 quadros a ~8 fps
     const phase = this.reduced ? 0 : (e.walking
       ? walkPhase(e.dist || 0, this.T, 2)
       : action === 'work' ? (t * 8 / 16) % 1 : (t * 5 / 8) % 1);
-    const frame = pivooFrame(e.dir, phase, action);
+    const frame = kirooFrame(e.dir, phase, action);
     const lift = e.anim === 'happy' && !this.reduced ? Math.round(Math.abs(Math.sin(t * 6)) * 3) : 0;
     if (e.img.texture.key !== e.sheet) e.img.setTexture(e.sheet);
-    e.img.setCrop().setFrame(frame).setOrigin(0.5, PIVOO_FOOT / 32).setScale(PIVOO_SCALE);
+    e.img.setCrop().setFrame(frame).setOrigin(0.5, KIROO_FOOT / 32).setScale(KIROO_SCALE);
     const rx = Math.round(e.x);
     const ry = Math.round(e.y - lift);
     e.img.setPosition(rx, ry).setVisible(true);
     if (e.cover) e.cover.setVisible(false);
-    e.tag.box.setScale(inv).setPosition(...tagPosTop(rx, ry, PIVOO_HEAD * PIVOO_SCALE, inv)).setVisible(true);
+    e.tag.box.setScale(inv).setPosition(...tagPosTop(rx, ry, KIROO_HEAD * KIROO_SCALE, inv)).setVisible(true);
     e.img.setDepth(e.seated && !e.walking ? e.foot + 1 : e.y);
   }
 
@@ -391,7 +391,7 @@ class OfficeScene extends Phaser.Scene {
   }
 
   drawChar(e, t) {
-    if (e.sheet) return e.sheetKind === 'pivoo' ? this.drawPivoo(e, t) : this.drawHuman(e, t);
+    if (e.sheet) return e.sheetKind === 'kiroo' ? this.drawKiroo(e, t) : this.drawHuman(e, t);
     if (e.img.originY !== 23 / CH) e.img.setOrigin(0.5, 23 / CH).setScale(this.S);
     const anim = e.anim || 'idle';
     let pose = 'stand', frame = 0, lift = 0;

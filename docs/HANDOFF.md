@@ -18,7 +18,7 @@ Três pastas **não estão no git** (licença LimeZu) e entram no **build**, nã
 ## Folhas Kiroo dos agentes (2026-11-04, 512×1536)
 `assets/characters/{nina,theo,iris,rui,lia,beto}.png` = grade exata 16×48 de quadros 32×32 (corpo em y 3..29, pé em y=29). Carregadas como spritesheet normal (sem normalizador;
 `spriteLayout.js` removido). 8 direções horárias S,SW,W,NW,N,NE,E,SE; usadas só as 4 cardeais. Linhas 0-3 = espera (8 quadros/direção), 4-11 = caminhada (16/direção, 1 ciclo = 2 tiles),
-20 = prancheta de frente (usada como "trabalhando"). Mapeamento em `sprites.js` (`pivooFrame`). Não há guia oficial dessas folhas: o resto das linhas (corrida?, sono, "!", rindo, carregando) foi visto mas **não mapeado**; sentado de frente/costas e "precisa de você" ainda usam espera.
+20 = prancheta de frente (usada como "trabalhando"). Mapeamento em `sprites.js` (`kirooFrame`). Não há guia oficial dessas folhas: o resto das linhas (corrida?, sono, "!", rindo, carregando) foi visto mas **não mapeado**; sentado de frente/costas e "precisa de você" ainda usam espera.
 
 ## Estado atual
 Fase 1 entregue (pipeline + sala de Edição só com tiles do LimeZu).
@@ -54,7 +54,7 @@ Entrada: só o lugar da direita do sofá (o da esquerda não tem saída livre). 
 Peças novas (`tiles.yaml`, `set: interiors`, faixa 341-365 e 280-282): `sofa_blue/gray/brown/lilac`, `armchair_blue`, `table_round_light/orange`, `pingpong_blue`,
 `puff_blue/yellow/red`, `tv_wall`, `fridge`, `coffee_maker`. Os retângulos foram conferidos numa folha das peças antes de usar.
 **Desvios / a confirmar:**
-1. A pasta `Theme_Sorter_32x32` não estava em `pivoo-assets-ref/`: achei em `Downloads/moderninteriors-win/1_Interiors/32x32/`. O `Interiors_32x32.png` do projeto **não segue a ordem do Theme_Sorter** (ex.: Basement está na linha 341, Cozinha na 257, Pesca na 123), então localizei por correspondência de tiles. Não usei as imagens do Theme_Sorter, só o catálogo ampliado.
+1. A pasta `Theme_Sorter_32x32` não estava em `kiroo-assets-ref/`: achei em `Downloads/moderninteriors-win/1_Interiors/32x32/`. O `Interiors_32x32.png` do projeto **não segue a ordem do Theme_Sorter** (ex.: Basement está na linha 341, Cozinha na 257, Pesca na 123), então localizei por correspondência de tiles. Não usei as imagens do Theme_Sorter, só o catálogo ampliado.
 2. **Não existe peça de balcão de recepção nem de quadro de cortiça**: usei a mesa lavanda comprida e o quadro branco com gráfico. Se quiser peças de verdade, preciso que você aponte ou eu procuro no Grocery/Classroom.
 3. Sofás do Interiors só existem **de frente** (encosto ao norte): por isso ficam encostados na parede norte e a TV fica na mesma parede; não há sofá virado para a TV. Também não existe sofá de costas.
 4. Mesas redondas e pingue-pongue têm largura visual de 1,5 e 2 tiles dentro de um retângulo de 3 (as bordas são só sombra/borda); a colisão cobre os 3 tiles.
@@ -274,7 +274,7 @@ Só `room_builder_office` (chão e parede) e `modern_office` (móveis); nenhum t
 2. `chair_swivel` é a cadeira de encosto alto vista de frente (col 2, lin 8-9); não existe giratória de costas no tileset.
 3. `glass_divider` está mapeada (col 0-3, lin 26-28) mas não foi usada: não achei lugar onde não atrapalhe as estações.
 4. O chão fora das faixas laterais/sul aparece como piso (as peças de parede são finas). Decidir na Fase 2 se vira corredor.
-5. Referências: só havia `Office_Design_1.gif` e `_2.gif` em `pivoo-assets-ref/` (a pasta `6_Office_Designs` não existe).
+5. Referências: só havia `Office_Design_1.gif` e `_2.gif` em `kiroo-assets-ref/` (a pasta `6_Office_Designs` não existe).
 
 ## Itens da antiga lista "Falta para a Fase 2"
 Todos resolvidos na Fase 2 (acima). Decisão sobre a câmera: **a câmera segue o personagem; a sede não encolhe para caber

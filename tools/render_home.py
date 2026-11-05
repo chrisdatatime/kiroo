@@ -21,7 +21,7 @@ CHARS = ROOT / "assets" / "characters"
 OUT = ROOT / "frontend" / "src" / "assets" / "home"
 AGENTS = ["nina", "theo", "iris", "lia", "rui", "beto"]
 FLIP_H, FLIP_V, FLIP_D = 0x80000000, 0x40000000, 0x20000000
-SCALE, FOOT = 2, 29  # igual ao Phaser (sprites.js: PIVOO_SCALE, PIVOO_FOOT)
+SCALE, FOOT = 2, 29  # igual ao Phaser (sprites.js: KIROO_SCALE, KIROO_FOOT)
 
 
 def main() -> None:

@@ -87,14 +87,14 @@ class MusicLibrary:
                 "items": [{"title": str(i.get("title", "")), "artist": str(i.get("artist", "")), "platform": str(i.get("platform", "")), "region": str(i.get("region", "")),
                            "source": str(i.get("source", "")), "checked_at": str(i.get("checked_at", data.get("updated_at") or "")), "embeddable": False} for i in data.get("items", [])]}
 
-    def pivoo(self, wid: str) -> list[dict]:
+    def kiroo(self, wid: str) -> list[dict]:
         favs = {r["track_id"] for r in self.db.conn.execute("SELECT track_id FROM music_favorites WHERE workspace_id=?", (wid,))}
         out = []
         for t in sound.library(self.s.assets_dir):
             meta = BUILTIN_META.get(t["id"], {})
             out.append({"id": t["id"], "title": t["title"], "bpm": t.get("bpm"), "mood": t.get("mood"), "genre": meta.get("genre", t.get("genre") or "não informado"),
                         "energy": meta.get("energy", t.get("energy") or "não informada"), "vocal": meta.get("vocal", "não informado"), "duration_s": 32 if t.get("builtin") else t.get("duration_s"),
-                        "license": t.get("license"), "origin": "Sintetizada pelo estúdio" if t.get("builtin") else "Biblioteca licenciada", "tags": meta.get("tags", ""), "favorite": t["id"] in favs, "source": "pivoo"})
+                        "license": t.get("license"), "origin": "Sintetizada pelo estúdio" if t.get("builtin") else "Biblioteca licenciada", "tags": meta.get("tags", ""), "favorite": t["id"] in favs, "source": "kiroo"})
         return out
 
     def mine(self, wid: str) -> list[dict]:
@@ -102,7 +102,7 @@ class MusicLibrary:
                 self.db.conn.execute("SELECT * FROM music_tracks WHERE workspace_id=? ORDER BY created_at DESC", (wid,)).fetchall()]
 
     def track(self, wid: str, track_id: str) -> dict | None:
-        for t in self.pivoo(wid):
+        for t in self.kiroo(wid):
             if t["id"] == track_id:
                 return t
         row = self.db.conn.execute("SELECT * FROM music_tracks WHERE id=? AND workspace_id=?", (track_id, wid)).fetchone()
@@ -189,7 +189,7 @@ class MusicLibrary:
         text = f"{category} {name}".lower()
         favorites = _words(prefs.get("favorites", "")); avoid = _words(prefs.get("avoid", ""))
         ranked = []
-        for t in self.pivoo(wid) + self.mine(wid):
+        for t in self.kiroo(wid) + self.mine(wid):
             hay = _words(" ".join(str(t.get(k) or "") for k in ("title", "mood", "genre", "tags", "collection")))
             if avoid & hay:
                 continue

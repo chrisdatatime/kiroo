@@ -2,7 +2,7 @@
    Superfícies brancas, linha de 1 px cinza-azulada, sombra suave, primário índigo; lima só para "precisa de você" (!).
    O estilo "de jogo" (g-*) foi modernizado em styles.css com os mesmos tokens. */
 .pv {
-  --pivoo-ink: #1F2430; --pivoo-lime: #D5F45B; --pivoo-lime-strong: #C5E846;
+  --kiroo-ink: #1F2430; --kiroo-lime: #D5F45B; --kiroo-lime-strong: #C5E846;
   --ink: #1F2430; --ink-2: #4B5263; --ink-3: #6B7280;
   --canvas: #F4F5F7; --card: #FFFFFF; --line: #E3E7EE; --line-2: #D4DAE4;
   --primary: #3B44E6; --primary-hover: #2F37C9; --primary-soft: #ECEDFD;

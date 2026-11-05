@@ -25,8 +25,8 @@ O Design System separa a interface SaaS do universo visual do escritório sem cr
 
 | Papel | Token | Valor inicial |
 | --- | --- | --- |
-| Marca/estrutura | `--primary`, `--pivoo-ink` | `#17234B` |
-| Ação prioritária | `--pivoo-lime` | `#D5F45B` |
+| Marca/estrutura | `--primary`, `--kiroo-ink` | `#17234B` |
+| Ação prioritária | `--kiroo-lime` | `#D5F45B` |
 | Canvas SaaS | `--background` | `#F6F7FA` |
 | Superfície | `--card` | `#FFFFFF` |
 | Texto secundário | `--muted-foreground` | `#626B87` |

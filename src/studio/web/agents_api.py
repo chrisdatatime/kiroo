@@ -45,7 +45,7 @@ def get_agents(app, path: str, ctx):
             return _reply(200, tr.view(wid, m.group(1)))
         lib = MusicLibrary(db, s)
         if path == "/api/music":
-            return _reply(200, {"trends": lib.trends(), "pivoo": lib.pivoo(wid), "mine": lib.mine(wid), "prefs": _prefs(tr, wid)})
+            return _reply(200, {"trends": lib.trends(), "kiroo": lib.kiroo(wid), "mine": lib.mine(wid), "prefs": _prefs(tr, wid)})
         m = re.fullmatch(r"/api/music/file/([A-Za-z0-9_.-]+)", path)
         if m:
             f = lib.file_of(wid, m.group(1), _ff(s))

@@ -27,7 +27,7 @@ function Track({ t, sel, onPick, onFav, children }) {
 export default function MusicWindow({ v }) {
   const P = v.P;
   const [lib, setLib] = React.useState(null);
-  const [tab, setTab] = React.useState('pivoo');
+  const [tab, setTab] = React.useState('kiroo');
   const [sug, setSug] = React.useState([]);
   const cur = (P && P.edit && P.edit.music_choice) || { mode: 'auto', track_id: null, start_s: 0, volume_db: null, fade_in_s: 0.3, fade_out_s: 0.8, beat_sync: true };
   const [choice, setChoice] = React.useState(cur);
@@ -58,7 +58,7 @@ export default function MusicWindow({ v }) {
       setUp({ title: '', collection: '', mood: '', bpm: '', reference_url: '', authorized: false, file: null }); await load(); pick({ ...t, source: 'mine' }); setMsg('Música guardada no seu espaço privado.');
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
-  const selected = lib && choice.track_id ? [...lib.pivoo, ...lib.mine].find((t) => t.id === choice.track_id) : null;
+  const selected = lib && choice.track_id ? [...lib.kiroo, ...lib.mine].find((t) => t.id === choice.track_id) : null;
   const video = v.delivery && v.delivery['final.mp4'];
 
   return (
@@ -72,7 +72,7 @@ export default function MusicWindow({ v }) {
         {P ? (
           <div className="g-card" style={{ padding: 10, display: 'grid', gap: 8 }}>
             <strong>Trilha de “{P.product.name.slice(0, 50)}”</strong>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{MODES.map(([m, l]) => <button key={m} className="g-chip" aria-pressed={choice.mode === m} onClick={() => { setChoice({ ...choice, mode: m, track_id: m === 'none' || m === 'auto' ? null : choice.track_id }); if (m === 'mine') setTab('mine'); if (m === 'pick') setTab('pivoo'); }}>{l}</button>)}</div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{MODES.map(([m, l]) => <button key={m} className="g-chip" aria-pressed={choice.mode === m} onClick={() => { setChoice({ ...choice, mode: m, track_id: m === 'none' || m === 'auto' ? null : choice.track_id }); if (m === 'mine') setTab('mine'); if (m === 'pick') setTab('kiroo'); }}>{l}</button>)}</div>
             {choice.mode === 'auto' && (sug.length ? <p style={{ margin: 0, fontSize: 13.5 }}>Sugestão: <strong>{sug[0].title}</strong>. {sug[0].reason}</p> : <p style={{ margin: 0, fontSize: 13.5 }}>Sem sugestão disponível.</p>)}
             {choice.mode === 'platform' && <p style={{ margin: 0, fontSize: 13.5 }}>O vídeo sai sem trilha. Adicione “{choice.platform_title}” no editor da plataforma, se ela estiver disponível lá para sua conta.</p>}
             {selected && (
@@ -95,7 +95,7 @@ export default function MusicWindow({ v }) {
         ) : <p style={{ margin: 0 }}>Abra uma produção para aplicar uma trilha. Você já pode ouvir e organizar as músicas.</p>}
 
         <div role="tablist" style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-          {[['alta', 'Em alta'], ['pivoo', 'Biblioteca Kiroo'], ['mine', 'Minhas músicas']].map(([id, l]) => <button key={id} role="tab" aria-selected={tab === id} className="g-tab" style={{ padding: '0 12px' }} onClick={() => setTab(id)}>{l}</button>)}
+          {[['alta', 'Em alta'], ['kiroo', 'Biblioteca Kiroo'], ['mine', 'Minhas músicas']].map(([id, l]) => <button key={id} role="tab" aria-selected={tab === id} className="g-tab" style={{ padding: '0 12px' }} onClick={() => setTab(id)}>{l}</button>)}
           <span style={{ flex: 1 }} />
           <button className="g-btn g-sm" onClick={() => v.openTraining('lia')}>Preferências musicais</button>
         </div>
@@ -112,7 +112,7 @@ export default function MusicWindow({ v }) {
             ))}
           </>
         )}
-        {lib && tab === 'pivoo' && lib.pivoo.map((t) => <Track key={t.id} t={{ ...t, reason: (sug.find((s) => s.id === t.id) || {}).reason }} sel={choice.track_id === t.id} onPick={P ? () => pick(t) : null} onFav={() => fav(t)} />)}
+        {lib && tab === 'kiroo' && lib.kiroo.map((t) => <Track key={t.id} t={{ ...t, reason: (sug.find((s) => s.id === t.id) || {}).reason }} sel={choice.track_id === t.id} onPick={P ? () => pick(t) : null} onFav={() => fav(t)} />)}
         {lib && tab === 'mine' && (
           <>
             <fieldset className="g-card" style={{ padding: 10, display: 'grid', gap: 8 }}>

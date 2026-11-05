@@ -31,7 +31,7 @@ def send(to: str, subject: str, text: str) -> bool:
     user = os.environ.get("STUDIO_SMTP_USER") or ""
     password = os.environ.get("STUDIO_SMTP_PASSWORD") or ""
     msg = EmailMessage()
-    msg["From"] = os.environ.get("STUDIO_MAIL_FROM") or user or "pivoo@localhost"
+    msg["From"] = os.environ.get("STUDIO_MAIL_FROM") or user or "kiroo@localhost"
     msg["To"] = to
     msg["Subject"] = subject
     msg.set_content(text)

@@ -30,7 +30,7 @@ Legenda da última coluna: **Dado** (vira registro do workspace ou do pack), **P
 | `frontend/src/game/data.js` | `AGENTS` (6 objetos com id, nome, função, aba, caneca, look); `TABS` (aba → agente); `STAGES`/`STAGE_LABELS` (11 etapas do vídeo); liga agente → sala por `ROOMS.find(r => r.agent === a.id)` | Equipe vinda de `/api/team` (id, nome, função, avatar, sala, estado). `TABS`, `STAGES` e `STAGE_LABELS` vão para o módulo do pack (`packs/videoShopee.js`). A ligação agente ↔ sala passa a vir da atribuição (`room_assignments`) e não da propriedade do `.tmj` | Dado + Pack |
 | `frontend/src/game/map.js` (canvas) | `ROOMS` com `agent: 'nina'…` e `tab`, nomes e dicas das salas | `agent` e `tab` viram só o *padrão do pack*. Nome e agente da sala vêm da atribuição | Dado |
 | `frontend/src/game/world/tmjWorld.js` | Lê `agent`/`tab` das propriedades do objeto `room` do `.tmj` e mescla com `meta` (`OLD.ROOMS`) | `buildWorld(tmj, meta, assignments)`: a geometria vem do `.tmj` e quem ocupa a sala vem das atribuições. Sala sem agente vira `vacant: true` | Dado |
-| `frontend/src/game/phaser/sprites.js` | `CHARACTER_SHEETS = {nina:'nina', …, __player:'voce'}`, `PIVOO_IDS` | Mapa **avatar → folha** (catálogo), sem relação com o id do agente. `agent.avatar = 'pivoo:nina'` | Dado (catálogo) |
+| `frontend/src/game/phaser/sprites.js` | `CHARACTER_SHEETS = {nina:'nina', …, __player:'voce'}`, `KIROO_IDS` | Mapa **avatar → folha** (catálogo), sem relação com o id do agente. `agent.avatar = 'kiroo:nina'` | Dado (catálogo) |
 | `frontend/src/game/phaser/OfficeScene.js` | Carrega as folhas pelo `CHARACTER_SHEETS`; o resto é genérico (lê `v.chars`) | Carrega as folhas dos avatares que a equipe usa | Dado |
 | `frontend/src/game/agentLife.js` | Nada de nomes (só `seat`/`status`) | — | Fica |
 | `frontend/src/ui/WorldPhaser.jsx`, `ui/world/InfoCard.jsx`, `RoomDialog.jsx` | `onOpen={r.agent ? r.work : null}`: supõe que toda sala com agente tem "trabalho" (aba do vídeo) | A ação "Abrir trabalho" vem do pack, ou cai na ficha do agente / passo da missão. Placa de "Vaga disponível" | Dado |
@@ -134,7 +134,7 @@ agents
   pack_id TEXT NULL, pack_version INTEGER NULL   -- origem
   instructions TEXT (≤ 2000)         -- persona / instruções
   description TEXT (≤ 240)           -- "o que faz" (cartão da equipe)
-  avatar TEXT                        -- 'pivoo:nina' | 'limezu:<arquivo>' | 'gen:<id>' (Character Generator, futuro)
+  avatar TEXT                        -- 'kiroo:nina' | 'limezu:<arquivo>' | 'gen:<id>' (Character Generator, futuro)
   color TEXT '#RRGGBB'               pronoun TEXT NULL ('a'|'o'|NULL)
   status TEXT ('active'|'paused'|'archived')
   model TEXT                         -- só modelos com preço em pricing.LLM_PRICES; padrão barato
@@ -445,7 +445,7 @@ Cada fase só começa depois que a anterior for aceita. A 7.1 espera autorizaç�
 
 - Branch nova a partir do `HEAD` atual (`feat/mapa-tiled-phaser`), por exemplo `chore/fases-4-a-6`.
 - Um commit por fase, nesta ordem: **4** (UI clara do mundo Phaser), **4b** (shell e modais), **hover** do mapa, **5** (onboarding), **6** (chat com agentes). Em cada commit, só os arquivos daquela fase. Quando o mesmo arquivo tem mudanças de duas fases (provável em `App.jsx`, `styles.css`, `Shell.jsx`, `server.py`), separo por trecho (`git add -p` não roda aqui, então uso patch aplicado ao índice) e mostro a divisão antes de commitar.
-- Fora dos commits de fase e listados para decisão: `pivoo-office/` (parece um projeto externo), `.vscode/`, `docs/*.jpg`, `src/img/`, `tools/render_home.py`, `docs/DESIGN_SYSTEM.md`, `docs/VISAO_PRODUTO.md` e esta spec.
+- Fora dos commits de fase e listados para decisão: `kiroo-office/` (parece um projeto externo), `.vscode/`, `docs/*.jpg`, `src/img/`, `tools/render_home.py`, `docs/DESIGN_SYSTEM.md`, `docs/VISAO_PRODUTO.md` e esta spec.
 - Antes de cada commit: `npm run build`, os `node tests/*.mjs` e `pytest`. Resultado relatado com a saída real.
 
 ### 10.5 Fase 7.M — mapa com 10 vagas (nova, antes da 7.3)
@@ -465,7 +465,7 @@ Cada fase só começa depois que a anterior for aceita. A 7.1 espera autorizaç�
    - Config: `STUDIO_AGENT_DAY_CAP_CREDITS=5`, `STUDIO_AGENT_DAY_CAP_USD=0.30`, `STUDIO_WORKSPACE_DAY_CAP_CREDITS=20`, `STUDIO_WORKSPACE_DAY_CAP_USD=1.25`, `STUDIO_MISSION_CAP_CREDITS=10`, `STUDIO_AGENT_TASK_CAP_CREDITS=1`. Para o mensal do workspace vale o **menor** valor entre o derivado e o teto mensal que já existe (`monthly_cap_usd`).
    - Um passo só roda se couber em **todos** os tetos, tanto em créditos quanto em US$. Se não couber em algum, a missão pausa e o motivo diz qual teto foi atingido.
 2. **`claude-haiku-5-5` em `pricing.LLM_PRICES`**, com fonte e data, e o chat passa a ler o preço de lá. Teste: preço cadastrado, `llm_cost` correto e modelo sem preço recusado. **O modo real dos agentes genéricos só liga depois de o Chris confirmar o preço oficial**: até lá, uma flag (`STUDIO_AGENTS_REAL=0`) mantém o executor genérico no chamador simulado.
-3. **Avatares por manifesto explícito.** `assets/characters/manifest.json` lista cada folha (`key`, `file`, `kind`: `pivoo` | `limezu`, rótulo). O script `tools/check_avatars.py` valida o manifesto contra os PNGs (tamanho exato do formato, arquivo existente, chave única). **Folha desconhecida ou fora do manifesto falha com erro claro**, sem ser ignorada em silêncio. O build roda a validação.
+3. **Avatares por manifesto explícito.** `assets/characters/manifest.json` lista cada folha (`key`, `file`, `kind`: `kiroo` | `limezu`, rótulo). O script `tools/check_avatars.py` valida o manifesto contra os PNGs (tamanho exato do formato, arquivo existente, chave única). **Folha desconhecida ou fora do manifesto falha com erro claro**, sem ser ignorada em silêncio. O build roda a validação.
 4. **`pack.json` validado por schema e versão** (`packs/schema.json`, JSON Schema). Antes de instalar um pack, o loader valida o schema e confere se a versão é inteira e não menor que a instalada. **Executor fora da lista fechada (`native:video_shopee`, `generic`) é rejeitado** com erro. O mesmo teste roda no Python e no Node.
 5. **7.M:** o `tmj.test` garante:
    - todo assento de agente alcançável a partir do spawn, com tile livre ao lado;

@@ -15,8 +15,8 @@
 //   linhas 4-11  caminhada: 16 quadros por direção, 1 direção por linha (S, SW, W, NW, N, NE, E, SE)
 //   linha 20     de frente com prancheta, 16 quadros (usada como "trabalhando" quando virado para baixo)
 export const FW = 32, FH = 64, COLS = 56;
-export const PIVOO_FW = 32, PIVOO_FH = 32, PIVOO_COLS = 16, PIVOO_FOOT = 29, PIVOO_HEAD = 27;
-export const PIVOO_SCALE = 2; // corpo de ~52 px no mundo, com pixels inteiros
+export const KIROO_FW = 32, KIROO_FH = 32, KIROO_COLS = 16, KIROO_FOOT = 29, KIROO_HEAD = 27;
+export const KIROO_SCALE = 2; // corpo de ~52 px no mundo, com pixels inteiros
 export const HEAD = 48;      // px do pé ao topo da cabeça (nome fica acima disso)
 export const STAND_DY = 4;   // pé 4 px acima da base do tile (como o sprite antigo)
 export const SIT_DY = 6;     // sentado: a sprite sit termina em y=61, então desce 2 px a menos que o pé em pé (ajustar vendo o jogo)
@@ -32,21 +32,21 @@ export const DIRS ={ right: 0, up: 1, left: 2, down: 3 };
 
 // agente (ou '__player') → arquivo em assets/characters/
 export const CHARACTER_SHEETS = { nina: 'nina', theo: 'theo', iris: 'iris', rui: 'rui', lia: 'lia', beto: 'beto', __player: 'voce' };
-const PIVOO_IDS = new Set(['nina', 'theo', 'iris', 'rui', 'lia', 'beto']);
+const KIROO_IDS = new Set(['nina', 'theo', 'iris', 'rui', 'lia', 'beto']);
 
 export function characterSheetSpec(id) {
-  return PIVOO_IDS.has(id)
-    ? { kind: 'pivoo', frameWidth: PIVOO_FW, frameHeight: PIVOO_FH, head: PIVOO_HEAD, scale: PIVOO_SCALE }
+  return KIROO_IDS.has(id)
+    ? { kind: 'kiroo', frameWidth: KIROO_FW, frameHeight: KIROO_FH, head: KIROO_HEAD, scale: KIROO_SCALE }
     : { kind: 'human', frameWidth: FW, frameHeight: FH, head: HEAD, scale: 1 };
 }
 
-const PIVOO_DIR = { down: 0, left: 2, up: 4, right: 6 };
-export function pivooFrame(dir, phase = 0, action = 'idle') {
-  const d = PIVOO_DIR[dir] != null ? PIVOO_DIR[dir] : 0;
+const KIROO_DIR = { down: 0, left: 2, up: 4, right: 6 };
+export function kirooFrame(dir, phase = 0, action = 'idle') {
+  const d = KIROO_DIR[dir] != null ? KIROO_DIR[dir] : 0;
   const ph = ((phase % 1) + 1) % 1;
-  if (action === 'walk') return (4 + d) * PIVOO_COLS + Math.min(15, Math.floor(ph * 16));
-  if (action === 'work' && d === 0) return 20 * PIVOO_COLS + Math.min(15, Math.floor(ph * 16));
-  return (d >> 1) * PIVOO_COLS + (d & 1) * 8 + Math.min(7, Math.floor(ph * 8));
+  if (action === 'walk') return (4 + d) * KIROO_COLS + Math.min(15, Math.floor(ph * 16));
+  if (action === 'work' && d === 0) return 20 * KIROO_COLS + Math.min(15, Math.floor(ph * 16));
+  return (d >> 1) * KIROO_COLS + (d & 1) * 8 + Math.min(7, Math.floor(ph * 8));
 }
 
 const at = (row, col) => row * COLS + col;
