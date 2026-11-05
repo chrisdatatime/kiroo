@@ -201,7 +201,7 @@ export default function Landing({ onEnter, signupOpen }) {
       <a className="lp-skip" href="#lp-main" onClick={go('lp-main')}>Pular para o conteúdo</a>
       <header className="lp-top">
         <nav className="lp-nav" aria-label="Principal">
-          <a href="#lp-main" className="lp-brand" onClick={go('lp-main')}><img src={wordmark} alt="Kiroo" height="32" /></a>
+          <a href="#lp-main" className="lp-brand" onClick={go('lp-main')}><img src={wordmark} alt="Kiroo" height="30" /></a>
           <ul className="lp-links">
             <li><a href="#como" onClick={go('como')}>Como funciona</a></li>
             <li><a href="#equipe" onClick={go('equipe')}>Equipe</a></li>
@@ -411,7 +411,7 @@ export default function Landing({ onEnter, signupOpen }) {
             <button type="button" className="lp-btn is-lime is-lg" onClick={start}>{startLabel}<ArrowRight size={18} aria-hidden="true" /></button>
           </div>
           <div className="lp-foot-row">
-            <img src={wordmarkOnDark} alt="Kiroo" height="28" />
+            <img className="lp-foot-brand" src={wordmarkOnDark} alt="Kiroo" height="26" />
             <nav aria-label="Rodapé" className="lp-foot-links">
               <a href="#como" onClick={go('como')}>Como funciona</a>
               <a href="#equipe" onClick={go('equipe')}>Equipe</a>

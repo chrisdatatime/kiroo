@@ -95,7 +95,7 @@ class OfficeScene extends Phaser.Scene {
     this.free = false;                    // câmera solta (arrastada ou zoom no cursor) até "centralizar"
     this.applyView();
     // a fonte do nome pode chegar depois da cena: redesenha os nomes quando carregar
-    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => this.refreshFonts());
+    if (document.fonts && document.fonts.load) document.fonts.load("600 11px 'Instrument Sans'").then(() => this.refreshFonts(), () => {});
     if (this.opts.onReady) this.opts.onReady(this);
   }
 
@@ -190,7 +190,7 @@ class OfficeScene extends Phaser.Scene {
   // O container tem escala dpr/zoom (como o --inv do CSS): tamanho constante na tela, com a pill desenhada em "px CSS".
   makeTag(e) {
     const bg = this.add.graphics();
-    const txt = this.add.text(0, 0, '', { fontFamily: 'Nunito Sans, system-ui, sans-serif', fontStyle: '800', fontSize: '11px', color: PW.text })
+    const txt = this.add.text(0, 0, '', { fontFamily: "'Instrument Sans', system-ui, sans-serif", fontStyle: '600', fontSize: '11px', color: PW.text })
       .setOrigin(0.5, 0.5).setResolution(window.devicePixelRatio || 1);
     txt.texture.setFilter(Phaser.Textures.FilterMode.LINEAR);
     const box = this.add.container(0, 0, [bg, txt]).setDepth(UI + 1).setVisible(false);
@@ -200,7 +200,7 @@ class OfficeScene extends Phaser.Scene {
   setTag(e, label, lime) {
     const g = e.tag; if (!g || (g.label === label && g.lime === lime)) return;
     g.label = label; g.lime = lime;
-    // pill clara: branca, texto escuro, borda sutil; destaque (você / perto) em índigo com texto branco
+    // pill clara: branca, texto tinta, borda sutil; destaque (você / perto) em tinta com texto off-white
     g.txt.setText(label).setColor(lime ? PW.primaryText : PW.text);
     const w = Math.ceil((g.txt.width + 18) / 2) * 2, h = 20, r = h / 2;
     g.bg.clear();

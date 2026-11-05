@@ -104,7 +104,7 @@ function Damas({ rival }) {
                 background: !dark ? '#F3E3C7' : sel === i ? '#D5F45B' : isTarget ? '#9DD86A' : isLast ? '#8D6E50' : '#7A5A3E',
                 outline: fromSet.has(i) && sel !== i ? '2px dashed #D5F45B' : 'none', outlineOffset: -4 }}>
               {p && <span aria-hidden="true" style={{ width: 32, height: 32, borderRadius: '50%', border: '1px solid #D4DAE4', display: 'grid', placeItems: 'center',
-                background: sideOf(p) === 'w' ? '#F7F8FA' : '#E46F5A', boxShadow: '0 1px 2px rgba(31, 36, 48, .08)', font: '900 14px/1 Nunito Sans,sans-serif', color: '#17234B' }}>{isKing(p) ? 'D' : ''}</span>}
+                background: sideOf(p) === 'w' ? '#F7F8FA' : '#E46F5A', boxShadow: '0 1px 2px rgba(31, 36, 48, .08)', font: '900 14px/1 Instrument Sans,sans-serif', color: '#17234B' }}>{isKing(p) ? 'D' : ''}</span>}
             </button>
           );
         })}

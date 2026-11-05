@@ -1,6 +1,7 @@
 import React from 'react';
 import Icon from './icons.jsx';
 import { Avatar, Pill, AGENT_STATE } from './Central.jsx';
+import { AgentStatus } from './AgentHead.jsx';
 
 const ABOUT = {
   nina: 'Lê a ficha do produto, organiza as fotos oficiais e separa fato de suposição. Não inventa característica.',
@@ -32,7 +33,7 @@ export default function TeamView({ v }) {
               <div className="pv-grow"><div className="pv-title" style={{ fontSize: 17 }}>{a.name}</div><div className="pv-meta" style={{ marginTop: 0 }}>{a.role}</div></div>
             </div>
             <p className="pv-meta" style={{ margin: 0, minHeight: 54 }}>{ABOUT[a.id]}</p>
-            <div><Pill s={s}>{t}</Pill></div>
+            <div><AgentStatus state={s}>{t}</AgentStatus></div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <button className={s === 'need' ? 'pv-btn pv-btn-lime' : 'pv-btn'} onClick={() => v.openStep(a.tab)}>{s === 'need' ? 'Resolver' : 'Abrir etapa'}</button>
               <button className="pv-btn pv-btn-quiet" onClick={() => v.openTraining(a.id)}>Treinar</button>

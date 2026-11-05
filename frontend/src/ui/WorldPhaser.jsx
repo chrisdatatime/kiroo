@@ -6,6 +6,7 @@ import { CHARACTER_SHEETS, STAND_DY, characterSheetSpec } from '../game/phaser/s
 import { stepLevel, wheelAccumulator, wheelPx, loadLevel, saveLevel } from '../game/phaser/zoom.js';
 import ZoomControls from './world/ZoomControls.jsx';
 import InfoCard from './world/InfoCard.jsx';
+import { PW } from '../game/phaser/theme.js';
 
 // Detalhe da sala só carrega no primeiro clique numa placa
 const RoomDialog = lazyChunk(() => import('./world/RoomDialog.jsx'));
@@ -138,7 +139,7 @@ export default function WorldPhaser({ v }) {
   const dlgRoom = dlg.id ? roomOf(dlg.id) : null;
 
   return (
-    <div ref={root} className="pw-root">
+    <div ref={root} className="pw-root" style={{ '--pw-bg': PW.bg }}>
       <div ref={host} aria-hidden="true" style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none' }} />
       <div ref={overlay} className="px-world" onClick={v.onWorldClick} style={{ width: GRID.W, height: GRID.H }}>
         {v.hots.map((h) => (
@@ -163,7 +164,7 @@ export default function WorldPhaser({ v }) {
           const room = c.room ? roomOf(c.room) : null;
           // o nome é desenhado pelo Phaser (preso ao sprite); aqui ficam só o clique e o balão (escondido enquanto anda)
           return (
-            <InfoCard key={c.id} title={c.name || c.tagText} subtitle={[c.role, room && room.name].filter(Boolean).join(' · ')} status={c.status} need={c.need}
+            <InfoCard key={c.id} title={c.name || c.tagText} subtitle={[c.role, room && room.name].filter(Boolean).join(' · ')} status={c.status} need={c.need} active={c.work}
               onTalk={c.click} onOpen={room ? room.work : null}>
               <button className="px-char" data-walk={c.walking ? '1' : undefined} onClick={c.click} aria-label={c.aria} style={{ ...humanBox(c, c.id), zIndex: c.z }}>
                 {(c.need || c.work || c.near) && c.status && <span className={'px-bubble' + (c.need ? ' px-bubble-need' : '')}>{c.status}</span>}

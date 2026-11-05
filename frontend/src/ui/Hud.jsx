@@ -7,21 +7,21 @@ export default function Hud({ v }) {
     <>
       <div style={{ position: 'absolute', top: 14, left: 14, right: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap', pointerEvents: 'none', zIndex: 10 }}>
         <div className="g-hud" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 10px 8px 8px', pointerEvents: 'auto', maxWidth: 'min(560px,100%)' }}>
-          <span aria-hidden="true" style={{ width: 40, height: 40, borderRadius: 10, background: '#17234B', display: 'grid', placeItems: 'center', flex: 'none' }}>
-            <svg width="22" height="22" viewBox="0 0 16 16" fill="none" stroke="#D5F45B" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M3 8.5l3 3 7-7" /></svg>
+          <span aria-hidden="true" style={{ width: 40, height: 40, borderRadius: 10, background: '#0E0E10', display: 'grid', placeItems: 'center', flex: 'none' }}>
+            <svg width="22" height="22" viewBox="0 0 16 16" fill="none" stroke="#FF5B2E" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M3 8.5l3 3 7-7" /></svg>
           </span>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-            <span style={{ font: '800 12px/1 Nunito Sans,sans-serif', color: '#545C78' }}>Produção atual</span>
+            <span style={{ font: '800 12px/1 Instrument Sans,sans-serif', color: '#77777C' }}>Produção atual</span>
             <span className="fred" style={{ fontWeight: 600, fontSize: 16, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{v.prodName}</span>
-            <span style={{ font: '700 12.5px/1.2 Nunito Sans,sans-serif' }}>{v.stageLabel}</span>
+            <span style={{ font: '700 12.5px/1.2 Instrument Sans,sans-serif' }}>{v.stageLabel}</span>
           </div>
           {v.nextLabel && <button className="g-btn g-lime g-sm" onClick={v.goNext} style={{ marginLeft: 4 }}>{v.nextLabel}</button>}
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', pointerEvents: 'auto', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          {v.conn === 'erro' && <div className="g-hud" role="alert" style={{ padding: '0 12px', minHeight: 44, display: 'flex', alignItems: 'center', font: '800 13px/1.2 Nunito Sans,sans-serif', color: '#9A2E22' }}>Sem conexão com o estúdio</div>}
+          {v.conn === 'erro' && <div className="g-hud" role="alert" style={{ padding: '0 12px', minHeight: 44, display: 'flex', alignItems: 'center', font: '800 13px/1.2 Instrument Sans,sans-serif', color: '#9A2E22' }}>Sem conexão com o estúdio</div>}
           {!v.shell && <div className="g-hud" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', minHeight: 44 }} title="Créditos usados nesta produção (estimativa até a confirmação)">
-            <svg width="18" height="18" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8" fill="#F5C542" stroke="#17234B" strokeWidth="2" /><path d="M10 6v8M7.5 8.2h4a1.6 1.6 0 010 3.2h-3a1.6 1.6 0 000 3.2h4" fill="none" stroke="#17234B" strokeWidth="1.6" strokeLinecap="round" /></svg>
-            <span style={{ font: '800 13px/1 Nunito Sans,sans-serif', fontVariantNumeric: 'tabular-nums' }}>{v.spentText}</span>
+            <svg width="18" height="18" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8" fill="#F5C542" stroke="#0E0E10" strokeWidth="2" /><path d="M10 6v8M7.5 8.2h4a1.6 1.6 0 010 3.2h-3a1.6 1.6 0 000 3.2h4" fill="none" stroke="#0E0E10" strokeWidth="1.6" strokeLinecap="round" /></svg>
+            <span style={{ font: '800 13px/1 Instrument Sans,sans-serif', fontVariantNumeric: 'tabular-nums' }}>{v.spentText}</span>
             {v.mode === 'simulated' && <span className="g-sim">DEMO</span>}
           </div>}
           <button className="g-btn g-sm g-lime" onClick={v.openSectors} style={{ minHeight: 44 }}>Setores{v.rooms.some((r) => r.need) ? ` (${v.rooms.filter((r) => r.need).length})` : ''}</button>
@@ -40,15 +40,15 @@ export default function Hud({ v }) {
             <li key={r.id}>
               <button onClick={r.go} aria-label={r.aria} title={r.aria} style={{ position: 'relative', width: 48, height: 58, borderRadius: 12, border: '2px solid transparent', background: r.bg, cursor: 'pointer', padding: '3px 0 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
                 <span style={{ height: 30, overflow: 'hidden', display: 'block' }}><Boneco look={r.look} crop size={30} /></span>
-                <span style={{ font: '800 10px/1 Nunito Sans,sans-serif', color: '#17234B' }}>{r.name}</span>
-                <span aria-hidden="true" style={{ position: 'absolute', top: -4, right: -3, width: 16, height: 16, borderRadius: '50%', background: r.dot, border: '1px solid #D4DAE4', font: '900 10px/12px Nunito Sans,sans-serif', color: '#17234B', textAlign: 'center' }}>{r.sym}</span>
+                <span style={{ font: '800 10px/1 Instrument Sans,sans-serif', color: '#0E0E10' }}>{r.name}</span>
+                <span aria-hidden="true" style={{ position: 'absolute', top: -4, right: -3, width: 16, height: 16, borderRadius: '50%', background: r.dot, border: '1px solid #E7E7E4', font: '900 10px/12px Instrument Sans,sans-serif', color: '#0E0E10', textAlign: 'center' }}>{r.sym}</span>
               </button>
             </li>
           ))}
         </ul>
       </div>
 
-      <div className="g-hud" style={{ position: 'absolute', right: 14, bottom: 14, zIndex: 10, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8, font: '700 12px/1.2 Nunito Sans,sans-serif', flexWrap: 'wrap', maxWidth: 'min(420px,calc(100vw - 28px))' }}>
+      <div className="g-hud" style={{ position: 'absolute', right: 14, bottom: 14, zIndex: 10, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8, font: '700 12px/1.2 Instrument Sans,sans-serif', flexWrap: 'wrap', maxWidth: 'min(420px,calc(100vw - 28px))' }}>
         <span className="kbd">W</span><span className="kbd">A</span><span className="kbd">S</span><span className="kbd">D</span><span>/ setas ou clique para andar</span>
         <span className="kbd">E</span><span>interagir</span>
         <span className="kbd">Esc</span><span>fechar</span>
@@ -62,8 +62,8 @@ export default function Hud({ v }) {
       )}
 
       {v.toast && (
-        <div role="status" className="g-hud popb" style={{ position: 'absolute', left: '50%', top: 84, transform: 'translateX(-50%)', zIndex: 30, padding: '10px 16px', font: '800 14px/1.3 Nunito Sans,sans-serif', display: 'flex', gap: 10, alignItems: 'center', maxWidth: 'calc(100vw - 32px)' }}>
-          <span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: '50%', background: '#D5F45B', border: '1px solid #D4DAE4', flex: 'none' }} />{v.toast}
+        <div role="status" className="g-hud popb" style={{ position: 'absolute', left: '50%', top: 84, transform: 'translateX(-50%)', zIndex: 30, padding: '10px 16px', font: '800 14px/1.3 Instrument Sans,sans-serif', display: 'flex', gap: 10, alignItems: 'center', maxWidth: 'calc(100vw - 32px)' }}>
+          <span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: '50%', background: '#FF5B2E', border: '1px solid #E7E7E4', flex: 'none' }} />{v.toast}
         </div>
       )}
     </>

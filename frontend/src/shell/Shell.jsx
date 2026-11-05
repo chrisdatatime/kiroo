@@ -11,6 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import Icon from './icons.jsx';
 import { Avatar, AGENT_STATE } from './Central.jsx';
+import { AgentHead } from './AgentHead.jsx';
 import compactLogo from '../assets/brand/icone-app-preto.svg';
 import wordmark from '../assets/brand/wordmark-preto-laranja.svg';
 import './shell.css';
@@ -192,7 +193,7 @@ function Panel({ v, onCollapse, newMission }) {
           {team.map((a) => { const st = v.statuses[a.id] || 'idle'; const [s, t] = AGENT_STATE[st] || AGENT_STATE.idle; return (
             <li key={a.id}>
               <button type="button" onClick={() => openAgent(a)} aria-label={`${a.name}, ${a.role}: ${t}`}>
-                <span className="pv-person-av"><Avatar look={a.look} size={34} /><i data-s={s} aria-hidden="true" /></span>
+                <span className="pv-person-av"><Avatar look={a.look} size={34} /><i data-s={s} aria-hidden="true"><AgentHead active={st !== 'idle'} /></i></span>
                 <span className="pv-grow"><strong>{a.name}</strong><span>{st === 'idle' ? a.role : t}</span></span>
                 {st === 'need' && <span className="pv-need" aria-hidden="true">!</span>}
               </button>

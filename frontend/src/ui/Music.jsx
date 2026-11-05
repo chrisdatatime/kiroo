@@ -9,7 +9,7 @@ const secs = (n) => { const s = Math.round(n || 0); return Math.floor(s / 60) + 
 
 function Track({ t, sel, onPick, onFav, children }) {
   return (
-    <article className="g-card" style={{ padding: 10, display: 'grid', gap: 6, background: sel ? '#F2FBD9' : '#fff' }}>
+    <article className="g-card" style={{ padding: 10, display: 'grid', gap: 6, background: sel ? '#FFFFFF' : '#fff' }}>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <strong style={{ flex: 1, minWidth: 140 }}>{t.title}</strong>
         <button className="g-btn g-sm" aria-pressed={!!t.favorite} onClick={onFav}>{t.favorite ? 'Favorita' : 'Favoritar'}</button>
@@ -63,7 +63,7 @@ export default function MusicWindow({ v }) {
 
   return (
     <section role="dialog" aria-labelledby="mu-h" className="g-panel" style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', zIndex: 24, width: 'min(920px,calc(100vw - 24px))', height: 'min(720px,calc(100vh - 24px))', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <header style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid #D4DAE4', background: '#F7F8FA' }}>
+      <header style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid #E7E7E4', background: '#F2F2EF' }}>
         <h2 id="mu-h" className="fred" style={{ margin: 0, fontSize: 20, flex: 1 }}>Trilhas da Lia</h2>
         <CloseButton onClick={v.closeWin} label="Fechar trilhas" />
       </header>
@@ -89,7 +89,7 @@ export default function MusicWindow({ v }) {
               <button className="g-btn g-lime" disabled={busy} onClick={apply}>{video ? 'Aplicar e remontar (sem custo)' : 'Usar nesta produção'}</button>
               <span className="g-muted" style={{ fontSize: 12.5 }}>A escolha desta produção tem prioridade sobre sugestões automáticas.</span>
             </div>
-            {video && <video src={video} controls style={{ width: 200, maxWidth: '100%', borderRadius: 10, border: '1px solid #D4DAE4' }} aria-label="Prévia do vídeo com a trilha" />}
+            {video && <video src={video} controls style={{ width: 200, maxWidth: '100%', borderRadius: 10, border: '1px solid #E7E7E4' }} aria-label="Prévia do vídeo com a trilha" />}
             <p className="g-muted" style={{ margin: 0, fontSize: 12.5 }}>O formato atual não tem narração, então a redução da música durante a fala ainda não tem efeito.</p>
           </div>
         ) : <p style={{ margin: 0 }}>Abra uma produção para aplicar uma trilha. Você já pode ouvir e organizar as músicas.</p>}

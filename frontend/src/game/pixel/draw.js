@@ -1,4 +1,4 @@
-// Base da pixel art: paleta da Kiroo, um "pincel" de pixels e cache de sprites desenhados em canvas pequenos.
+// Base da pixel art: paleta do Kiroo, um "pincel" de pixels e cache de sprites desenhados em canvas pequenos.
 // Todo sprite é desenhado em pixels de mundo (1 tile = 16 px) e ampliado pela câmera sem suavização.
 
 export const PAL = {

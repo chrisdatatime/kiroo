@@ -1,14 +1,14 @@
 /* Home pública do Kiroo. Escopo: .lp (o body do app tem overflow hidden, então a home rola dentro de si).
-   Marca: marinho #17234B, lima #D5F45B (só ação principal e "precisa de você"), creme, céu #8ED8F8, lavanda #B8B4DE.
-   Títulos em Nunito Sans pesada, texto em Geist. Pixel art sempre com image-rendering: pixelated. */
+   Marca Kiroo: tinta #0E0E10, papel #FAFAF8; laranja #FF5B2E só em acentos pequenos e no rodapé escuro. Céu #8ED8F8 e lavanda #B8B4DE de apoio.
+   Títulos e texto em Instrument Sans. Pixel art sempre com image-rendering: pixelated. */
 
 .lp {
-  --ink: #17234B; --ink-2: #3A4570; --mute: #646C86; --line: #E7E1D2; --line-2: #D9D2C0;
-  --paper: #FBF7EE; --card: #FFFFFF; --lime: #D5F45B; --lime-2: #C4E640; --sky: #8ED8F8; --lav: #B8B4DE; --sun: #FFC46B;
+  --ink: #0E0E10; --ink-2: #77777C; --mute: #77777C; --line: #E7E7E4; --line-2: #C9C9C4;
+  --paper: #FAFAF8; --card: #FFFFFF; --lime: #FF5B2E; --lime-2: #E84E24; --sky: #8ED8F8; --lav: #B8B4DE; --sun: #FFC46B;
   --r-lg: 28px; --r-md: 18px; --r-sm: 12px;
   position: fixed; inset: 0; overflow-y: auto; overflow-x: hidden; scroll-behavior: auto;
   background: var(--paper); color: var(--ink);
-  font: 400 16px/1.55 'Geist Variable', system-ui, sans-serif; -webkit-font-smoothing: antialiased;
+  font: 400 16px/1.55 'Instrument Sans', system-ui, sans-serif; -webkit-font-smoothing: antialiased;
 }
 .lp *, .lp *::before, .lp *::after { box-sizing: border-box; }
 .lp img { max-width: 100%; }
@@ -20,7 +20,7 @@
 #lp-main:focus { outline: none; }
 
 /* ------------------------------------------------------------ tipografia */
-.lp-h1, .lp-h2, .lp-h3, .lp-out-t { font-family: 'Nunito Sans', system-ui, sans-serif; color: var(--ink); margin: 0; }
+.lp-h1, .lp-h2, .lp-h3, .lp-out-t { font-family: 'Instrument Sans', system-ui, sans-serif; color: var(--ink); margin: 0; }
 .lp-h1 { font-size: clamp(40px, 5.6vw, 72px); line-height: .98; font-weight: 900; letter-spacing: -.045em; text-wrap: balance; }
 .lp-h1 mark { background: none; color: inherit; position: relative; white-space: nowrap; z-index: 0; }
 .lp-h1 mark::after { content: ''; position: absolute; left: -.06em; right: -.06em; bottom: .04em; height: .34em; background: var(--lime); z-index: -1; border-radius: 3px; transform: skewX(-8deg); }
@@ -31,66 +31,68 @@
 .lp-sub { font-size: 18px; color: var(--mute); margin: 14px auto 0; max-width: 36em; }
 .lp-p { color: var(--mute); margin: 8px 0 0; font-size: 15.5px; }
 .lp-small { color: var(--mute); font-size: 13.5px; margin: 6px 0 0; line-height: 1.45; }
-.lp-kicker { display: inline-flex; align-items: center; gap: 8px; margin: 0 0 14px; font: 700 13px/1 'Geist Variable', sans-serif; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
+.lp-kicker { display: inline-flex; align-items: center; gap: 8px; margin: 0 0 14px; font: 700 13px/1 'Instrument Sans', sans-serif; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
 .lp-kicker::before { content: ''; width: 18px; height: 3px; border-radius: 2px; background: var(--ink); }
 .lp-eyebrow { display: inline-flex; align-items: center; gap: 8px; margin: 0 0 22px; padding: 7px 12px 7px 10px; border: 1px solid var(--line-2); border-radius: 999px; background: var(--card); font-size: 13.5px; font-weight: 600; color: var(--ink-2); }
 .lp-eyebrow-dot { width: 8px; height: 8px; border-radius: 2px; background: var(--lime); box-shadow: 0 0 0 1.5px var(--ink); }
 .lp-note { margin: 16px 0 0; font-size: 13.5px; color: var(--mute); }
 
 /* ------------------------------------------------------------ botões */
-.lp-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 12px; border: 1.5px solid transparent; background: transparent; color: var(--ink); font: 650 15px/1 'Geist Variable', sans-serif; cursor: pointer; text-decoration: none; white-space: nowrap; transition: transform .12s, box-shadow .12s, background .15s; }
+.lp-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 12px; border: 1.5px solid transparent; background: transparent; color: var(--ink); font: 650 15px/1 'Instrument Sans', sans-serif; cursor: pointer; text-decoration: none; white-space: nowrap; transition: transform .12s, box-shadow .12s, background .15s; }
 .lp-btn.is-lg { min-height: 52px; padding: 0 22px; font-size: 16px; border-radius: 14px; }
-.lp-btn.is-ghost:hover { background: rgba(23, 35, 75, .06); }
+.lp-btn.is-ghost:hover { background: rgba(14, 14, 16, .06); }
 .lp-btn.is-ink { background: var(--ink); color: #fff; }
-.lp-btn.is-ink:hover { background: #22305F; }
+.lp-btn.is-ink:hover { background: #2A2A2E; }
 .lp-btn.is-line { border-color: var(--line-2); background: var(--card); }
 .lp-btn.is-line:hover { border-color: var(--ink); }
-/* a ação principal carrega o "peso" do jogo: borda e sombra dura em marinho */
-.lp-btn.is-lime { background: var(--lime); border-color: var(--ink); box-shadow: 0 4px 0 var(--ink); }
-.lp-btn.is-lime:hover { background: var(--lime-2); transform: translateY(-1px); box-shadow: 0 5px 0 var(--ink); }
-.lp-btn.is-lime:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--ink); }
+/* ação principal: botão tinta com texto papel (o laranja fica para o agente ativo e para o fundo escuro do rodapé) */
+.lp-btn.is-lime { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+.lp-btn.is-lime:hover { background: #2A2A2E; transform: translateY(-1px); }
+.lp-btn.is-lime:active { transform: translateY(1px); }
 .lp-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
 
 /* ------------------------------------------------------------ topo */
 .lp-top { position: sticky; top: 0; z-index: 20; padding: 12px 0; background: linear-gradient(var(--paper) 70%, rgba(251, 247, 238, 0)); }
 .lp-nav { width: min(1200px, 100% - 32px); margin-inline: auto; display: flex; align-items: center; gap: 24px; padding: 8px 8px 8px 18px; background: rgba(255, 255, 255, .92); border: 1px solid var(--line); border-radius: 18px; backdrop-filter: blur(8px); }
 .lp-brand { display: flex; align-items: center; min-height: 44px; }
-.lp-brand img { display: block; width: auto; }
+.lp-brand img { display: block; height: 30px; width: auto; }
+.lp-foot-brand { display: block; height: 26px; width: auto; }
+.lp-cmp-ic img { display: block; width: 22px; height: auto; }
 .lp-links { display: flex; gap: 4px; margin: 0 auto; padding: 0; list-style: none; }
 .lp-links a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px; border-radius: 10px; text-decoration: none; font-weight: 550; font-size: 15px; color: var(--ink-2); }
-.lp-links a:hover { background: rgba(23, 35, 75, .05); color: var(--ink); }
+.lp-links a:hover { background: rgba(14, 14, 16, .05); color: var(--ink); }
 .lp-nav-cta { display: flex; gap: 6px; }
 
 /* ------------------------------------------------------------ hero */
 .lp-hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.12fr); gap: 56px; align-items: center; padding: 48px 0 40px; }
 .lp-hero-art { display: flex; flex-direction: column; align-items: center; gap: 18px; }
-.lp-frame { width: 100%; padding: 10px; background: var(--card); border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: 0 30px 60px -30px rgba(23, 35, 75, .35); }
+.lp-frame { width: 100%; padding: 10px; background: var(--card); border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: 0 30px 60px -30px rgba(14, 14, 16, .35); }
 .lp-sede { position: relative; aspect-ratio: 1216 / 1024; border-radius: 20px; overflow: hidden; background: #E9E4F2; }
 .lp-sede > img { display: block; width: 100%; height: 100%; image-rendering: pixelated; user-select: none; }
 .lp-sede-empty { position: absolute; inset: 0; background:
-  repeating-linear-gradient(0deg, transparent 0 31px, rgba(23, 35, 75, .06) 31px 32px),
-  repeating-linear-gradient(90deg, transparent 0 31px, rgba(23, 35, 75, .06) 31px 32px), #EFEAF7; }
+  repeating-linear-gradient(0deg, transparent 0 31px, rgba(14, 14, 16, .06) 31px 32px),
+  repeating-linear-gradient(90deg, transparent 0 31px, rgba(14, 14, 16, .06) 31px 32px), #EFEAF7; }
 .lp-layer { position: absolute; inset: 0; opacity: 0; visibility: hidden; transition: opacity .25s, visibility .25s; }
 .lp-layer.is-on { opacity: 1; visibility: visible; }
 
 .lp-pin { position: absolute; transform: translate(-50%, -100%); display: flex; flex-direction: column; align-items: center; gap: 4px; pointer-events: none; }
-.lp-pin-tag { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px 3px 6px; border-radius: 8px; background: var(--ink); color: #fff; font: 700 12px/1.2 'Geist Variable', sans-serif; white-space: nowrap; box-shadow: 0 2px 0 rgba(0, 0, 0, .25); }
-.lp-pin.is-quiet .lp-pin-tag { background: rgba(23, 35, 75, .8); }
+.lp-pin-tag { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px 3px 6px; border-radius: 8px; background: var(--ink); color: #fff; font: 700 12px/1.2 'Instrument Sans', sans-serif; white-space: nowrap; box-shadow: 0 2px 0 rgba(0, 0, 0, .25); }
+.lp-pin.is-quiet .lp-pin-tag { background: rgba(14, 14, 16, .8); }
 .lp-dot { width: 8px; height: 8px; border-radius: 50%; background: #B9BFD0; flex: none; }
 .lp-dot.is-work { background: var(--sky); }
 .lp-dot.is-need { background: var(--lime); }
-.lp-need { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--lime); border: 2px solid var(--ink); color: var(--ink); font: 900 14px/1 'Nunito Sans', sans-serif; box-shadow: 0 2px 0 var(--ink); animation: lp-bob .7s ease-in-out infinite alternate; }
+.lp-need { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--lime); border: 2px solid var(--ink); color: var(--ink); font: 900 14px/1 'Instrument Sans', sans-serif; box-shadow: 0 2px 0 var(--ink); animation: lp-bob .7s ease-in-out infinite alternate; }
 .lp-need.is-inline { display: inline-grid; width: 20px; height: 20px; font-size: 12px; animation: none; margin-right: 4px; vertical-align: -4px; }
 .lp-work { display: flex; gap: 3px; padding: 5px 7px; border-radius: 9px; background: #fff; border: 2px solid var(--ink); }
 .lp-work i { width: 4px; height: 4px; border-radius: 50%; background: var(--ink); animation: lp-dots 1s infinite; }
 .lp-work i:nth-child(2) { animation-delay: .15s; } .lp-work i:nth-child(3) { animation-delay: .3s; }
-.lp-room-label { position: absolute; transform: translate(-50%, -50%); padding: 4px 10px; border-radius: 999px; background: rgba(255, 255, 255, .85); color: var(--ink-2); font: 600 12px/1.2 'Geist Variable', sans-serif; }
+.lp-room-label { position: absolute; transform: translate(-50%, -50%); padding: 4px 10px; border-radius: 999px; background: rgba(255, 255, 255, .85); color: var(--ink-2); font: 600 12px/1.2 'Instrument Sans', sans-serif; }
 @keyframes lp-bob { to { transform: translateY(-4px); } }
 @keyframes lp-dots { 0%, 100% { opacity: .35; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-2px); } }
 
-.lp-card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-md); box-shadow: 0 18px 40px -18px rgba(23, 35, 75, .45); padding: 16px; color: var(--ink); }
+.lp-card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-md); box-shadow: 0 18px 40px -18px rgba(14, 14, 16, .45); padding: 16px; color: var(--ink); }
 .lp-card-kicker { font-size: 12.5px; font-weight: 650; color: var(--mute); }
-.lp-card-title { font: 800 18px/1.2 'Nunito Sans', sans-serif; letter-spacing: -.02em; margin-top: 2px; }
+.lp-card-title { font: 800 18px/1.2 'Instrument Sans', sans-serif; letter-spacing: -.02em; margin-top: 2px; }
 .lp-card-foot { display: flex; justify-content: space-between; font-size: 12px; color: var(--mute); margin-top: 6px; }
 .lp-mission { position: absolute; left: 4%; bottom: 5%; width: min(290px, 60%); }
 .lp-steps { list-style: none; margin: 12px 0; padding: 0; display: grid; gap: 7px; font-size: 13.5px; }
@@ -111,8 +113,8 @@
 .lp-bubble.is-me { align-self: flex-end; border-radius: 14px 14px 4px 14px; background: var(--ink); color: #fff; }
 
 .lp-switch { display: inline-flex; gap: 4px; padding: 5px; background: var(--card); border: 1px solid var(--line); border-radius: 16px; }
-.lp-switch-btn { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 16px; border: 0; border-radius: 12px; background: transparent; color: var(--ink-2); font: 600 15px/1 'Geist Variable', sans-serif; cursor: pointer; }
-.lp-switch-btn:hover { background: rgba(23, 35, 75, .05); }
+.lp-switch-btn { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 16px; border: 0; border-radius: 12px; background: transparent; color: var(--ink-2); font: 600 15px/1 'Instrument Sans', sans-serif; cursor: pointer; }
+.lp-switch-btn:hover { background: rgba(14, 14, 16, .05); }
 .lp-switch-btn[aria-selected="true"] { background: #EFF8C8; color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--ink); }
 
 /* ------------------------------------------------------------ o que chega */
@@ -131,7 +133,7 @@
 .lp-focus-btn { width: 100%; display: flex; gap: 14px; align-items: flex-start; text-align: left; padding: 16px; border-radius: var(--r-md); border: 1.5px solid transparent; background: rgba(255, 255, 255, .55); color: var(--ink); font: inherit; cursor: pointer; transition: background .15s, border-color .15s; }
 .lp-focus-btn:hover { background: #fff; }
 .lp-focus-btn[aria-pressed="true"] { background: #fff; border-color: var(--ink); box-shadow: 0 3px 0 var(--ink); }
-.lp-focus-btn strong { display: block; font: 800 17px/1.25 'Nunito Sans', sans-serif; letter-spacing: -.01em; padding-top: 9px; }
+.lp-focus-btn strong { display: block; font: 800 17px/1.25 'Instrument Sans', sans-serif; letter-spacing: -.01em; padding-top: 9px; }
 .lp-focus-txt { display: block; margin-top: 6px; font-size: 14.5px; color: var(--mute); line-height: 1.5; }
 .lp-focus-ic { flex: none; display: grid; place-items: center; width: 42px; height: 42px; border-radius: 12px; background: #F4F1FA; color: var(--ink); }
 .lp-focus-btn[aria-pressed="true"] .lp-focus-ic { background: var(--lime); }
@@ -155,7 +157,7 @@
 .lp-pilot .lp-h3, .lp-pilot .lp-p, .lp-pilot-line { padding-inline: 12px; }
 .lp-pilot .lp-h3 { display: flex; align-items: center; gap: 10px; margin-top: 22px; }
 .lp-pilot-line { margin: 6px 0 0; font-weight: 650; color: var(--ink-2); }
-.lp-tag { font: 700 11.5px/1 'Geist Variable', sans-serif; letter-spacing: .02em; padding: 5px 8px; border-radius: 7px; background: var(--lime); color: var(--ink); }
+.lp-tag { font: 700 11.5px/1 'Instrument Sans', sans-serif; letter-spacing: .02em; padding: 5px 8px; border-radius: 7px; background: var(--lime); color: var(--ink); }
 .lp-pilot-art { border-radius: 20px; background: var(--ink); padding: 26px 18px 16px; display: flex; flex-direction: column; gap: 16px; align-items: center; }
 .lp-track { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; width: 100%; position: relative; }
 .lp-track-step { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 2px; border-radius: 12px; background: rgba(255, 255, 255, .07); color: #AEB6D4; font-size: 11.5px; font-weight: 600; text-align: center; }
@@ -167,7 +169,7 @@
 .lp-cmp { border-radius: var(--r-lg); padding: 30px 32px; border: 1px solid var(--line); }
 .lp-cmp.is-before { background: transparent; border-style: dashed; border-color: var(--line-2); }
 .lp-cmp.is-after { background: var(--card); position: relative; overflow: hidden; padding-bottom: 104px; }
-.lp-cmp-h { display: flex; align-items: center; gap: 12px; font: 800 18px/1.2 'Nunito Sans', sans-serif; margin: 0 0 18px; }
+.lp-cmp-h { display: flex; align-items: center; gap: 12px; font: 800 18px/1.2 'Instrument Sans', sans-serif; margin: 0 0 18px; }
 .lp-cmp-ic { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 11px; background: #ECE7DA; color: var(--ink-2); }
 .is-after .lp-cmp-ic { background: var(--ink); }
 .lp-cmp ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 12px; }
@@ -183,8 +185,8 @@
 .lp-agent { padding: 24px 26px 28px; background: var(--card); border: 1px solid var(--line); border-radius: var(--r-lg); }
 .lp-agent-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; }
 .lp-agent-top .lp-sprite { background: #F2EFF8; border-radius: 16px; padding: 4px; width: 72px; height: 72px; }
-.lp-agent-n { font: 800 13px/1 'Geist Variable', sans-serif; color: #B3AC9A; letter-spacing: .04em; }
-.lp-agent .lp-h3 span { display: block; font: 600 14px/1.3 'Geist Variable', sans-serif; color: var(--mute); letter-spacing: 0; margin-top: 3px; }
+.lp-agent-n { font: 800 13px/1 'Instrument Sans', sans-serif; color: #B3AC9A; letter-spacing: .04em; }
+.lp-agent .lp-h3 span { display: block; font: 600 14px/1.3 'Instrument Sans', sans-serif; color: var(--mute); letter-spacing: 0; margin-top: 3px; }
 .lp-sprite { display: block; image-rendering: pixelated; user-select: none; }
 .lp-sprite-empty { display: block; border-radius: 12px; background: #EEEAF5; }
 
@@ -194,7 +196,7 @@
 .lp-checks li { display: flex; gap: 14px; font-size: 17px; color: var(--ink-2); }
 .lp-checks svg { flex: none; margin-top: 3px; color: var(--ink); }
 .lp-checks strong { color: var(--ink); }
-.lp-receipt { padding: 22px 24px; border-radius: 20px; background: #FFFDF7; border: 1px solid var(--line-2); box-shadow: 0 24px 50px -28px rgba(23, 35, 75, .4); font-variant-numeric: tabular-nums;
+.lp-receipt { padding: 22px 24px; border-radius: 20px; background: #FFFDF7; border: 1px solid var(--line-2); box-shadow: 0 24px 50px -28px rgba(14, 14, 16, .4); font-variant-numeric: tabular-nums;
   -webkit-mask: radial-gradient(circle 7px at 50% 100%, transparent 98%, #000) 50% 100% / 22px 100% repeat-x; mask: radial-gradient(circle 7px at 50% 100%, transparent 98%, #000) 50% 100% / 22px 100% repeat-x; padding-bottom: 30px; }
 .lp-receipt-h { display: flex; justify-content: space-between; align-items: baseline; font-weight: 700; padding-bottom: 12px; border-bottom: 1.5px dashed var(--line-2); }
 .lp-receipt-h em { font-style: normal; font-size: 12px; font-weight: 600; color: var(--mute); padding: 3px 8px; border-radius: 6px; background: #F1ECDE; }
@@ -203,7 +205,7 @@
 .lp-receipt dt { color: var(--ink-2); } .lp-receipt dd { margin: 0; font-weight: 650; }
 .lp-receipt .is-back dt, .lp-receipt .is-back dd { color: #2F8A4A; }
 .lp-receipt-t { display: flex; justify-content: space-between; padding: 12px 0; border-top: 1.5px dashed var(--line-2); margin-bottom: 10px; }
-.lp-receipt-t strong { font: 900 20px/1 'Nunito Sans', sans-serif; }
+.lp-receipt-t strong { font: 900 20px/1 'Instrument Sans', sans-serif; }
 
 /* começar */
 .lp-start { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 470px); gap: 48px; padding: 56px 56px 150px; border-radius: 40px; background: #E9F3FA; border: 1px solid #D6E6F0; overflow: hidden; }
@@ -211,8 +213,8 @@
 .lp-steps-big { list-style: none; margin: 0; padding: 0; background: var(--card); border: 1px solid #D6E6F0; border-radius: 24px; overflow: hidden; align-self: center; }
 .lp-steps-big li { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 22px 26px; }
 .lp-steps-big li + li { border-top: 1px solid #E3EDF3; }
-.lp-steps-big strong { font: 800 21px/1.25 'Nunito Sans', sans-serif; letter-spacing: -.02em; }
-.lp-chip { font: 700 12px/1 'Geist Variable', sans-serif; padding: 6px 9px; border-radius: 7px; color: var(--ink); }
+.lp-steps-big strong { font: 800 21px/1.25 'Instrument Sans', sans-serif; letter-spacing: -.02em; }
+.lp-chip { font: 700 12px/1 'Instrument Sans', sans-serif; padding: 6px 9px; border-radius: 7px; color: var(--ink); }
 .lp-chip.is-sun { background: #FFE6B8; } .lp-chip.is-sky { background: #CDEEFC; } .lp-chip.is-lime { background: #E6F8A6; }
 .lp-start-floor { position: absolute; left: 0; right: 0; bottom: 0; height: 112px; display: flex; align-items: flex-end; justify-content: center; gap: clamp(8px, 3vw, 40px); padding-bottom: 14px;
   background: repeating-linear-gradient(0deg, #C9C6E4 0 1px, transparent 1px 32px), repeating-linear-gradient(90deg, #C9C6E4 0 1px, #D9D7EE 1px 32px); border-top: 6px solid #B8B4DE; }
@@ -220,7 +222,7 @@
 /* dúvidas */
 .lp-faq { max-width: 760px; margin: 0 auto; display: grid; gap: 10px; }
 .lp-qa { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-md); }
-.lp-qa summary { list-style: none; display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 64px; padding: 14px 14px 14px 22px; cursor: pointer; font: 750 17px/1.35 'Geist Variable', sans-serif; }
+.lp-qa summary { list-style: none; display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 64px; padding: 14px 14px 14px 22px; cursor: pointer; font: 750 17px/1.35 'Instrument Sans', sans-serif; }
 .lp-qa summary::-webkit-details-marker { display: none; }
 .lp-qa summary:focus-visible { outline-offset: -3px; border-radius: var(--r-md); }
 .lp-qa-ic { flex: none; position: relative; width: 40px; height: 40px; border-radius: 11px; background: #F2EFF8; }
@@ -231,17 +233,18 @@
 .lp-qa p { margin: 0; padding: 0 22px 22px; color: var(--ink-2); max-width: 62ch; }
 
 /* rodapé */
-.lp-foot { margin-top: 120px; background: var(--ink); color: #C9CFE4; border-radius: 40px 40px 0 0; padding: 96px 0 40px; }
+.lp-foot { margin-top: 120px; background: var(--ink); color: #C9C9C4; border-radius: 40px 40px 0 0; padding: 96px 0 40px; }
 .lp-foot-cta { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 18px; padding-bottom: 72px; border-bottom: 1px solid rgba(255, 255, 255, .12); }
 .lp-foot-cta p { margin: 0 0 8px; font-size: 18px; max-width: 32em; }
-.lp-foot .lp-btn.is-lime { box-shadow: 0 4px 0 #0A112A; border-color: #0A112A; }
+.lp-foot .lp-btn.is-lime { background: var(--lime); border-color: var(--lime); color: var(--ink); }
+.lp-foot .lp-btn.is-lime:hover { background: var(--lime-2); }
 .lp-foot-row { display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: wrap; padding: 32px 0 20px; }
 .lp-foot-links { display: flex; flex-wrap: wrap; gap: 4px; }
-.lp-foot-links a, .lp-foot-links button { display: inline-flex; align-items: center; min-height: 44px; padding: 0 12px; border: 0; border-radius: 10px; background: none; color: #C9CFE4; font: 550 15px/1 'Geist Variable', sans-serif; text-decoration: none; cursor: pointer; }
+.lp-foot-links a, .lp-foot-links button { display: inline-flex; align-items: center; min-height: 44px; padding: 0 12px; border: 0; border-radius: 10px; background: none; color: #C9C9C4; font: 550 15px/1 'Instrument Sans', sans-serif; text-decoration: none; cursor: pointer; }
 .lp-foot-links a:hover, .lp-foot-links button:hover { color: #fff; background: rgba(255, 255, 255, .06); }
 .lp-foot :focus-visible { outline-color: var(--lime); }
-.lp-foot-legal { margin: 0; font-size: 13px; color: #8E97B8; }
-.lp-foot-legal a { color: #C9CFE4; }
+.lp-foot-legal { margin: 0; font-size: 13px; color: #9A9AA0; }
+.lp-foot-legal a { color: #C9C9C4; }
 
 /* ------------------------------------------------------------ responsivo */
 @media (max-width: 1080px) {

@@ -11,8 +11,8 @@ export function AccountContent({ v }) {
           ['Modo', a.workspace.mode === 'real' ? 'IA real (gera custo)' : 'DEMO (sem custo, imagens de exemplo)'],
           ['Produção com IA real', a.workspace.allow_real ? 'liberada' : 'liberada com os planos de créditos'],
           ['Créditos', (v.wallet || a.workspace.credits || {}).exempt ? 'isento (conta do dono)' : ((v.wallet || a.workspace.credits || {}).balance || '0') + ' créditos']].map(([k, val]) => (
-          <div key={k} style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '8px 0', borderBottom: '2px dotted #E3E7EE' }}>
-            <dt className="g-label">{k}</dt><dd style={{ margin: 0, font: '700 14px/1.35 Nunito Sans,sans-serif' }}>{val}</dd>
+          <div key={k} style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '8px 0', borderBottom: '2px dotted #E7E7E4' }}>
+            <dt className="g-label">{k}</dt><dd style={{ margin: 0, font: '700 14px/1.35 Instrument Sans,sans-serif' }}>{val}</dd>
           </div>
         ))}
       </dl>

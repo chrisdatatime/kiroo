@@ -28,10 +28,10 @@ export class AppBoundary extends React.Component {
   render() {
     if (!this.state.err) return this.props.children;
     return (
-      <div role="alert" style={{ position: 'fixed', inset: 0, display: 'grid', placeItems: 'center', padding: 16, background: '#FBF7EE', fontFamily: "'Geist Variable', system-ui, sans-serif", color: '#17234B' }}>
+      <div role="alert" style={{ position: 'fixed', inset: 0, display: 'grid', placeItems: 'center', padding: 16, background: '#FAFAF8', fontFamily: "'Instrument Sans', system-ui, sans-serif", color: '#0E0E10' }}>
         <div style={{ maxWidth: 420, textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
-          <h1 style={{ margin: 0, font: "900 28px/1.1 'Nunito Sans', sans-serif", letterSpacing: '-.03em' }}>Algo travou por aqui</h1>
-          <p style={{ margin: 0, color: '#646C86' }}>Seu trabalho está salvo no servidor. Recarregar a página costuma resolver; se o estúdio acabou de ser atualizado, é isso mesmo.</p>
+          <h1 style={{ margin: 0, font: "900 28px/1.1 Instrument Sans, sans-serif", letterSpacing: '-.03em' }}>Algo travou por aqui</h1>
+          <p style={{ margin: 0, color: '#77777C' }}>Seu trabalho está salvo no servidor. Recarregar a página costuma resolver; se o estúdio acabou de ser atualizado, é isso mesmo.</p>
           <button type="button" className="g-btn g-lime" onClick={() => window.location.reload()}>Recarregar</button>
         </div>
       </div>

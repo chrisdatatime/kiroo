@@ -25,7 +25,7 @@ export function CreditsContent({ v }) {
               <div className="g-label">Saldo</div>
               <div className="fred" style={{ fontSize: 28, fontWeight: 600 }}>{d.exempt ? 'Isento' : d.balance + ' créditos'}</div>
             </div>
-            {d.held_cc > 0 && <div><div className="g-label">Reservado agora</div><div style={{ font: '700 15px Nunito Sans,sans-serif' }}>{d.held} créditos</div></div>}
+            {d.held_cc > 0 && <div><div className="g-label">Reservado agora</div><div style={{ font: '700 15px Instrument Sans,sans-serif' }}>{d.held} créditos</div></div>}
             <p className="g-muted" style={{ margin: 0, fontSize: 12.5, lineHeight: 1.45, flex: '1 1 220px' }}>
               {d.exempt
                 ? 'Conta do dono: o consumo é registrado, mas não precisa de saldo.'
@@ -43,7 +43,7 @@ export function CreditsContent({ v }) {
                 <div key={u.production_id} className="g-card" style={{ padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                     <strong style={{ flex: 1, fontSize: 14 }}>{u.product || u.production_id}</strong>
-                    <span style={{ font: '800 14px Nunito Sans,sans-serif' }}>{u.total} créditos</span>
+                    <span style={{ font: '800 14px Instrument Sans,sans-serif' }}>{u.total} créditos</span>
                   </div>
                   <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 2 }}>
                     {u.stages.map((s) => (
@@ -61,13 +61,13 @@ export function CreditsContent({ v }) {
               : (
                 <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
                   {d.statement.map((e) => (
-                    <li key={e.id} style={{ display: 'flex', gap: 10, padding: '8px 2px', borderBottom: '2px dotted #E3E7EE', fontSize: 13 }}>
+                    <li key={e.id} style={{ display: 'flex', gap: 10, padding: '8px 2px', borderBottom: '2px dotted #E7E7E4', fontSize: 13 }}>
                       <span className="g-muted" style={{ width: 82, flex: 'none' }}>{when(e.at)}</span>
                       <span style={{ flex: 1 }}>
                         <strong>{e.label}</strong>{e.stage ? ' · ' + e.stage : ''}
                         {(e.product || e.note) && <span className="g-muted"> — {[e.product, e.note].filter(Boolean).join(' · ')}</span>}
                       </span>
-                      <span style={{ fontWeight: 800, color: e.amount_cc > 0 ? '#205C2E' : e.amount_cc < 0 ? '#17234B' : '#545C78' }}>
+                      <span style={{ fontWeight: 800, color: e.amount_cc > 0 ? '#205C2E' : e.amount_cc < 0 ? '#0E0E10' : '#77777C' }}>
                         {e.amount_cc > 0 ? '+' : ''}{e.amount}
                       </span>
                     </li>

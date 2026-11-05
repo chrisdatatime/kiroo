@@ -28,7 +28,7 @@ const GOOGLE_ERRORS = {
 };
 const TEAM = [
   { id: 'nina', look: { shirt: '#FF8FC0', acc: 'bone' } },
-  { id: 'theo', look: { shirt: '#D5F45B', acc: 'fones' } },
+  { id: 'theo', look: { shirt: '#FF5B2E', acc: 'fones' } },
   { id: 'iris', look: { shirt: '#FF9A3D', acc: 'oculos' } },
 ];
 const COPY = {
@@ -65,7 +65,7 @@ function Field({ id, label, aside, children, hint, hintId }) {
   );
 }
 
-const inputCls = 'h-11 rounded-[12px] border-[var(--au-line-2)] bg-white px-3.5 text-[15px] md:text-[15px] shadow-[0_1px_0_rgba(23,35,75,.03)] placeholder:text-[#9AA0B4] focus-visible:border-[var(--au-ink)] focus-visible:ring-[3px] focus-visible:ring-[rgba(23,35,75,.12)]';
+const inputCls = 'h-11 rounded-[12px] border-[var(--au-line-2)] bg-white px-3.5 text-[15px] md:text-[15px] shadow-[0_1px_0_rgba(14, 14, 16, .03)] placeholder:text-[#9AA0B4] focus-visible:border-[var(--au-ink)] focus-visible:ring-[3px] focus-visible:ring-[rgba(14, 14, 16, .12)]';
 
 function PasswordInput({ id, value, onChange, autoComplete, invalid, describedBy, autoFocus }) {
   const [show, setShow] = React.useState(false);
@@ -183,6 +183,7 @@ export default function AuthScreen({ onDone, resetToken, initialMode, onBack }) 
     if (params.has('erro')) window.history.replaceState(null, '', window.location.pathname);  // a mensagem já está na tela
   }, [params]);
   React.useEffect(() => { if (!cfg.signup && mode === 'signup') setMode('login'); }, [cfg.signup, mode]);
+  React.useEffect(() => { document.title = mode === 'signup' ? 'Kiroo — Criar conta' : 'Kiroo — Entrar'; }, [mode]);
   // a cada troca de etapa, o foco vai para o título (leitor de tela anuncia a etapa nova)
   React.useEffect(() => { if (first.current) { first.current = false; return; } headRef.current?.focus(); }, [mode]);
   React.useEffect(() => {
@@ -248,8 +249,8 @@ export default function AuthScreen({ onDone, resetToken, initialMode, onBack }) 
       <div className="au-main">
         <header className="au-top">
           {onBack && mode !== 'reset' && mode !== 'verify'
-            ? <button type="button" className="au-brand" onClick={onBack} aria-label="Kiroo: voltar para o início"><img src={logo} alt="" height="28" /></button>
-            : <span className="au-brand"><img src={logo} alt="Kiroo" height="28" /></span>}
+            ? <button type="button" className="au-brand" onClick={onBack} aria-label="Kiroo: voltar para o início"><img src={logo} alt="" height="26" /></button>
+            : <span className="au-brand"><img src={logo} alt="Kiroo" height="26" /></span>}
           {onBack && mode !== 'reset' && mode !== 'verify' && (
             <Button variant="ghost" className="h-10 rounded-[10px] px-3 text-[14px] text-[var(--au-ink-2)]" onClick={onBack}>
               <ArrowLeft aria-hidden="true" />Início

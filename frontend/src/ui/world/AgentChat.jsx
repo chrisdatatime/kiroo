@@ -69,7 +69,7 @@ function AgentChat(p) {
           <SheetDescription id="pw-chat-desc" className="pw-chat-desc">
             Conversa rápida: {p.name} explica e sugere, mas não executa nada. Use os botões para agir.
           </SheetDescription>
-          {p.statusText && <StatusChip need={p.status === 'need'}>{p.statusText}</StatusChip>}
+          {p.statusText && <StatusChip need={p.status === 'need'} active={p.status === 'work'}>{p.statusText}</StatusChip>}
           <div className="pw-chat-actions">
             {(p.actions || []).map((a, k) => (
               <button key={a.label} type="button" className={'pw-btn' + (k === 0 ? ' pw-btn-primary' : '')}

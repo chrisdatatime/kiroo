@@ -12,8 +12,8 @@
 // e marque o elemento real com data-tour="<alvo>".
 
 export const STEPS = [
-  { id: 'welcome', kind: 'dialog', title: 'Boas-vindas à Kiroo',
-    body: 'A Kiroo é uma equipe de agentes que transforma um produto em uma missão de produção. Em 1 minutinho a gente mostra onde fica cada coisa.' },
+  { id: 'welcome', kind: 'dialog', title: 'Boas-vindas ao Kiroo',
+    body: 'O Kiroo é uma equipe de agentes que transforma um produto em uma missão de produção. Em 1 minutinho a gente mostra onde fica cada coisa.' },
   { id: 'team', kind: 'spot', view: 'central', targets: ['team', 'team-head'], side: 'right', title: 'Sua equipe',
     body: 'São 6 agentes, cada um numa etapa: Nina prepara, Theo dirige, Iris faz as imagens, Lia os vídeos, Rui revisa e Beto edita. O pontinho mostra quem está livre ou trabalhando; clique para abrir a etapa.' },
   { id: 'new-mission', kind: 'spot', view: 'central', targets: ['new-mission'], side: 'bottom', title: 'Nova missão',
