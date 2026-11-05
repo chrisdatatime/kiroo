@@ -1,4 +1,4 @@
-# Pivoo (protótipo)
+# Kiroo (protótipo)
 
 Escritório-jogo isométrico para produzir vídeos de produto com agentes de IA.
 

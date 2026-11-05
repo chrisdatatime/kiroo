@@ -1,7 +1,7 @@
 // Mundo da sede no Phaser 3 a partir do office.tmj (SPEC-VIS-001, Fase 2).
 // - Camadas na ordem do mapa. Antes de furniture_sorted: chão/parede/móveis atrás (depth negativo).
 //   furniture_sorted: um sprite por tile, depth = y do pé do móvel. Depois: furniture_above, sempre na frente.
-// - Personagens: agentes PIVOO em folhas 6x6 de quadros 32x32 e jogador LimeZu em quadros 32x64;
+// - Personagens: agentes Kiroo em folhas 6x6 de quadros 32x32 e jogador LimeZu em quadros 32x64;
 //   sem a folha (arte fora do git), cai no sprite de characters.js. Depth = y do pé.
 // - Câmera segue o jogador com lerp, presa aos limites do mapa, zoom inteiro em pixels do dispositivo (sem blur).
 //   A sede não encolhe para caber na tela; se o mapa for menor que a tela, ele fica centralizado.
@@ -329,7 +329,7 @@ class OfficeScene extends Phaser.Scene {
     return (ft.rim = r);
   }
 
-  // Agentes PIVOO: folha 16x48 de quadros 32x32 (ver sprites.js). Não tem as faixas da folha LimeZu.
+  // Agentes Kiroo: folha 16x48 de quadros 32x32 (ver sprites.js). Não tem as faixas da folha LimeZu.
   drawPivoo(e, t) {
     const inv = tagScale(this.cameras.main.zoom, window.devicePixelRatio || 1);
     const action = e.walking ? 'walk' : (e.work || e.anim === 'type' ? 'work' : 'idle');

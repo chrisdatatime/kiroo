@@ -1,4 +1,4 @@
-# HANDOFF — migração visual do Pivoo (SPEC-VIS-001)
+# HANDOFF — migração visual do Kiroo (SPEC-VIS-001)
 
 > **2026-11-04 — reavaliação de produto:** diagnóstico, visão e plano em [VISAO_PRODUTO.md](VISAO_PRODUTO.md). Fase 0 entregue: shell com Central, Missão, Equipe e Escritório
 > (`frontend/src/shell/`). Pendente: validar no seu navegador; `tests/minigames.test.mjs` segue falhando (já falhava antes).
@@ -15,14 +15,14 @@ Três pastas **não estão no git** (licença LimeZu) e entram no **build**, nã
   artefato da CI com acesso restrito), são copiadas para o contexto do build antes de `npm run build` e **nunca** entram numa imagem pública nem no
   repositório. Hoje a única cópia está na máquina do Chris (origem: `Downloads\moderninteriors-win`), então vale ter um backup privado.
 
-## Folhas PIVOO dos agentes (2026-11-04, 512×1536)
+## Folhas Kiroo dos agentes (2026-11-04, 512×1536)
 `assets/characters/{nina,theo,iris,rui,lia,beto}.png` = grade exata 16×48 de quadros 32×32 (corpo em y 3..29, pé em y=29). Carregadas como spritesheet normal (sem normalizador;
 `spriteLayout.js` removido). 8 direções horárias S,SW,W,NW,N,NE,E,SE; usadas só as 4 cardeais. Linhas 0-3 = espera (8 quadros/direção), 4-11 = caminhada (16/direção, 1 ciclo = 2 tiles),
 20 = prancheta de frente (usada como "trabalhando"). Mapeamento em `sprites.js` (`pivooFrame`). Não há guia oficial dessas folhas: o resto das linhas (corrida?, sono, "!", rindo, carregando) foi visto mas **não mapeado**; sentado de frente/costas e "precisa de você" ainda usam espera.
 
 ## Estado atual
 Fase 1 entregue (pipeline + sala de Edição só com tiles do LimeZu).
-**Fase 2 entregue (2026-11-04), aguardando validação do Chris:** o `office.tmj` roda no Phaser 3 dentro do Pivoo, atrás
+**Fase 2 entregue (2026-11-04), aguardando validação do Chris:** o `office.tmj` roda no Phaser 3 dentro do Kiroo, atrás
 de uma feature flag com **padrão `canvas`** (renderizador antigo intacto, nada DEPRECATED foi apagado).
 Escopo aprovado (opção A): **só integração**. A estrutura da sede inteira entrou na Fase 2b-1 (abaixo); mobília é a 2b-2.
 `npm run build` ✓ · `node tests/map.test.mjs` ✓ · `node tests/tmj.test.mjs` ✓ (novo).

@@ -1,7 +1,7 @@
-# Pivoo — frontend (escritório-jogo)
+# Kiroo — frontend (escritório-jogo)
 
 ## O que é
-Interface principal do **Pivoo**: um escritório explorável em pixel art, visto de cima (RPG 2D), em que o usuário produz vídeos de
+Interface principal do **Kiroo**: um escritório explorável em pixel art, visto de cima (RPG 2D), em que o usuário produz vídeos de
 produto para a Shopee Vídeo com agentes. **O motor é o servidor Python** (`../src/studio`): este frontend só desenha e
 chama a API. Princípio: o usuário traz o produto, o estúdio propõe a produção, o usuário ajusta o que importa.
 
@@ -99,7 +99,7 @@ A importação automática de fotos pelo link **não existe**: as fotos vêm do 
 
 ## Identidade visual
 Interface (Fase 4b): tema claro, primário índigo `#3B44E6`, texto `#1F2430`, linha `#E3E7EE`, fonte Geist; lima fica só para "precisa de você" (!).
-As classes `g-*` foram redesenhadas com esses tokens. Marca **Pivoo**, assinatura "Seu estúdio ganha vida." Marinho `#17234B`, lima `#D5F45B` (próxima ação, seleção, "!"), creme `#FFF8EC`,
+As classes `g-*` foram redesenhadas com esses tokens. Marca **Kiroo**, assinatura "Seu estúdio ganha vida." Marinho `#17234B`, lima `#D5F45B` (próxima ação, seleção, "!"), creme `#FFF8EC`,
 preto `#111111`, azul-céu `#8ED8F8`. Fonte Nunito Sans. Os **olhos** são o centro da identidade e mudam com o humor do personagem.
 Logos e padrão ficam em `src/assets/` (PNG transparentes enviados pelo Chris; não são vetores). Apoio da pixel art: lavanda `#B8B4DE`. Sem emojis como ícones, sem gradientes roxos.
 

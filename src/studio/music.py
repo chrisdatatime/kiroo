@@ -1,7 +1,7 @@
 """Biblioteca musical da Lia e do Beto.
 
 A Lia sugere e guarda a escolha da produção; o Beto é o único que aplica a trilha, em `_edit` (uma só vez por montagem).
-Três origens, sempre separadas: tendências (curadoria manual, só referência, nunca incorporadas), Biblioteca Pivoo
+Três origens, sempre separadas: tendências (curadoria manual, só referência, nunca incorporadas), Biblioteca Kiroo
 (sintetizada pelo estúdio ou licenciada em assets/music) e Minhas músicas (uploads privados do workspace, com autorização
 confirmada pelo usuário).
 """

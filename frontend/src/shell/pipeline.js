@@ -16,7 +16,7 @@ export function buildPipeline({ idx, statuses = {}, hasProd, paused = false, det
   const review = { id: 'revisao', title: 'Revisão e aprovação', agents: ['rui'], tab: 'revisao', state: idx >= 8 ? 'done' : pick(statuses.rui) };
   const delivery = { id: 'entrega', title: 'Entrega concluída', agents: ['beto'], tab: 'entrega', state: idx >= 10 ? 'done' : idx === 9 ? 'need' : idx === 8 ? 'work' : 'wait' };
   const anyWork = fronts.some((f) => f.state === 'work') || review.state === 'work' || delivery.state === 'work';
-  const orchestrator = { id: 'orquestrador', title: 'Orquestrador PIVOO', agents: [], state: !hasProd ? 'wait' : paused ? 'need' : idx >= 10 ? 'done' : 'work', busy: anyWork };
+  const orchestrator = { id: 'orquestrador', title: 'Orquestrador Kiroo', agents: [], state: !hasProd ? 'wait' : paused ? 'need' : idx >= 10 ? 'done' : 'work', busy: anyWork };
   const goal = { id: 'objetivo', title: 'Objetivo do usuário', agents: [], tab: 'produto', state: hasProd ? 'done' : 'need' };
   const all = [goal, orchestrator, ...fronts, review, delivery];
   all.forEach((n) => { n.detail = detail[n.id] || ''; n.label = STATE_LABEL[n.state]; });

@@ -1,4 +1,4 @@
-# Pivoo
+# Kiroo
 
 *Seu estúdio ganha vida.*
 
@@ -83,7 +83,7 @@ Roteiro comercial (contas, créditos, Mercado Pago, hospedagem): [docs/ROADMAP_S
 | Rui | Critérios da conferência automática |
 | Beto | Sem modelo: só o estilo de edição padrão |
 
-**Trilhas** (`src/studio/music.py`): Biblioteca Pivoo, uploads privados com autorização declarada e tendências. Tendências vêm só de curadoria manual em `profiles/music/trends.json` (`updated_at`, `curator`, `items` com `title`, `artist`, `platform`, `region`, `source`, `checked_at`) e nunca são incorporadas: o vídeo sai sem trilha para adicionar a música na plataforma.
+**Trilhas** (`src/studio/music.py`): Biblioteca Kiroo, uploads privados com autorização declarada e tendências. Tendências vêm só de curadoria manual em `profiles/music/trends.json` (`updated_at`, `curator`, `items` com `title`, `artist`, `platform`, `region`, `source`, `checked_at`) e nunca são incorporadas: o vídeo sai sem trilha para adicionar a música na plataforma.
 
 ## Online pelo seu computador
 

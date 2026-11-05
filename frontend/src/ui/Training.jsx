@@ -75,7 +75,7 @@ export default function TrainingWindow({ v }) {
             <Field id="f-qual" label={d.questions.quality} value={form.quality} onChange={set('quality')} />
             {agent === 'beto' && v.editOptions && (
               <label style={{ display: 'flex', flexDirection: 'column', gap: 5, fontWeight: 700, fontSize: 13.5 }}>Qual estilo de edição usar por padrão nas próximas produções?
-                <select className="g-field" value={form.edit_style} onChange={(e) => set('edit_style')(e.target.value)}><option value="">O padrão do Pivoo</option>{v.editOptions.styles.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}</select>
+                <select className="g-field" value={form.edit_style} onChange={(e) => set('edit_style')(e.target.value)}><option value="">O padrão do Kiroo</option>{v.editOptions.styles.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}</select>
               </label>
             )}
             {agent === 'lia' && (

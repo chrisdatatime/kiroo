@@ -1,5 +1,5 @@
 // Personagens humanos do LimeZu (Character Generator 2.0, versão 32x32) no mundo Phaser (SPEC-VIS-001, Fase 3).
-// Só o renderer Phaser usa isto. characters.js (feijão Pivoo), Boneco.jsx e o renderer canvas seguem intactos.
+// Só o renderer Phaser usa isto. characters.js (feijão Kiroo), Boneco.jsx e o renderer canvas seguem intactos.
 //
 // Folha (conferida nos PNGs reais, ver assets/characters/contact-sheet.png): 1792x1312, quadro 32x64, 56 colunas.
 // A grade começa em (0,0); 1312 = 20 faixas de 64 + 32 px vazios no fim (o Phaser descarta o resto).
@@ -8,7 +8,7 @@
 //   faixa 5 sit2 (12: direita 0-5, esquerda 6-11, perna escondida)   faixa 6 phone (12, de frente: 0-2 início, 3-8 loop, 9-11 fim)
 // Só existe sentado de lado (sit); por isso sofá/puff e cadeira de mesa usam idle rebaixado (ver SEAT/seatMode abaixo). Nas faixas 6 e 7 os quadros 12+ são rótulos do guia, não usar.
 // Pé: a última linha opaca é y=63 (andando/parado) ou y=61 (sentado); a cabeça começa em y=16 (topo do corpo = 48 px acima do pé).
-// Dois formatos coexistem: o jogador ainda usa a folha LimeZu 32x64; os seis agentes usam as folhas PIVOO
+// Dois formatos coexistem: o jogador ainda usa a folha LimeZu 32x64; os seis agentes usam as folhas Kiroo
 // 512x1536 = 16 colunas x 48 linhas de quadros 32x32 (grade exata, sem margem). Corpo ocupa y 3..29 do quadro.
 // 8 direções em sentido horário a partir da frente: S, SW, W, NW, N, NE, E, SE (só as 4 cardeais são usadas).
 //   linhas 0-3   espera (idle): 8 quadros por direção, 2 direções por linha (S/SW, W/NW, N/NE, E/SE)

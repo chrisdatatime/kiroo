@@ -5,7 +5,7 @@ import React from 'react';
 export function AboutContent({ v } = {}) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, font: '600 14px/1.45 Nunito Sans,sans-serif' }}>
-      <p style={{ margin: 0 }}>Pivoo: seu estúdio ganha vida.</p>
+      <p style={{ margin: 0 }}>Kiroo: seu estúdio ganha vida.</p>
       <div className="g-card" style={{ padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 4 }}>
         <span className="g-label">Arte da sede</span>
         <span>
@@ -15,7 +15,7 @@ export function AboutContent({ v } = {}) {
       </div>
       <div className="g-card" style={{ padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 4 }}>
         <span className="g-label">Personagens e marca</span>
-        <span>Personagens desenhados pela equipe Pivoo. Fontes Geist e Nunito Sans (SIL Open Font License).</span>
+        <span>Personagens desenhados pela equipe Kiroo. Fontes Geist e Nunito Sans (SIL Open Font License).</span>
       </div>
       {v && v.openTour && (
         <div className="g-card" style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>

@@ -222,9 +222,9 @@ class App:
 
     def _send_verification(self, acc: Accounts, uid: str, email: str) -> bool:
         code = acc.start_verification(uid)
-        return self.send_mail(email, f"Pivoo: seu código é {code}",
-                              f"Seu código de confirmação do Pivoo é {code}.\n\nEle vale por 30 minutos. "
-                              "Se você não criou uma conta no Pivoo, ignore este e-mail.")
+        return self.send_mail(email, f"Kiroo: seu código é {code}",
+                              f"Seu código de confirmação do Kiroo é {code}.\n\nEle vale por 30 minutos. "
+                              "Se você não criou uma conta no Kiroo, ignore este e-mail.")
 
     def _first_account(self, acc: Accounts, s, uid: str, wid: str) -> None:
         """Primeira conta = administrador: recebe as produções existentes e o modo/teto atuais."""
@@ -368,8 +368,8 @@ class App:
                 tok = acc.start_reset(p.get("email", ""))
                 if tok:  # sem SMTP, o e-mail (com o link) vai para o log do servidor: só o operador vê
                     link = f"{self._origin(headers)}/?reset={tok}"
-                    self.send_mail(acc.user_by_email(p.get("email", ""))["email"], "Pivoo: redefinir sua senha",
-                                   f"Para criar uma nova senha no Pivoo, abra o link abaixo (vale por 30 minutos):\n\n{link}\n\n"
+                    self.send_mail(acc.user_by_email(p.get("email", ""))["email"], "Kiroo: redefinir sua senha",
+                                   f"Para criar uma nova senha no Kiroo, abra o link abaixo (vale por 30 minutos):\n\n{link}\n\n"
                                    "Se você não pediu isso, ignore este e-mail: sua senha continua a mesma.")
                 if mailer.configured():
                     return _json(200, {"ok": True, "sent": True, "message": "Se houver uma conta com este e-mail, enviamos um link "
@@ -819,7 +819,7 @@ def serve(port: int = 8765, open_browser: bool = True, public_host: str | None =
     except OSError as exc:
         raise SystemExit(f"A porta {port} já está em uso: pare o outro servidor do estúdio e tente de novo.") from exc
     url = f"http://127.0.0.1:{port}/"
-    print(f"Pivoo em {url}  (Ctrl+C para sair)", flush=True)
+    print(f"Kiroo em {url}  (Ctrl+C para sair)", flush=True)
     if open_browser:
         webbrowser.open(url)
     try:

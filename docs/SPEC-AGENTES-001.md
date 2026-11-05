@@ -1,4 +1,4 @@
-# SPEC-AGENTES-001 — Pivoo como plataforma de agentes configuráveis (Fase 7)
+# SPEC-AGENTES-001 — Kiroo como plataforma de agentes configuráveis (Fase 7)
 
 > Status: **aprovada com ajustes (2026-11-04).** As decisões do Chris estão em §10 e §11 e **prevalecem sobre o resto do texto** quando houver diferença (§11 vale sobre §10).
 > Fases 4–6 validadas pelo Chris; 7.0 feita na branch `chore/fases-4-a-6`. Ordem: 7.1 → 7.2 → 7.M → 7.3 → 7.4, com parada e resumo ao fim de cada fase.
@@ -300,7 +300,7 @@ Os agentes genéricos reutilizam o padrão do `agent_chat.py`: regras fixas do s
 2. **Wizard "Novo agente"** (Dialog com 3 passos e preview do personagem à direita):
    - *Função e nome*: templates de função (Redator, Revisor, Pesquisador, Atendimento, Em branco) que já preenchem a persona.
    - *Persona e limites*: instruções (com contador), modelo (select curto: "Econômico" = haiku é o padrão), teto por tarefa e por dia em créditos, com a estimativa de custo de uma tarefa típica.
-   - *Avatar e sala*: grade de avatares do catálogo (as 6 folhas PIVOO + `voce` + LimeZu disponíveis) e escolha de vaga no minimapa/lista ("Sem mesa" permitido).
+   - *Avatar e sala*: grade de avatares do catálogo (as 6 folhas Kiroo + `voce` + LimeZu disponíveis) e escolha de vaga no minimapa/lista ("Sem mesa" permitido).
 3. **Editor de fluxo** (Sheet): lista ordenável (arrastar + teclado ↑/↓), cada passo com título, agente (select), "de onde vem a entrada" e o toggle **Pedir aprovação**. Mostra o teto de custo estimado do fluxo. O fluxo de vídeo aparece **só em leitura** (os passos são do pack).
 4. **Nova missão**: primeiro escolhe o fluxo ("Vídeo Shopee" no topo, como padrão para quem tem o pack), depois o formulário do fluxo (o de vídeo é o de hoje; o genérico é um campo de texto + orçamento).
 5. **Central, Setores, painel, ⌘K, onboarding e chat** leem `v.team`/`v.missions`, sem nenhum nome fixo. O onboarding ganha o passo **"Escolha um pack ou crie seu primeiro agente"** (cards: Vídeo Shopee (já instalado), Conteúdo de produto, Equipe em branco).
@@ -382,7 +382,7 @@ P ≈ até 1 dia · M ≈ 2–3 dias · G ≈ 4–6 dias (ritmo atual de sessõe
 4. **Pack de vídeo removível?** Proposta: não na v1 (pode ser escondido, não desinstalado). Os agentes do pack podem ser arquivados?
 5. **Template extra:** "Conteúdo de produto" (descrição + legenda a partir de um texto do produto, com Redator → Revisor → aprovação) serve como prova? Alternativas: Atendimento (respostas-padrão) ou Marketing (calendário de posts).
 6. **Marketplace de packs:** vai existir? Se sim, packs de terceiros mudam o modelo de confiança (código vs. dado). A proposta é que packs sejam **só dado** (agentes + fluxo genérico), e que packs com executor nativo como o de vídeo continuem só nossos.
-7. **Avatar:** só as folhas PIVOO + LimeZu que já temos, ou esperar o Character Generator para a v1 do wizard?
+7. **Avatar:** só as folhas Kiroo + LimeZu que já temos, ou esperar o Character Generator para a v1 do wizard?
 8. **Membros/convites:** a gestão da equipe é só do dono ou de qualquer membro do workspace? (Hoje todo membro é `owner`.)
 9. **Nome do conceito na UI:** "pack", "kit" ou "modelo de equipe"?
 10. **Commit das Fases 4–6** antes de começar a 7.1: de acordo?
@@ -437,7 +437,7 @@ Cada fase só começa depois que a anterior for aceita. A 7.1 espera autorizaç�
 
 ### 10.3 Avatares por pasta
 
-- Catálogo = arquivos `assets/characters/*.png` (fora do git, licença) mais um `assets/characters/catalog.json` gerado por `tools/make_avatar_catalog.py`. Esse script lê a pasta, mede cada folha e descobre o formato pelo tamanho (folha PIVOO 512×1536 em quadros 32×32, ou LimeZu/Character Generator 1792×1312 em quadros 32×64). Folha de tamanho desconhecido é ignorada com aviso.
+- Catálogo = arquivos `assets/characters/*.png` (fora do git, licença) mais um `assets/characters/catalog.json` gerado por `tools/make_avatar_catalog.py`. Esse script lê a pasta, mede cada folha e descobre o formato pelo tamanho (folha Kiroo 512×1536 em quadros 32×32, ou LimeZu/Character Generator 1792×1312 em quadros 32×64). Folha de tamanho desconhecido é ignorada com aviso.
 - Para pôr uma folha nova: salvar na pasta, rodar o script e **gerar o build de novo**. Os PNGs entram no bundle por `import.meta.glob` (`WorldPhaser.jsx`), então uma folha nova só aparece depois de `npm run build`. Servir as folhas em tempo de execução fica para depois, se fizer falta.
 - `agent.avatar` guarda a chave do catálogo (nome do arquivo sem extensão). Dois agentes podem usar a mesma. Avatar ausente (PNG removido) cai no feijão, como hoje.
 

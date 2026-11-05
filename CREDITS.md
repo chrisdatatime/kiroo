@@ -11,5 +11,5 @@ No jogo, o crédito aparece em **Sobre e créditos** (janela Minha conta e rodap
 
 ## Personagens e marca
 
-Personagens desenhados por código pela equipe Pivoo (`frontend/src/game/pixel/characters.js`).
+Personagens desenhados por código pela equipe Kiroo (`frontend/src/game/pixel/characters.js`).
 Fonte Nunito Sans (SIL Open Font License).

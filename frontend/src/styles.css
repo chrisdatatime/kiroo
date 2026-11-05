@@ -5,7 +5,7 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* Pivoo — estilos globais do jogo
+/* Kiroo — estilos globais do jogo
    Tokens principais: navy #17234B (contorno/estrutura), lima #D5F45B (acento/próxima ação),
    creme #FFF8EC (painéis), fundo #17234B. Fonte: Nunito Sans. Azul-céu #8ED8F8 de apoio. */
 
@@ -234,7 +234,7 @@ details > summary { cursor: pointer; }
   html {
     @apply font-sans; } }
 
-/* PIVOO Design System — tokens semânticos compartilhados pelo shell shadcn/ui. */
+/* Kiroo Design System — tokens semânticos compartilhados pelo shell shadcn/ui. */
 :root {
   --background: #F4F5F7;
   --foreground: #1F2430;

@@ -17,7 +17,7 @@ const FILES = import.meta.glob(['../../../assets/tilesets/*.png', '!../../../ass
 const URLS = {};
 Object.entries(FILES).forEach(([path, url]) => { URLS[path.split('/').pop().replace(/\.png$/, '')] = url; });
 
-// Personagens: agentes PIVOO 32x32 e jogador LimeZu 32x64. Sem os PNGs, o mundo cai no feijão de characters.js.
+// Personagens: agentes Kiroo 32x32 e jogador LimeZu 32x64. Sem os PNGs, o mundo cai no feijão de characters.js.
 const CH_FILES = import.meta.glob('../../../assets/characters/*.png', { query: '?url', import: 'default', eager: true });
 const CH_URLS = {};
 Object.entries(CH_FILES).forEach(([path, url]) => { CH_URLS[path.split('/').pop().replace(/\.png$/, '')] = url; });

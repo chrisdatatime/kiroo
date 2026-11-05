@@ -1,4 +1,4 @@
-# Roteiro: Pivoo como jogo + SaaS pago
+# Roteiro: Kiroo como jogo + SaaS pago
 
 Decisões do Chris (27/10/2026):
 

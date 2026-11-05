@@ -24,7 +24,7 @@ export function lazyChunk(load) {
 export class AppBoundary extends React.Component {
   constructor(p) { super(p); this.state = { err: null }; }
   static getDerivedStateFromError(err) { return { err }; }
-  componentDidCatch(err, info) { console.error('Pivoo: erro na interface', err, info && info.componentStack); }
+  componentDidCatch(err, info) { console.error('Kiroo: erro na interface', err, info && info.componentStack); }
   render() {
     if (!this.state.err) return this.props.children;
     return (

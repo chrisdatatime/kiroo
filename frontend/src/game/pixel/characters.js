@@ -1,5 +1,5 @@
 // Mantido na migração SPEC-VIS-001: os dois arquivos do LimeZu liberados são cenário e móveis, não personagens.
-// Personagens em pixel art: feijões com olhos grandes (o centro da identidade Pivoo).
+// Personagens em pixel art: feijões com olhos grandes (o centro da identidade Kiroo).
 // Sprite de 20x26 px; 4 direções (down/up/left/right) e poses stand, walk (4 quadros), sit, type, wave, happy.
 import { PAL, shade, sprite, cached } from './draw.js';
 

@@ -2,7 +2,7 @@ import React from 'react';
 import { CloseButton } from './bits.jsx';
 import { getJSON, post, readFile } from '../engine/api.js';
 
-// Trilhas, na sala da Lia. Em alta é só referência; o que entra no vídeo vem da Biblioteca Pivoo ou de Minhas músicas.
+// Trilhas, na sala da Lia. Em alta é só referência; o que entra no vídeo vem da Biblioteca Kiroo ou de Minhas músicas.
 // A Lia guarda a escolha; o Beto aplica a trilha uma única vez, na montagem.
 const MODES = [['auto', 'Escolha por mim'], ['pick', 'Quero escolher'], ['mine', 'Usar minha música'], ['none', 'Sem música']];
 const secs = (n) => { const s = Math.round(n || 0); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
@@ -95,15 +95,15 @@ export default function MusicWindow({ v }) {
         ) : <p style={{ margin: 0 }}>Abra uma produção para aplicar uma trilha. Você já pode ouvir e organizar as músicas.</p>}
 
         <div role="tablist" style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-          {[['alta', 'Em alta'], ['pivoo', 'Biblioteca Pivoo'], ['mine', 'Minhas músicas']].map(([id, l]) => <button key={id} role="tab" aria-selected={tab === id} className="g-tab" style={{ padding: '0 12px' }} onClick={() => setTab(id)}>{l}</button>)}
+          {[['alta', 'Em alta'], ['pivoo', 'Biblioteca Kiroo'], ['mine', 'Minhas músicas']].map(([id, l]) => <button key={id} role="tab" aria-selected={tab === id} className="g-tab" style={{ padding: '0 12px' }} onClick={() => setTab(id)}>{l}</button>)}
           <span style={{ flex: 1 }} />
           <button className="g-btn g-sm" onClick={() => v.openTraining('lia')}>Preferências musicais</button>
         </div>
         {!lib && !err && <p>Carregando…</p>}
         {lib && tab === 'alta' && (
           <>
-            <p style={{ margin: 0, fontSize: 13.5 }}><strong>Curadoria manual</strong>{lib.trends.updated_at ? `, atualizada em ${lib.trends.updated_at}` : ''}. Não há integração com as plataformas. Estar em alta não comprova autorização de uso comercial, e estas faixas nunca são incorporadas pelo Pivoo.</p>
-            {lib.trends.items.length === 0 && <p className="g-card" style={{ margin: 0, padding: 12 }}>Nenhuma tendência cadastrada. O Pivoo não inventa rankings: a lista só aparece quando alguém faz a curadoria com fonte e data.</p>}
+            <p style={{ margin: 0, fontSize: 13.5 }}><strong>Curadoria manual</strong>{lib.trends.updated_at ? `, atualizada em ${lib.trends.updated_at}` : ''}. Não há integração com as plataformas. Estar em alta não comprova autorização de uso comercial, e estas faixas nunca são incorporadas pelo Kiroo.</p>
+            {lib.trends.items.length === 0 && <p className="g-card" style={{ margin: 0, padding: 12 }}>Nenhuma tendência cadastrada. O Kiroo não inventa rankings: a lista só aparece quando alguém faz a curadoria com fonte e data.</p>}
             {lib.trends.items.map((t, k) => (
               <article key={k} className="g-card" style={{ padding: 10, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
                 <div style={{ flex: 1, minWidth: 200 }}><strong>{t.title}</strong>{t.artist ? ' · ' + t.artist : ''}<div className="g-muted" style={{ fontSize: 12.5, fontWeight: 700 }}>{t.platform} · {t.region} · fonte: {t.source} · verificado em {t.checked_at}</div></div>
@@ -124,7 +124,7 @@ export default function MusicWindow({ v }) {
                 <input aria-label="Clima" className="g-field" placeholder="Clima" value={up.mood} onChange={(e) => setUp({ ...up, mood: e.target.value })} />
                 <input aria-label="BPM" className="g-field" placeholder="BPM (se souber)" inputMode="numeric" value={up.bpm} onChange={(e) => setUp({ ...up, bpm: e.target.value.replace(/\D/g, '') })} />
               </div>
-              <input aria-label="Link de referência" className="g-field" placeholder="Link de referência (só anotação: o Pivoo não baixa áudio de links)" value={up.reference_url} onChange={(e) => setUp({ ...up, reference_url: e.target.value })} />
+              <input aria-label="Link de referência" className="g-field" placeholder="Link de referência (só anotação: o Kiroo não baixa áudio de links)" value={up.reference_url} onChange={(e) => setUp({ ...up, reference_url: e.target.value })} />
               <label style={{ fontSize: 13.5, fontWeight: 700 }}><input type="checkbox" checked={up.authorized} onChange={(e) => setUp({ ...up, authorized: e.target.checked })} /> Tenho autorização para usar esta música em vídeos comerciais.</label>
               <div><button className="g-btn g-lime" disabled={busy || !up.file || !up.authorized} onClick={send}>Enviar</button></div>
             </fieldset>

@@ -10,7 +10,7 @@ import logo from '../assets/logo-dark.png';
 import { AboutContent } from './About.jsx';
 import './auth.css';
 
-// Acesso ao Pivoo: entrar, criar conta, confirmar e-mail, esqueci a senha e nova senha (?reset=token).
+// Acesso ao Kiroo: entrar, criar conta, confirmar e-mail, esqueci a senha e nova senha (?reset=token).
 // Mesma sessão de sempre (cookie HttpOnly do servidor Python); Google só aparece quando o servidor tem as credenciais.
 
 // O servidor recusa cadastro em endereço público (só convite); /api/auth/config confirma ao abrir.
@@ -32,7 +32,7 @@ const TEAM = [
   { id: 'iris', look: { shirt: '#FF9A3D', acc: 'oculos' } },
 ];
 const COPY = {
-  login: { title: 'Entrar no Pivoo', sub: 'Sua equipe está na sede, esperando o próximo produto.', cta: 'Entrar', busy: 'Entrando…' },
+  login: { title: 'Entrar no Kiroo', sub: 'Sua equipe está na sede, esperando o próximo produto.', cta: 'Entrar', busy: 'Entrando…' },
   signup: { title: 'Criar sua conta', sub: 'Monte seu estúdio em menos de um minuto. Começa em DEMO, sem custo.', cta: 'Criar conta', busy: 'Criando sua conta…' },
   forgot: { title: 'Esqueceu a senha?', sub: 'Informe o e-mail da conta. Enviamos um link para criar uma nova.', cta: 'Enviar link', busy: 'Enviando…' },
   sent: { title: 'Confira seu e-mail', sub: '' },
@@ -248,8 +248,8 @@ export default function AuthScreen({ onDone, resetToken, initialMode, onBack }) 
       <div className="au-main">
         <header className="au-top">
           {onBack && mode !== 'reset' && mode !== 'verify'
-            ? <button type="button" className="au-brand" onClick={onBack} aria-label="Pivoo: voltar para o início"><img src={logo} alt="" width="96" /></button>
-            : <span className="au-brand"><img src={logo} alt="Pivoo" width="96" /></span>}
+            ? <button type="button" className="au-brand" onClick={onBack} aria-label="Kiroo: voltar para o início"><img src={logo} alt="" width="96" /></button>
+            : <span className="au-brand"><img src={logo} alt="Kiroo" width="96" /></span>}
           {onBack && mode !== 'reset' && mode !== 'verify' && (
             <Button variant="ghost" className="h-10 rounded-[10px] px-3 text-[14px] text-[var(--au-ink-2)]" onClick={onBack}>
               <ArrowLeft aria-hidden="true" />Início

@@ -117,7 +117,7 @@ export default function Central({ v }) {
                   <div className="flex flex-wrap gap-2">{v.nextLabel && <Button className="bg-[var(--pivoo-lime)] text-[var(--pivoo-ink)] hover:bg-[var(--pivoo-lime-strong)]" onClick={v.goNext}>{v.nextLabel}<ArrowRight /></Button>}<Button variant="outline" onClick={() => v.setView('missao')}><Play />Ver fluxo</Button></div>
                 </CardContent>
               </>) : (
-                <CardContent className="flex flex-1 flex-col items-center justify-center py-12 text-center"><span className="mb-3 grid size-11 place-items-center rounded-xl bg-muted text-muted-foreground"><Sparkles className="size-5" /></span><div className="font-semibold">Sem missão aberta</div><p className="mt-1 max-w-sm text-sm text-muted-foreground">Comece com o produto; o PIVOO organiza direção, geração, revisão e entrega.</p><Button className="mt-5" onClick={() => { v.setView('missao'); v.newProd(); }}><Plus />Começar missão</Button></CardContent>
+                <CardContent className="flex flex-1 flex-col items-center justify-center py-12 text-center"><span className="mb-3 grid size-11 place-items-center rounded-xl bg-muted text-muted-foreground"><Sparkles className="size-5" /></span><div className="font-semibold">Sem missão aberta</div><p className="mt-1 max-w-sm text-sm text-muted-foreground">Comece com o produto; o Kiroo organiza direção, geração, revisão e entrega.</p><Button className="mt-5" onClick={() => { v.setView('missao'); v.newProd(); }}><Plus />Começar missão</Button></CardContent>
               )}
             </Card>
           </section>

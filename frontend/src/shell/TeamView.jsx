@@ -21,7 +21,7 @@ export default function TeamView({ v }) {
       </header>
       <div className="pv-card" style={{ padding: 16, display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
         <span className="pv-nicon"><Icon name="brain" size={20} /></span>
-        <div className="pv-grow" style={{ flexBasis: 220 }}><div className="pv-title">Orquestrador PIVOO</div><div className="pv-meta">Interpreta o objetivo, planeja, delega, controla orçamento e tentativas, retoma o que parou e chama você nas decisões. Trabalha sozinho.</div></div>
+        <div className="pv-grow" style={{ flexBasis: 220 }}><div className="pv-title">Orquestrador Kiroo</div><div className="pv-meta">Interpreta o objetivo, planeja, delega, controla orçamento e tentativas, retoma o que parou e chama você nas decisões. Trabalha sozinho.</div></div>
         <Pill s={v.pipeline.orchestrator.state}>{v.pipeline.orchestrator.label}</Pill>
       </div>
       <div className="pv-grid">

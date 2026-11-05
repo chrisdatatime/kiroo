@@ -1,4 +1,4 @@
-# Vocabulário de tiles do Pivoo (SPEC-VIS-001, Fase 1).
+# Vocabulário de tiles do Kiroo (SPEC-VIS-001, Fase 1).
 # Tileset: Modern Interiors by LimeZu — https://limezu.itch.io/moderninteriors
 #
 # GID = firstgid + linha*colunas + coluna. Os firstgid têm de bater com assets/maps/office.tmx.

@@ -26,7 +26,7 @@ const DESCS = {
   pilot: 'Quanto os agentes decidem sozinhos.',
   account: 'Quem está conectado e em qual estúdio.',
   credits: 'Saldo, consumo por produção e extrato.',
-  about: 'Pivoo e os créditos da arte.',
+  about: 'Kiroo e os créditos da arte.',
 };
 
 function Row({ title, desc, children }) {
@@ -43,7 +43,7 @@ function General({ v }) {
     <div className="pref-stack">
       <section className="pref-sec">
         <h3 className="pref-sec-h">Aparência</h3>
-        <Row title="Modo de cor" desc="O Pivoo usa o tema claro. O modo escuro vem depois.">
+        <Row title="Modo de cor" desc="O Kiroo usa o tema claro. O modo escuro vem depois.">
           <span className="pref-static">Claro</span>
         </Row>
       </section>

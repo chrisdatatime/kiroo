@@ -73,7 +73,7 @@ SUGGESTIONS = {
 
 # Regras obrigatórias do sistema: uma orientação não pode contrariá-las.
 SYSTEM_RULES = [
-    (re.compile(r"invent|exager|prometa|garant|certifica", re.I), "O Pivoo não inventa características, benefícios ou garantias do produto."),
+    (re.compile(r"invent|exager|prometa|garant|certifica", re.I), "O Kiroo não inventa características, benefícios ou garantias do produto."),
     (re.compile(r"(mud|troc|alter)\w*\s+(a\s+|o\s+)?(cor|forma|modelo|variante|tamanho)", re.I), "O produto precisa continuar idêntico às fotos oficiais."),
     (re.compile(r"publi(que|car)\s|poste|postar", re.I), "Treinar um agente não dá permissão de publicar: a publicação é manual."),
     (re.compile(r"(ignor|sem|pul)\w*\s+(a\s+|o\s+)?(orçamento|limite|teto|aprova|revis)", re.I), "O orçamento e as etapas de aprovação não podem ser dispensados por treinamento."),

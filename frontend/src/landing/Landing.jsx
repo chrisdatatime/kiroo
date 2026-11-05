@@ -8,7 +8,7 @@ import logoLight from '../assets/logo-light.png';
 import { ART, AGENT_PINS } from './art.js';
 import './landing.css';
 
-// Home pública (antes do login). Estrutura inspirada em escritórios virtuais, com o conteúdo do Pivoo:
+// Home pública (antes do login). Estrutura inspirada em escritórios virtuais, com o conteúdo do Kiroo:
 // a sede real (tools/render_home.py), os seis agentes, o Piloto, créditos com estimativa e as regras honestas do produto.
 // Nada de depoimentos, logos de clientes ou números inventados.
 
@@ -43,7 +43,7 @@ const PILOT = [
 
 const FAQ = [
   ['O vídeo vai ser fiel ao meu produto?', 'A equipe trabalha a partir das suas fotos e da ficha, e o Rui confere cada cena contra elas. Mesmo assim, conferência automática pode ser inconclusiva: quando isso acontece, a cena espera você. Não prometemos 100% de fidelidade; prometemos dizer quando há dúvida.'],
-  ['O Pivoo publica direto na Shopee?', 'Não. Você baixa o vídeo e publica pelo app ou pelo painel da Shopee. A legenda sugerida usa só o que está na ficha e o que você confirmou: nada de preço, variante ou característica inventada.'],
+  ['O Kiroo publica direto na Shopee?', 'Não. Você baixa o vídeo e publica pelo app ou pelo painel da Shopee. A legenda sugerida usa só o que está na ficha e o que você confirmou: nada de preço, variante ou característica inventada.'],
   ['Quanto custa um vídeo?', 'Depende de quantas imagens e takes a produção usa. Antes de cada etapa paga você vê a estimativa em créditos e o limite da produção. Se uma geração falha, o crédito reservado volta para o saldo.'],
   ['O que é o modo DEMO?', 'Contas novas começam no DEMO: o fluxo inteiro funciona, mas imagens e vídeos são de exemplo e não custam nada. Serve para conhecer a equipe antes de gastar créditos.'],
   ['Preciso andar pelo escritório para usar?', 'Não. O escritório é para ver a equipe trabalhando e conversar com ela quando quiser. Tudo o que importa (aprovar, liberar gasto, baixar) fica a um clique na Central.'],
@@ -193,14 +193,14 @@ function FocusScene() {
 export default function Landing({ onEnter, signupOpen }) {
   const start = () => onEnter(signupOpen ? 'signup' : 'login');
   const startLabel = signupOpen ? 'Começar no DEMO' : 'Entrar no estúdio';
-  React.useEffect(() => { document.title = 'Pivoo · Uma equipe de vídeo para a sua loja'; return () => { document.title = 'Pivoo'; }; }, []);
+  React.useEffect(() => { document.title = 'Kiroo · Uma equipe de vídeo para a sua loja'; return () => { document.title = 'Kiroo'; }; }, []);
 
   return (
     <div className="lp">
       <a className="lp-skip" href="#lp-main" onClick={go('lp-main')}>Pular para o conteúdo</a>
       <header className="lp-top">
         <nav className="lp-nav" aria-label="Principal">
-          <a href="#lp-main" className="lp-brand" onClick={go('lp-main')}><img src={logoDark} alt="Pivoo" width="104" /></a>
+          <a href="#lp-main" className="lp-brand" onClick={go('lp-main')}><img src={logoDark} alt="Kiroo" width="104" /></a>
           <ul className="lp-links">
             <li><a href="#como" onClick={go('como')}>Como funciona</a></li>
             <li><a href="#equipe" onClick={go('equipe')}>Equipe</a></li>
@@ -300,7 +300,7 @@ export default function Landing({ onEnter, signupOpen }) {
               </ul>
             </div>
             <div className="lp-cmp is-after">
-              <h3 className="lp-cmp-h"><span className="lp-cmp-ic"><img src={logoLight} alt="" width="22" /></span>Com a equipe do Pivoo</h3>
+              <h3 className="lp-cmp-h"><span className="lp-cmp-ic"><img src={logoLight} alt="" width="22" /></span>Com a equipe do Kiroo</h3>
               <ul>
                 <li>Você manda fotos e ficha, a Nina organiza</li>
                 <li>O Rui confere cada cena contra o produto real</li>
@@ -410,7 +410,7 @@ export default function Landing({ onEnter, signupOpen }) {
             <button type="button" className="lp-btn is-lime is-lg" onClick={start}>{startLabel}<ArrowRight size={18} aria-hidden="true" /></button>
           </div>
           <div className="lp-foot-row">
-            <img src={logoLight} alt="Pivoo" width="96" />
+            <img src={logoLight} alt="Kiroo" width="96" />
             <nav aria-label="Rodapé" className="lp-foot-links">
               <a href="#como" onClick={go('como')}>Como funciona</a>
               <a href="#equipe" onClick={go('equipe')}>Equipe</a>
@@ -421,7 +421,7 @@ export default function Landing({ onEnter, signupOpen }) {
           </div>
           <p className="lp-foot-legal">
             Arte da sede: Modern Interiors e Modern Office por LimeZu (<a href="https://limezu.itch.io/moderninteriors" target="_blank" rel="noopener noreferrer">limezu.itch.io</a>).
-            Shopee é marca da Sea Limited; o Pivoo não é afiliado à Shopee.
+            Shopee é marca da Sea Limited; o Kiroo não é afiliado à Shopee.
           </p>
         </div>
       </footer>

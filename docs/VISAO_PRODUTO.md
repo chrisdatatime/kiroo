@@ -1,4 +1,4 @@
-# PIVOO — diagnóstico, visão e plano de evolução (2026-11-04)
+# Kiroo — diagnóstico, visão e plano de evolução (2026-11-04)
 
 > Escrito depois de ler `App.jsx`, `Hud.jsx`, `ProdWindow`, `data.js`, `agent_config.py`, `orchestrator.py`, `view.py`, os docs e o HANDOFF.
 > Primeira fatia já implementada: ver "O que entrou agora" no fim.
@@ -32,7 +32,7 @@
 
 ## 2. Visão
 
-> **Pivoo é o sistema operacional de equipes de agentes: você descreve um objetivo, a equipe planeja, executa, pede decisão nos pontos certos e entrega — e você vê tudo acontecendo.**
+> **Kiroo é o sistema operacional de equipes de agentes: você descreve um objetivo, a equipe planeja, executa, pede decisão nos pontos certos e entrega — e você vê tudo acontecendo.**
 
 O diagrama "O motor trabalhando nos bastidores" (objetivo → orquestrador → frentes em paralelo → revisão → entrega) é o **modelo mental certo**.
 Hoje ele existe só dentro do código. A visão é torná-lo o **centro do produto**:
@@ -53,7 +53,7 @@ Hoje ele existe só dentro do código. A visão é torná-lo o **centro do produ
 4. **Escritório** — o mundo em pixel art, com seu valor intacto: *ver* a equipe trabalhando e interagir com ela. Deixa de ser a porta de entrada obrigatória.
 - Utilitárias: **Créditos** e **Conta**, sempre na lateral; **⌘K** para ir a qualquer lugar.
 
-### Sistema de design "Pivoo Studio"
+### Sistema de design "Kiroo Studio"
 Mantém marinho `#17234B`, lima `#D5F45B`, creme, Nunito Sans e os olhos. Muda a *gramática*: superfícies planas, linha de 1 px, raio 12, sombra suave, números tabulares,
 lima **somente** para "próxima ação / precisa de você". Estado nunca só por cor (ícone + texto). O estilo "jogo" (borda grossa) fica no Escritório e nos minijogos.
 

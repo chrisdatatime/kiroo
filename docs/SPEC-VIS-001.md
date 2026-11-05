@@ -1,4 +1,4 @@
-# SPEC-VIS-001 — Mundo do Pivoo em tileset (Tiled + Phaser 3)
+# SPEC-VIS-001 — Mundo do Kiroo em tileset (Tiled + Phaser 3)
 
 | | |
 |---|---|
@@ -159,7 +159,7 @@ porta e colisão; a mobília é a 2b-2. Objects: um `room` por célula (+ `meu`)
 - Nenhum tile é desenhado por código.
 
 **Fase 2 (integração)**
-- O `.tmj` é renderizado no Phaser dentro do Pivoo, com y-sorting, colisão e câmera.
+- O `.tmj` é renderizado no Phaser dentro do Kiroo, com y-sorting, colisão e câmera.
 - Os objetos `room` ligam às salas e estados que já existem.
 - Andar, sentar, monitores, agentes, treinamento e trilhas seguem funcionando.
 - `CREDITS.md` presente.

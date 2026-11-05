@@ -1,4 +1,4 @@
-// Dados da Pivoo: agentes, etapas e cenas. O mapa da sede vem de game/map.js (renderizador antigo) ou do
+// Dados da Kiroo: agentes, etapas e cenas. O mapa da sede vem de game/map.js (renderizador antigo) ou do
 // assets/maps/office.tmj (Phaser, SPEC-VIS-001 Fase 2), conforme a flag em game/worldFlag.js.
 import * as OLD from './map.js';
 import { WORLD } from './worldFlag.js';

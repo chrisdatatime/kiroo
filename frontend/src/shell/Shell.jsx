@@ -39,7 +39,7 @@ function RailTip({ label, children, kbd }) {
 
 // Menu do estúdio (logo no topo do trilho)
 function WorkspaceMenu({ v, newMission }) {
-  const ws = v.account?.workspace?.name || 'Pivoo';
+  const ws = v.account?.workspace?.name || 'Kiroo';
   return (
     <DropdownMenu>
       <RailTip label={ws}>
@@ -55,7 +55,7 @@ function WorkspaceMenu({ v, newMission }) {
         <DropdownMenuItem onSelect={() => v.openPrefs('prefs')}><Settings />Preferências</DropdownMenuItem>
         <DropdownMenuItem onSelect={() => v.openPrefs('pilot')}><Bot />Piloto: {v.pilot.label}</DropdownMenuItem>
         <DropdownMenuItem onSelect={() => v.openPrefs('credits')}><CircleDollarSign />Créditos e extrato</DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => v.openPrefs('about')}><Info />Sobre o Pivoo</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => v.openPrefs('about')}><Info />Sobre o Kiroo</DropdownMenuItem>
         <DropdownMenuItem onSelect={v.openTour}><GraduationCap />Rever tutorial</DropdownMenuItem>
         {v.account?.admin && (<>
           <DropdownMenuSeparator />
@@ -140,7 +140,7 @@ function Rail({ v, onSearch, newMission }) {
 function Panel({ v, onCollapse, newMission }) {
   const [q, setQ] = React.useState('');
   const [teamOpen, setTeamOpen] = React.useState(true);
-  const ws = v.account?.workspace?.name || 'Pivoo';
+  const ws = v.account?.workspace?.name || 'Kiroo';
   const name = v.account?.user?.name || 'Minha conta';
   const team = v.team.filter((a) => `${a.name} ${a.role}`.toLowerCase().includes(q.trim().toLowerCase()));
   const busy = v.team.filter((a) => v.statuses[a.id] !== 'idle').length;
@@ -225,7 +225,7 @@ export default function Shell({ v, rootRef, stageRef, onKeyDown, onKeyUp, onBlur
 
   return (
     <div ref={rootRef} tabIndex={-1} onKeyDown={onKeyDown} onKeyUp={onKeyUp} onBlur={onBlur} className="pv" data-panel={panel ? 'open' : 'closed'}
-      aria-label="Pivoo. Trilho de navegação, painel do estúdio e área de trabalho. Ctrl K abre a busca de comandos.">
+      aria-label="Kiroo. Trilho de navegação, painel do estúdio e área de trabalho. Ctrl K abre a busca de comandos.">
       <TooltipProvider delayDuration={250}>
         <Rail v={v} onSearch={() => setPal(true)} newMission={newMission} />
         {panel && <Panel v={v} onCollapse={() => setPanel(false)} newMission={newMission} />}

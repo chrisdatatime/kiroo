@@ -22,7 +22,7 @@ assert.equal(sitFrame('right', 0), at(5, 0)); assert.equal(sitFrame('left', 0), 
 assert.equal(phoneFrame(0), at(6, 0)); assert.equal(phoneFrame(0.29), at(6, 2));
 for (let s = 0.3; s < 5; s += 0.01) { const f = phoneFrame(s) - at(6, 0); assert.ok(f >= 3 && f <= 8, 'loop ' + f); }
 assert.deepEqual(Object.keys(CHARACTER_SHEETS).sort(), ['__player', 'beto', 'iris', 'lia', 'nina', 'rui', 'theo']);
-// Os agentes usam a folha PIVOO 16x48 (32x32); só o jogador mantém a folha LimeZu 32x64.
+// Os agentes usam a folha Kiroo 16x48 (32x32); só o jogador mantém a folha LimeZu 32x64.
 assert.deepEqual(characterSheetSpec('nina'), { kind: 'pivoo', frameWidth: 32, frameHeight: 32, head: 27, scale: 2 });
 assert.deepEqual(characterSheetSpec('__player'), { kind: 'human', frameWidth: 32, frameHeight: 64, head: 48, scale: 1 });
 // espera: linhas 0-3, 8 quadros por direção (frente/esq/costas/dir = linhas 0,1,2,3 colunas 0-7)

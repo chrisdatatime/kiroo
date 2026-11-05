@@ -38,7 +38,7 @@ import MissionView from './shell/MissionView.jsx';
 import TeamView from './shell/TeamView.jsx';
 import { buildPipeline, attention } from './shell/pipeline.js';
 
-// Pivoo — escritório-jogo sobre o motor REAL (servidor Python).
+// Kiroo — escritório-jogo sobre o motor REAL (servidor Python).
 // O estado da produção vem de /api/state; as ações chamam a API. O jogo (mundo, movimento, personalização)
 // continua local. Se o motor estiver em modo DEMO, as gerações são simuladas lá e a interface avisa.
 

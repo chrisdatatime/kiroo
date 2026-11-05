@@ -1,4 +1,4 @@
-# PIVOO Design System
+# Kiroo Design System
 
 ## Objetivo
 
@@ -67,7 +67,7 @@ Regras:
 ### P0 — concluído nesta fatia
 
 - Integrar shadcn/ui sem criar outra aplicação.
-- Definir tokens PIVOO e tipografia do shell.
+- Definir tokens Kiroo e tipografia do shell.
 - Migrar navegação principal, responsividade e menu da conta.
 - Migrar a Central preservando ações e dados do `viewModel`.
 
