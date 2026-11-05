@@ -55,7 +55,7 @@
 .lp-top { position: sticky; top: 0; z-index: 20; padding: 12px 0; background: linear-gradient(var(--paper) 70%, rgba(251, 247, 238, 0)); }
 .lp-nav { width: min(1200px, 100% - 32px); margin-inline: auto; display: flex; align-items: center; gap: 24px; padding: 8px 8px 8px 18px; background: rgba(255, 255, 255, .92); border: 1px solid var(--line); border-radius: 18px; backdrop-filter: blur(8px); }
 .lp-brand { display: flex; align-items: center; min-height: 44px; }
-.lp-brand img { display: block; height: auto; }
+.lp-brand img { display: block; width: auto; }
 .lp-links { display: flex; gap: 4px; margin: 0 auto; padding: 0; list-style: none; }
 .lp-links a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px; border-radius: 10px; text-decoration: none; font-weight: 550; font-size: 15px; color: var(--ink-2); }
 .lp-links a:hover { background: rgba(23, 35, 75, .05); color: var(--ink); }

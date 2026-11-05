@@ -66,3 +66,5 @@
   .ob-check path { animation: none; stroke-dashoffset: 0; }
   .ob-dialog.ob-dialog, [data-slot="dialog-overlay"] { animation: none !important; }
 }
+
+.ob-wordmark { display: block; height: 22px; width: auto; margin: 0 0 14px; }

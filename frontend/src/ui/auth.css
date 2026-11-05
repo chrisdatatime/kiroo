@@ -19,7 +19,7 @@
 .au-top { display: flex; align-items: center; justify-content: space-between; min-height: 48px; }
 .au-brand { display: inline-flex; align-items: center; min-height: 44px; padding: 0 4px; border: 0; background: none; border-radius: 10px; cursor: pointer; }
 span.au-brand { cursor: default; }
-.au-brand img { display: block; height: auto; }
+.au-brand img { display: block; width: auto; }
 .au-center { flex: 1; display: grid; place-items: center; padding: 28px 0 32px; }
 .au-panel { width: min(400px, 100%); display: flex; flex-direction: column; animation: au-in .32s var(--au-ease) both; }
 @keyframes au-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }

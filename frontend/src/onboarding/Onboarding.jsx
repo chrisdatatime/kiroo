@@ -1,6 +1,7 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowLeft, ArrowRight, Plus, X } from 'lucide-react';
+import wordmark from '../assets/brand/wordmark-preto-laranja.svg';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { STEPS, createTour, layoutFor, placeCard, progress, text } from './tour.js';
 import './onboarding.css';
@@ -171,7 +172,7 @@ function Onboarding({ start = 0, ctx, api, onClosed }) {
         <DialogContent showCloseButton={false} className="ob-dialog" onKeyDown={onKey}
           onInteractOutside={(e) => e.preventDefault()} aria-describedby="ob-body">
           <button type="button" className="ob-x" onClick={close} aria-label="Fechar tutorial (continua daqui depois)"><X size={16} aria-hidden="true" /></button>
-          {final ? <Check /> : <span className="ob-badge">Tour rápido · 1 min</span>}
+          {final ? <Check /> : <>{step.id === 'welcome' && <img className="ob-wordmark" src={wordmark} alt="Kiroo" height="22" />}<span className="ob-badge">Tour rápido · 1 min</span></>}
           <DialogTitle className="ob-title" aria-live="polite">{title}</DialogTitle>
           <DialogDescription id="ob-body" className="ob-body">{body}</DialogDescription>
           {confirm ? <SkipConfirm onYes={skip} onNo={() => setConfirm(false)} /> : final ? (

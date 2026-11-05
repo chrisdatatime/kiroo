@@ -11,7 +11,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import Icon from './icons.jsx';
 import { Avatar, AGENT_STATE } from './Central.jsx';
-import compactLogo from '../assets/icon.png';
+import compactLogo from '../assets/brand/icone-app-preto.svg';
+import wordmark from '../assets/brand/wordmark-preto-laranja.svg';
 import './shell.css';
 
 // Layout (padrão de escritório virtual): trilho de ícones à esquerda, painel colapsável com o contexto do estúdio
@@ -151,7 +152,7 @@ function Panel({ v, onCollapse, newMission }) {
   return (
     <aside className="pv-panel" aria-label="Painel do estúdio">
       <header className="pv-panel-head">
-        <h2 title={ws}>{ws}</h2>
+        <div className="pv-brand"><img src={wordmark} alt="Kiroo" height="22" /><h2 title={ws}>{ws}</h2></div>
         <RailTip label="Recolher painel"><button type="button" className="pv-icon-btn" onClick={onCollapse} aria-label="Recolher painel"><PanelLeft size={18} aria-hidden="true" /></button></RailTip>
       </header>
 
@@ -220,6 +221,7 @@ export default function Shell({ v, rootRef, stageRef, onKeyDown, onKeyUp, onBlur
     return () => window.removeEventListener('keydown', h);
   }, []);
   const cur = VIEWS.find((x) => x.id === v.view) || VIEWS[0];
+  React.useEffect(() => { document.title = `Kiroo — ${cur.label}`; }, [cur.label]);
   const bal = v.wallet ? (v.wallet.exempt ? 'Isento' : `${v.wallet.balance} créditos`) : '';
   const newMission = () => { v.setView('missao'); v.newProd(); };
 

@@ -1,0 +1,14 @@
+KIROO — Logotipos (direção 2c · Ombro)
+
+Cores: Preto #0E0E10 · Branco #FAFAF8 · Laranja #FF5B2E
+
+wordmark/transparente — logotipo horizontal sem fundo, 256 a 4096 px de largura
+wordmark/com-fundo — logotipo sobre fundo sólido
+icone-app — ícone com cantos arredondados (raio 25%), 16 a 1024 px
+avatar-social — ícone quadrado sem cantos para redes sociais (a plataforma recorta)
+simbolo — cabeça do agente isolada, sem fundo
+favicon — 16, 32, 48 px
+svg — vetores originais
+
+Tamanho mínimo do wordmark: 18 px de altura. Abaixo disso, use o ícone.
+Laranja só na cabeça do agente.

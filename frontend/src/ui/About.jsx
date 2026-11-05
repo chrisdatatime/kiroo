@@ -1,11 +1,13 @@
 import React from 'react';
+import wordmark from '../assets/brand/wordmark-preto-laranja.svg';
 
 // Sobre e créditos da arte (o crédito do tileset LimeZu é exigido pela licença; texto igual ao CREDITS.md).
 // Não confundir com ui/Credits.jsx, que é o saldo de créditos do estúdio.
 export function AboutContent({ v } = {}) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, font: '600 14px/1.45 Nunito Sans,sans-serif' }}>
-      <p style={{ margin: 0 }}>Kiroo: seu estúdio ganha vida.</p>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, font: '500 14px/1.45 var(--font-sans)' }}>
+      <img src={wordmark} alt="Kiroo" height="28" style={{ display: 'block', width: 'auto', height: 28, alignSelf: 'flex-start' }} />
+      <p style={{ margin: 0 }}>Seu estúdio ganha vida.</p>
       <div className="g-card" style={{ padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 4 }}>
         <span className="g-label">Arte da sede</span>
         <span>
@@ -15,7 +17,7 @@ export function AboutContent({ v } = {}) {
       </div>
       <div className="g-card" style={{ padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 4 }}>
         <span className="g-label">Personagens e marca</span>
-        <span>Personagens desenhados pela equipe Kiroo. Fontes Geist e Nunito Sans (SIL Open Font License).</span>
+        <span>Personagens desenhados pela equipe Kiroo. Fontes Instrument Sans e Geist Mono (SIL Open Font License), servidas pelo próprio app.</span>
       </div>
       {v && v.openTour && (
         <div className="g-card" style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>

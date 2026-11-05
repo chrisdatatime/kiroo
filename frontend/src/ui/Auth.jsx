@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import Boneco from '../Boneco.jsx';
 import { auth, authConfig } from '../engine/api.js';
 import { ART } from '../landing/art.js';
-import logo from '../assets/logo-dark.png';
+import logo from '../assets/brand/wordmark-preto-laranja.svg';
 import { AboutContent } from './About.jsx';
 import './auth.css';
 
@@ -248,8 +248,8 @@ export default function AuthScreen({ onDone, resetToken, initialMode, onBack }) 
       <div className="au-main">
         <header className="au-top">
           {onBack && mode !== 'reset' && mode !== 'verify'
-            ? <button type="button" className="au-brand" onClick={onBack} aria-label="Kiroo: voltar para o início"><img src={logo} alt="" width="96" /></button>
-            : <span className="au-brand"><img src={logo} alt="Kiroo" width="96" /></span>}
+            ? <button type="button" className="au-brand" onClick={onBack} aria-label="Kiroo: voltar para o início"><img src={logo} alt="" height="28" /></button>
+            : <span className="au-brand"><img src={logo} alt="Kiroo" height="28" /></span>}
           {onBack && mode !== 'reset' && mode !== 'verify' && (
             <Button variant="ghost" className="h-10 rounded-[10px] px-3 text-[14px] text-[var(--au-ink-2)]" onClick={onBack}>
               <ArrowLeft aria-hidden="true" />Início

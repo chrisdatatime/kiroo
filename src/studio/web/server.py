@@ -54,6 +54,10 @@ MEDIA_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".mp4", ".txt", ".md", ".json"}
 ACTIONS = {"run", "approve", "reject", "final", "pause", "resume", "cancel", "budget", "references", "validate",
            "direction", "go_ahead", "autonomy", "edit", "music", "retry"}
 GAME_DIST = Path(__file__).resolve().parents[3] / "frontend" / "dist"   # build do jogo (npm run build)
+# Arquivos da raiz do dist (vêm de frontend/public; ver frontend/scripts/brand-assets.mjs). Lista fechada, nada de listar pasta.
+BRAND_FILES = {"favicon.ico": "image/x-icon", "favicon.svg": "image/svg+xml", "apple-touch-icon.png": "image/png",
+               "icon-192.png": "image/png", "icon-512.png": "image/png", "icon-maskable-512.png": "image/png",
+               "og-image.png": "image/png", "manifest.webmanifest": "application/manifest+json"}
 MAX_BODY = 150 * 1024 * 1024  # uploads em base64
 MAX_AUTH_BODY = 64 * 1024  # rotas sem sessão não recebem envio grande
 SECURITY_HEADERS = {"X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer"}
@@ -301,6 +305,9 @@ class App:
                     return _json(404, {"error": "não encontrado"})
                 ctype = mimetypes.guess_type(f.name)[0] or "application/octet-stream"
                 return Response(200, "text/javascript; charset=utf-8" if f.suffix == ".js" else ctype, file=f)
+            if method == "GET" and path.lstrip("/") in BRAND_FILES and (GAME_DIST / path.lstrip("/")).is_file():
+                f = GAME_DIST / path.lstrip("/")  # ícones, manifest e og-image da marca (frontend/public, gerados por script)
+                return Response(200, BRAND_FILES[f.name], file=f)
             if method == "POST" and path.startswith("/api/auth/"):
                 return self._auth(path, headers, json.loads(body or b"{}"))
             if method == "GET" and path == "/api/auth/config":  # o que a tela de acesso pode oferecer

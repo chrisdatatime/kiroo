@@ -7,7 +7,7 @@ import { GRID, BUILD, OUTSIDE, ROOMS, WALLS, DOORS, FURNITURE, CHAIRS, RUGS, WAL
 import { PAL, shade, sprite, Px, rng } from './draw.js';
 import { deskSprite, chairSprites, furnitureSprite, paintWallDecor, paintWindowFrame, paintWindowBars, paintScreen, deskItem } from './furniture.js';
 import { charSprite } from './characters.js';
-import logoUrl from '../../assets/logo-game.png';
+import logoUrl from '../../assets/brand/wordmark-preto-laranja.svg';
 import photoUrl from '../../assets/paisagem.jpg';
 
 const { T, W, H } = GRID;

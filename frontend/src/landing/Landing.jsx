@@ -3,8 +3,9 @@ import {
   ArrowRight, Check, CircleDot, Coins, Eye, FileVideo, Hand, Images, MessageCircle, Music2, PackageCheck,
   ReceiptText, RotateCcw, ShieldCheck, Sparkles, Undo2, Users,
 } from 'lucide-react';
-import logoDark from '../assets/logo-dark.png';
-import logoLight from '../assets/logo-light.png';
+import wordmark from '../assets/brand/wordmark-preto-laranja.svg';
+import wordmarkOnDark from '../assets/brand/wordmark-branco-laranja.svg';
+import agentHead from '../assets/brand/simbolo-laranja.svg';
 import { ART, AGENT_PINS } from './art.js';
 import './landing.css';
 
@@ -193,14 +194,14 @@ function FocusScene() {
 export default function Landing({ onEnter, signupOpen }) {
   const start = () => onEnter(signupOpen ? 'signup' : 'login');
   const startLabel = signupOpen ? 'Começar no DEMO' : 'Entrar no estúdio';
-  React.useEffect(() => { document.title = 'Kiroo · Uma equipe de vídeo para a sua loja'; return () => { document.title = 'Kiroo'; }; }, []);
+  React.useEffect(() => { document.title = 'Kiroo — Uma equipe de vídeo para a sua loja'; return () => { document.title = 'Kiroo'; }; }, []);
 
   return (
     <div className="lp">
       <a className="lp-skip" href="#lp-main" onClick={go('lp-main')}>Pular para o conteúdo</a>
       <header className="lp-top">
         <nav className="lp-nav" aria-label="Principal">
-          <a href="#lp-main" className="lp-brand" onClick={go('lp-main')}><img src={logoDark} alt="Kiroo" width="104" /></a>
+          <a href="#lp-main" className="lp-brand" onClick={go('lp-main')}><img src={wordmark} alt="Kiroo" height="32" /></a>
           <ul className="lp-links">
             <li><a href="#como" onClick={go('como')}>Como funciona</a></li>
             <li><a href="#equipe" onClick={go('equipe')}>Equipe</a></li>
@@ -300,7 +301,7 @@ export default function Landing({ onEnter, signupOpen }) {
               </ul>
             </div>
             <div className="lp-cmp is-after">
-              <h3 className="lp-cmp-h"><span className="lp-cmp-ic"><img src={logoLight} alt="" width="22" /></span>Com a equipe do Kiroo</h3>
+              <h3 className="lp-cmp-h"><span className="lp-cmp-ic"><img src={agentHead} alt="" width="22" /></span>Com a equipe do Kiroo</h3>
               <ul>
                 <li>Você manda fotos e ficha, a Nina organiza</li>
                 <li>O Rui confere cada cena contra o produto real</li>
@@ -410,7 +411,7 @@ export default function Landing({ onEnter, signupOpen }) {
             <button type="button" className="lp-btn is-lime is-lg" onClick={start}>{startLabel}<ArrowRight size={18} aria-hidden="true" /></button>
           </div>
           <div className="lp-foot-row">
-            <img src={logoLight} alt="Kiroo" width="96" />
+            <img src={wordmarkOnDark} alt="Kiroo" height="28" />
             <nav aria-label="Rodapé" className="lp-foot-links">
               <a href="#como" onClick={go('como')}>Como funciona</a>
               <a href="#equipe" onClick={go('equipe')}>Equipe</a>
