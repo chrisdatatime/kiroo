@@ -32,6 +32,16 @@ Sem sessão, o App mostra `src/landing/Landing.jsx` (lazy, CSS `landing.css` com
 (`App.state.entry` = `login` | `signup`; "Voltar para o início" limpa). `?entrar` abre direto o login; `?reset=` vai para a nova senha;
 sessão que expira com o estúdio aberto volta direto ao login. Imagens da sede e retratos: `python tools/render_home.py` gera
 `src/assets/home/` (derivado da arte LimeZu, fora do git; sem eles a home mostra superfícies neutras). Nada de depoimentos, logos ou números inventados.
+Direção de arte "bastidor em pixel, resultado em filme": composição fluida (margem `--gut`, mídia de ponta a ponta), papel areia, claquete/REC/timecode
+como linguagem; laranja = luz de REC. Formato e duração de vídeo só do próprio arquivo (`stage.js` → `fmtFormat`/`fmtTC`).
+**Câmera contínua** (`landing/Stage.jsx`): uma camada sticky desenha um quadro com a sede; o quadro segue "encaixes" invisíveis no conteúdo
+(`.lp-slot.is-hero` → tela inteira → `.lp-slot.is-acts`) e a câmera (`fitCamera`/`mixCam`/`pan` em `stage.js`, testados) vai do close da abertura ao
+plano geral e às salas de cada ato (corta entre os dois agentes do ato). Rolagem nativa; rAF só com a seção na tela; com movimento reduzido, sem zoom,
+sem passeio e sem cortes. Narrativa: abertura → plano geral → 3 atos (`ACTS`) → [Resultados, só se houver vídeo em `src/assets/showcase/`] →
+Hoje no estúdio (linhas que abrem uma sala) → Controle (frase que acende na rolagem + console do Piloto com rádios nativos) → Créditos (estimativa →
+reserva → débito/estorno animado) → Dúvidas → Encerramento (sede à noite; a luz segue o cursor e passeia sozinha no toque; claquete).
+Tipografia refinada: títulos contidos (H1 até 100 px, seções até 60 px) com quebras definidas pelo sentido. Utilitários em `landing/util.js`
+(`useInView`, `useScrollVar`). Sem vídeos reais, a home não mostra galeria nem storyboard. Lógica pura testada em `tests/landing.test.mjs`.
 
 ## Pedaços sob demanda
 Todo `React.lazy` usa `lazyChunk` (`src/lib/lazyChunk.jsx`): se um chunk antigo sumiu depois de um build, a página recarrega uma vez;
