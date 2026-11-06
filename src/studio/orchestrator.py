@@ -85,6 +85,10 @@ class Orchestrator:
         self._review_jobs: dict = {}
         self._review_holds: dict = {}
         self._ledger: Ledger | None = None
+        # Desligamento gracioso: o servidor liga este evento; o laço para entre duas etapas (nunca no meio de uma
+        # chamada paga) e `stopped` avisa que a produção foi interrompida e não concluída.
+        self.stop_event = None
+        self.stopped = False
 
     # ================================================================ criação
     def create_production(self, product: ProductInput, *, format_id: str, art_direction: str, presenter: str,
@@ -157,6 +161,9 @@ class Orchestrator:
 
     def _loop(self, pid: str, wait: bool, deadline: float | None) -> None:
         while True:
+            if self.stop_event is not None and self.stop_event.is_set():
+                self.stopped = True
+                break
             self._settle(pid)
             status = PS(self.db.production(pid)["status"])
             if status in TERMINAL or status in {PS.PAUSED, PS.AWAITING_FINAL_REVIEW}:

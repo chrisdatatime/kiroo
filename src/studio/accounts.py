@@ -134,11 +134,11 @@ class Accounts:
     # ----------------------------------------------------------- usuários
     def create_user(self, email: str, password: str | None, name: str = "", *, admin: bool = False,
                     workspace_name: str | None = None, verified: bool = False,
-                    google_sub: str | None = None) -> tuple[str, str]:
+                    google_sub: str | None = None, no_password: bool = False) -> tuple[str, str]:
         email = (email or "").strip().lower()
         if not EMAIL_RE.match(email):
             raise AuthError("e-mail inválido")
-        if google_sub is None or password:
+        if (google_sub is None and not no_password) or password:  # no_password: o dono define a senha pelo link
             validate_password(password or "")
         if self.db.conn.execute("SELECT 1 FROM users WHERE email=?", (email,)).fetchone():
             raise AuthError("já existe uma conta com este e-mail")
@@ -198,6 +198,12 @@ class Accounts:
         self.db.conn.execute("DELETE FROM login_attempts WHERE ts < ?", (since,))
         n = self.db.conn.execute("SELECT COUNT(*) FROM login_attempts WHERE key=?", (key,)).fetchone()[0]
         return n >= LOGIN_MAX_FAILS
+
+    def throttled(self, key: str) -> bool:
+        return self._throttled(key)
+
+    def record_fail(self, key: str) -> None:
+        self.db.conn.execute("INSERT INTO login_attempts(key, ts) VALUES (?,?)", (key, now()))
 
     def login(self, email: str, password: str, ip: str = "") -> tuple[str, dict]:
         email = (email or "").strip().lower()

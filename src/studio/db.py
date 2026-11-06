@@ -107,6 +107,13 @@ CREATE TABLE IF NOT EXISTS events (
     message TEXT,
     data_json TEXT
 );
+-- Estado do processo que executa a produção (não é o estado da produção): running | idle | interrupted | abandoned.
+CREATE TABLE IF NOT EXISTS run_state (
+    production_id TEXT PRIMARY KEY,
+    state TEXT NOT NULL,
+    resume_attempts INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL
+);
 """
 
 
@@ -157,6 +164,18 @@ class Database:
             (production_id, scene_idx, now(), type_, from_state, to_state, message,
              json.dumps(data, ensure_ascii=False) if data else None),
         )
+
+    # ------------------------------------------------- execução (retomada após reinício)
+    def set_run_state(self, pid: str, state: str, *, resume_attempts: int | None = None, reset_attempts: bool = False) -> None:
+        self.conn.execute(
+            "INSERT INTO run_state(production_id, state, resume_attempts, updated_at) VALUES (?,?,?,?)"
+            " ON CONFLICT(production_id) DO UPDATE SET state=excluded.state, updated_at=excluded.updated_at,"
+            " resume_attempts=CASE WHEN ? THEN 0 WHEN ? IS NOT NULL THEN ? ELSE resume_attempts END",
+            (pid, state, resume_attempts or 0, now(), int(reset_attempts), resume_attempts, resume_attempts))
+
+    def run_states(self, *states: str) -> list[sqlite3.Row]:
+        marks = ",".join("?" * len(states))
+        return self.conn.execute(f"SELECT * FROM run_state WHERE state IN ({marks}) ORDER BY updated_at", states).fetchall()
 
     def events(self, production_id: str) -> list[sqlite3.Row]:
         return self.conn.execute(
