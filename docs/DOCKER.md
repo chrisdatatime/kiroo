@@ -2,7 +2,7 @@
 
 Imagem multi-stage que traz a arte licenciada (LimeZu) de um **pacote privado no Cloudflare R2**, sem nunca gravar credenciais nem o ZIP em camadas.
 
-> **Status da validação:** o downloader, o Dockerfile (lido por testes estáticos), o `.dockerignore` e o check de Git foram validados com testes automáticos e dados fictícios. **O `docker build` real, a inspeção da imagem e o download real do R2 ainda não foram executados** (a máquina de desenvolvimento não tem Docker). Os comandos abaixo são o roteiro para fazer isso.
+> **Status da validação:** o downloader, o Dockerfile (lido por testes estáticos), o `.dockerignore` e o check de Git têm testes automáticos com dados fictícios. O build real foi feito e conferido manualmente por Christian (ver "Evidências do build real"). A inspeção de camadas, o usuário não-root, a persistência e o desligamento ainda **não** foram executados: a sessão de desenvolvimento não tem Docker. Para isso há `scripts/verify_phase3.sh` e `scripts/verify_image_layers.py` (seção abaixo).
 
 ## Visão geral
 
@@ -198,6 +198,34 @@ docker rm kiroo-prod
 ```
 
 Depois crie o admin, entre pela interface e rode uma produção no modo simulado (sem custo). Confirme que `/data` guarda o banco (`docker run --rm -v kiroo-prod-data:/data kiroo:local ls -la /data`).
+
+## Evidências do build real
+
+**Verificado manualmente por Christian em 2026-11-06, fora desta sessão** (a sessão de desenvolvimento não tem Docker e não repetiu estes passos):
+
+- build real concluído, com o pacote baixado do R2;
+- escritório exibido com os assets licenciados;
+- login funcionando;
+- produção simulada concluída;
+- MP4 baixado e reproduzido;
+- crédito ao LimeZu visível.
+
+Observação registrada na sessão: a primeira abertura mostrou o escritório antigo porque o código tinha o renderizador antigo como padrão (flag no frontend), e não por problema da imagem, do mapa ou do pacote. Corrigido nos commits `a558404` e `8e76b82`; o novo (Phaser) é o único mundo.
+
+Dados da imagem **não informados** nesta sessão e a preencher por quem rodou o build (nenhum é segredo):
+
+| Item | Como obter | Valor |
+|---|---|---|
+| ID/digest da imagem | `docker image inspect kiroo:local --format '{{.Id}}'` | _a preencher_ |
+| Python | `docker run --rm kiroo:local python --version` | _a preencher_ (base declarada no Dockerfile: `python:3.12-slim`) |
+| ffmpeg | `docker run --rm kiroo:local ffmpeg -version` (1ª linha) | _a preencher_ (instalado por apt, sem versão fixa) |
+| Node (build do frontend) | `docker run --rm node:22-bookworm-slim node --version` | _a preencher_ (base declarada: `node:22-bookworm-slim`) |
+
+## Roteiro automatizado de verificação (não executado ainda)
+
+`scripts/verify_image_layers.py` varre todas as camadas de `docker save` procurando o nome do ZIP, qualquer `*.zip`, caminhos de assets fora do esperado e os valores reais das variáveis `R2_*` (lidos do ambiente; imprime só `True/False`). Tem testes com imagem sintética (`tests/test_verify_image_layers.py`).
+
+`scripts/verify_phase3.sh [a|b|c|d|all]` (Git Bash/Linux, com o Compose rodando) cobre: **a** camadas e `Config.Env` sem `R2_*`; **b** usuário não-root e permissões de escrita; **c** backup do volume (confere que abre) e persistência após `down` (sem `-v`) + `up --force-recreate`, comparando contagens, `integrity_check` e checksums da mídia; **d** o e2e de desligamento/retomada (`scripts/e2e_shutdown.py`) em contêiner descartável com dados próprios, e SIGTERM no serviço real. O script nunca usa `down -v`, `volume rm` nem `prune`. Ele **não foi executado** nem testado contra Docker; a sintaxe foi checada com `bash -n`. SIGKILL no serviço real e o `/readyz` 503 durante o desligamento ficam para verificação manual.
 
 ## Arquivos desta fase
 

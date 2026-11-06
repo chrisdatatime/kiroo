@@ -198,3 +198,13 @@ Ordenados por gravidade. Esforço: **P** = até ~½ dia, **M** = 1–3 dias, **G
 | 15 | **Baixo** | Operação: sem painel admin web (tudo pela CLI), sem monitoramento, sem logs estruturados, sem rate-limit global fora do login e do chat. | M |
 
 **Rota mínima sugerida (lançamento fechado, 1 instância):** itens 1, 2, 3 (mínimo), 4, 5, 6, 7 e 8. Estimativa total: **~1–2 semanas** de trabalho focado. Os itens 9 e 11 definem o salto para SaaS aberto.
+
+---
+
+## Nota de 2026-11-06 — bloqueios 5 e 6 (assets licenciados e imagem Linux)
+
+Verificado manualmente por Christian em 2026-11-06, fora desta sessão: o build real da imagem Docker (branch `deploy/docker`) foi concluído com os assets licenciados baixados do R2 privado; o escritório abriu com esses assets; o login funcionou; uma produção simulada terminou; o MP4 foi baixado e reproduzido; o crédito ao LimeZu aparece na interface. Detalhes e comandos em [DOCKER.md](DOCKER.md).
+
+- **Bloqueio 6 (Dockerfile/infra Linux):** imagem multi-stage com Python 3.12, ffmpeg, DejaVu e usuário não-root, dependências por lockfile com hashes. Build real feito. Ainda sem evidência de execução: não-root, persistência após recriar, SIGTERM/SIGKILL e varredura das camadas (roteiro em `scripts/verify_phase3.sh`).
+- **Bloqueio 5 (assets licenciados fora do git):** o pacote privado é baixado no build por BuildKit secrets e conferido por SHA256 (`assets.lock`). Segue aberta a confirmação de que a licença LimeZu cobre a distribuição dos PNGs no navegador de um SaaS.
+
