@@ -1,0 +1,39 @@
+# Teste local da imagem Kiroo. Veja docs/DOCKER.md.
+#
+# Credenciais de LEITURA do R2: exporte no terminal (nunca em arquivo versionado nem no chat):
+#   R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY
+# Elas só existem durante `docker compose build` (BuildKit secrets) e não vão ao runtime.
+name: kiroo
+
+services:
+  kiroo:
+    build:
+      context: .
+      secrets:
+        - r2_account_id
+        - r2_access_key_id
+        - r2_secret_access_key
+    image: kiroo:local
+    init: true
+    ports:
+      - "127.0.0.1:${KIROO_PORT:-8765}:8765"
+    # Configuração de runtime (sem credenciais do R2). Opcional: copie .env.docker.example para .env.docker.
+    env_file:
+      - path: .env.docker
+        required: false
+    volumes:
+      - kiroo-data:/data                       # banco, produções, uploads (persistente)
+      - ./reference:/reference:ro              # referência pessoal: ./reference/bia/PERFIL BIA.jpg (opcional)
+    stop_grace_period: 40s                     # > STUDIO_SHUTDOWN_GRACE_S (25)
+    restart: unless-stopped
+
+secrets:
+  r2_account_id:
+    environment: R2_ACCOUNT_ID
+  r2_access_key_id:
+    environment: R2_ACCESS_KEY_ID
+  r2_secret_access_key:
+    environment: R2_SECRET_ACCESS_KEY
+
+volumes:
+  kiroo-data:

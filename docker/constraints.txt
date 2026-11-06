@@ -1,0 +1,4 @@
+# versões já validadas pela suíte de testes local
+google-genai==2.33.0
+pydantic==2.14.1
+python-dotenv==1.2.4

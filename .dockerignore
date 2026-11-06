@@ -1,0 +1,40 @@
+# Segredos e configuração real (os exemplos ficam)
+.env
+.env.*
+!.env.example
+!.env.docker.example
+*.pem
+*.key
+
+# Dados, bancos e pacotes
+data/
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+*.db
+*.zip
+pacote-assets/
+
+# Pessoal e de terceiros
+assets/bia/
+*-office/
+
+# Arte licenciada: só entra pelo pacote privado (stage `assets`), nunca pelo contexto local
+assets/characters/
+assets/tilesets/
+frontend/src/assets/home/
+tools/out/
+
+# Dependências, builds e lixo de ferramentas
+.git/
+.github/
+.venv/
+**/node_modules/
+frontend/dist/
+frontend/vite.config.js.timestamp-*
+**/__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+.vscode/
+.claude/
