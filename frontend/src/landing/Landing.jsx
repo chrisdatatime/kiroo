@@ -305,6 +305,7 @@ function Finale({ start, startLabel, onEnter, NAV }) {
           <button type="button" onClick={() => onEnter('login')}>Entrar</button>
         </nav>
         <p className="lp-foot-legal">
+          Arte da sede: Modern Interiors e Modern Office por LimeZu (<a href="https://limezu.itch.io/moderninteriors" target="_blank" rel="noopener noreferrer">limezu.itch.io</a>).{' '}
           Shopee é marca da Sea Limited; o Kiroo não é afiliado à Shopee.
         </p>
       </div>
