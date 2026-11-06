@@ -11,7 +11,7 @@ BODY = json.dumps({"email": "a@b.com", "password": "senha-forte-123"}).encode()
 
 @pytest.fixture
 def app(settings):
-    return App(8765, settings_loader=lambda: settings, sim_pacing=False, public_host=PUBLIC)
+    return App(8765, settings_loader=lambda: settings, sim_pacing=False, public_host=PUBLIC, trust_proxy="cloudflare")
 
 
 def _make_user(app):
@@ -43,8 +43,8 @@ def test_cookie_is_secure_only_on_the_public_address(app):
 
 def test_client_ip_comes_from_the_tunnel_and_cannot_be_spoofed(app):
     assert app._client_ip({"Host": PUBLIC, "Cf-Connecting-Ip": "1.2.3.4"}) == "1.2.3.4"  # o túnel (Go) usa esta caixa
-    assert app._client_ip({"Host": PUBLIC, "X-Forwarded-For": "9.9.9.9"}) == "publico"
-    assert app._client_ip({"Host": "127.0.0.1:8765", "Cf-Connecting-Ip": "1.2.3.4"}) == "local"
+    assert app._client_ip({"Host": PUBLIC, "X-Forwarded-For": "9.9.9.9"}) == "local"   # só o cabeçalho declarado vale
+    assert app._client_ip({"Host": PUBLIC, "X-Forwarded-For": "9.9.9.9"}, "10.0.0.2") == "10.0.0.2"
 
 
 def test_login_throttle_ignores_spoofed_forwarded_for(app):
@@ -57,13 +57,16 @@ def test_login_throttle_ignores_spoofed_forwarded_for(app):
     assert "muitas tentativas" in json.loads(last.body)["error"]
 
 
-def test_local_mode_keeps_signup_open(settings):
+def test_local_mode_signup_is_closed_unless_opened_explicitly(settings):
     app = App(8765, settings_loader=lambda: settings, sim_pacing=False)
+    assert app.handle("POST", "/api/auth/signup", {**CLIENT, "Host": "127.0.0.1:8765"}, BODY).status == 403
+    app = App(8765, settings_loader=lambda: settings, sim_pacing=False, signup="open")
     assert app.handle("POST", "/api/auth/signup", {**CLIENT, "Host": "127.0.0.1:8765"}, BODY).status == 200
 
 
 def test_security_headers_are_defined():
     assert SECURITY_HEADERS["X-Frame-Options"] == "DENY" and SECURITY_HEADERS["Referrer-Policy"] == "no-referrer"
+    assert "Permissions-Policy" in SECURITY_HEADERS and SECURITY_HEADERS["X-Content-Type-Options"] == "nosniff"
 
 
 def test_second_server_on_the_same_port_is_refused():

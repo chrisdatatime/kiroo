@@ -10,6 +10,8 @@ from studio.db import Database
 from studio.providers.simulated import placeholder_png
 from studio.web.server import App
 
+from .conftest import promote_admin
+
 BASE = {"Host": "127.0.0.1:8765"}
 CLIENT = {**BASE, "X-Studio-Client": "game"}
 PNG = "data:image/png;base64," + base64.b64encode(placeholder_png("x", 90, 160)).decode()
@@ -22,14 +24,22 @@ def app(settings, tmp_path):
     def loader():
         return load_settings(env_file=tmp_path / "none.env", data_dir=settings.data_dir, assets_dir=settings.assets_dir,
                              profiles_dir=settings.profiles_dir, x264_preset="ultrafast")
-    return App(8765, settings_loader=loader, sim_pacing=False)
+    return App(8765, settings_loader=loader, sim_pacing=False, signup="open")
 
 
 class User:
-    def __init__(self, app, email, password="senha-forte-123"):
+    def __init__(self, app, email, password="senha-forte-123", admin=None):
+        """Cadastra pela API. `admin=None`: o primeiro usuário do banco de teste é promovido (o operador faria pela CLI);
+        a API de cadastro nunca promove ninguém sozinha."""
         self.app = app
+        s, db, _ = app._db()
+        first = db.conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
+        db.close()
         r = app.handle("POST", "/api/auth/signup", CLIENT, json.dumps({"email": email, "password": password}).encode())
         assert r.status == 200, r.body
+        assert json.loads(r.body)["admin"] is False
+        if admin or (admin is None and first):
+            promote_admin(app, email)
         self.cookie = r.headers["Set-Cookie"].split(";")[0]
         self.me = self.get("/api/me")[1]
 
@@ -69,9 +79,9 @@ def test_signup_rules(app):
     assert app.handle("POST", "/api/auth/signup", BASE, b'{"email":"c@d.com","password":"senha-forte-123"}').status == 403
 
 
-def test_first_account_is_admin_others_are_demo_only(app):
+def test_admin_is_explicit_and_others_are_demo_only(app):
     chris, cliente = User(app, "chris@x.com"), User(app, "cliente@x.com")
-    assert chris.me["admin"] is True and chris.me["workspace"]["allow_real"] is True
+    assert chris.me["admin"] is True and chris.me["workspace"]["allow_real"] is True  # promovido como a CLI faz
     assert cliente.me["admin"] is False and cliente.me["workspace"]["allow_real"] is False
     status, body = cliente.post("/api/runtime", {"mode": "real", "monthly_cap_usd": 50})
     assert status == 403 and "DEMO" in body["error"]
@@ -229,7 +239,8 @@ def test_forgot_sends_link_and_reset_verifies_email(app):
 
 def test_auth_config_is_public(app):
     r = app.handle("GET", "/api/auth/config", BASE, b"")
-    assert r.status == 200 and json.loads(r.body) == {"signup": True, "google": False, "email": False}
+    assert r.status == 200 and json.loads(r.body) == {"signup": "open", "google": False, "email": False}
+    assert json.loads(app.handle("GET", "/api/config", BASE, b"").body)["signup"] == "open"
     r = app.handle("GET", "/api/auth/google/start", BASE, b"")  # sem credenciais: volta ao login com aviso
     assert r.status == 302 and "erro=google_off" in r.headers["Location"]
 
@@ -254,7 +265,7 @@ def _google_login(app):
                       {**BASE, "Cookie": f"studio_oauth={state}"}, b"")
 
 
-def test_google_creates_first_account_as_admin_and_links_later(app):
+def test_google_creates_account_without_admin_and_links_later(app):
     calls = _google_app(app, {"sub": "g-1", "email": "Chris@Gmail.com", "email_verified": True, "name": "Chris"})
     r = _google_login(app)
     assert r.status == 302 and r.headers["Location"] == "/"
@@ -263,7 +274,7 @@ def test_google_creates_first_account_as_admin_and_links_later(app):
     assert calls[0][1]["client_secret"] == "segredo" and calls[0][1]["redirect_uri"] == "http://127.0.0.1:8765/api/auth/google/callback"
     st, me = app.handle("GET", "/api/me", {**BASE, "Cookie": cookies[1].split(";")[0]}, b""), None
     me = json.loads(st.body)
-    assert me["admin"] is True and me["user"]["email"] == "chris@gmail.com" and me["user"]["email_verified"] is True
+    assert me["admin"] is False and me["user"]["email"] == "chris@gmail.com" and me["user"]["email_verified"] is True
     # conta sem senha não entra por senha
     r = app.handle("POST", "/api/auth/login", CLIENT, b'{"email":"chris@gmail.com","password":"!"}')
     assert r.status == 400

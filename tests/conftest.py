@@ -89,15 +89,36 @@ requires_ffmpeg = pytest.mark.skipif(
 )
 
 
+def promote_admin(app, email: str) -> None:
+    """Faz o mesmo que `studio admin create-user --admin` faz depois de criar a conta: nenhuma conta vira admin sozinha."""
+    s, db, acc = app._db()
+    try:
+        u = acc.user_by_email(email)
+        db.conn.execute("UPDATE users SET is_platform_admin=1 WHERE id=?", (u["id"],))
+        wid = acc.workspaces_of(u["id"])[0]["id"]
+        acc.assign_orphans(wid)
+        acc.set_workspace(wid, allow_real=1, mode=s.mode, monthly_cap_usd=s.monthly_cap_usd, credits_exempt=1)
+    finally:
+        db.close()
+
+
 def login_app(app, host_dict: dict, email: str = "chris@example.com", password: str = "senha-forte-123"):
-    """Cria a conta (a primeira vira administradora) e entra; atualiza host_dict com o cookie e app.token com o CSRF."""
+    """Cria a conta (o primeiro usuário do banco de teste é promovido a administrador, como o operador faria pela CLI)
+    e entra; atualiza host_dict com o cookie e app.token com o CSRF."""
     import json as _json
     base = {"Host": f"127.0.0.1:{app.port}"}
-    r = app.handle("POST", "/api/auth/signup", {**base, "X-Studio-Client": "game"},
+    s, db, acc = app._db()
+    try:
+        exists = acc.user_by_email(email) is not None
+        first = db.conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
+        if not exists:
+            acc.create_user(email, password, "", admin=False)
+    finally:
+        db.close()
+    if not exists and first:
+        promote_admin(app, email)
+    r = app.handle("POST", "/api/auth/login", {**base, "X-Studio-Client": "game"},
                    _json.dumps({"email": email, "password": password}).encode())
-    if r.status != 200:  # já existe: só entra
-        r = app.handle("POST", "/api/auth/login", {**base, "X-Studio-Client": "game"},
-                       _json.dumps({"email": email, "password": password}).encode())
     cookie = r.headers["Set-Cookie"].split(";")[0]
     me = _json.loads(app.handle("GET", "/api/me", {**base, "Cookie": cookie}, b"").body)
     host_dict.clear()
