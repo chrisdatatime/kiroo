@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { inflateSync } from 'node:zlib';
-import { kirooFrameRects, normalizeKirooSheet } from '../src/game/phaser/spriteLayout.js';
+import { inspectKirooSheet, KIROO_SHEET_ROWS } from '../src/game/phaser/spriteLayout.js';
+import { KIROO_COLS, kirooFrame } from '../src/game/phaser/sprites.js';
 
 // Lê os PNGs RGBA reais sem depender do DOM ou adicionar uma biblioteca ao produto.
 function readRGBA(url) {
@@ -32,32 +33,21 @@ function readRGBA(url) {
   return { width, height, data };
 }
 
+// Folhas atuais: grade 16x48 de quadros 32x32 (sprites.js). Mapeamento de quadros: kirooFrame().
+const FRAMES = KIROO_COLS * KIROO_SHEET_ROWS;
 for (const name of ['nina', 'theo', 'iris', 'rui', 'lia', 'beto']) {
   const source = readRGBA(new URL(`../../assets/characters/${name}.png`, import.meta.url));
-  const rects = kirooFrameRects(source);
-  assert.equal(rects.length, 36, name);
-  const covered = new Uint8Array(source.width * source.height);
-  rects.forEach((r) => {
-    assert.ok(r.width > 0 && r.width <= 32 && r.height > 0 && r.height <= 32, `${name}: quadro inteiro`);
-    for (let y = r.y; y < r.y + r.height; y++) for (let x = r.x; x < r.x + r.width; x++) {
-      assert.equal(covered[y * source.width + x], 0, `${name}: sem sobreposição`);
-      covered[y * source.width + x] = 1;
-    }
-  });
-  for (let pixel = 0; pixel < covered.length; pixel++) {
-    if (source.data[pixel * 4 + 3] > 127) assert.equal(covered[pixel], 1, `${name}: pixel não cortado`);
+  assert.equal(source.width, 512, name); assert.equal(source.height, 1536, name);
+  const frames = inspectKirooSheet(source);
+  assert.equal(frames.length, FRAMES, name);
+  const empty = frames.filter((f) => f.opaque === 0);
+  assert.equal(empty.length, 0, `${name}: quadros vazios ${empty.map((f) => f.index).join(',')}`);
+  frames.forEach((f) => assert.ok(f.top >= 0 && f.bottom <= 30, `${name}: quadro ${f.index} dentro do 32x32 (linhas ${f.top}..${f.bottom})`));
+  // Todo quadro que o jogo pode pedir existe e tem desenho (espera, caminhada, prancheta).
+  for (const dir of ['down', 'left', 'up', 'right']) for (const action of ['idle', 'walk', 'work']) for (let k = 0; k < 16; k++) {
+    const idx = kirooFrame(dir, k / 16, action);
+    assert.ok(idx >= 0 && idx < FRAMES && frames[idx].opaque > 0, `${name}: ${dir}/${action}/${k} -> quadro ${idx}`);
   }
-  // Verifica as chamadas reais de renderização: cada desenho fica no centro da
-  // célula e seus pés na mesma base, sem redimensionamento ou vazamento entre quadros.
-  const draws = [];
-  const output = normalizeKirooSheet(source, () => ({ getContext: () => ({
-    drawImage: (...args) => draws.push(args), getImageData: () => source,
-  }) }));
-  assert.equal(output.width, 192); assert.equal(output.height, 192);
-  draws.slice(1).forEach(([, , , sw, sh, dx, dy, dw, dh], i) => {
-    assert.equal(sw, dw); assert.equal(sh, dh);
-    assert.ok(Math.abs((dx % 32) + dw / 2 - 16) <= 0.5, `${name}: centro fixo ${i}`);
-    assert.equal(dy + dh, (Math.floor(i / 6) + 1) * 32, `${name}: base fixa ${i}`);
-  });
-  console.log(`${name}: 36 quadros completos e alinhados`);
+  assert.throws(() => inspectKirooSheet({ ...source, width: 350, height: 1019 }), /esperado 512x1536/);
+  console.log(`${name}: ${FRAMES} quadros 32x32, todos com desenho; quadros usados pelo jogo ok`);
 }
