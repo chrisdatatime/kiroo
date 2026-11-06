@@ -14,8 +14,8 @@ import { Tutorial, DialogWindow, BoardWindow, CustomWindow } from './ui/Windows.
 import ProdWindow from './ui/ProdWindow.jsx';
 import GamesWindow from './ui/Games.jsx';
 import { PILOT } from './ui/Pilot.jsx';
-import { me, auth, setLoggedOutHandler, AuthRequired, getJSON, post, readFile } from './engine/api.js';
-import AuthScreen, { SIGNUP_OPEN } from './ui/Auth.jsx';
+import { me, auth, authConfig, setLoggedOutHandler, AuthRequired, getJSON, post, readFile } from './engine/api.js';
+import AuthScreen from './ui/Auth.jsx';
 const Landing = lazyChunk(() => import('./landing/Landing.jsx'));
 // Conta, Piloto, Créditos e Sobre vivem no modal de Preferências (carregado ao abrir)
 const Preferences = lazyChunk(() => import('./ui/Preferences.jsx'));
@@ -98,7 +98,7 @@ export default class App extends React.Component {
       player: { i: SPAWN[0], j: SPAWN[1], path: [], dir: 'down', moving: false, seat: null }, pending: null, dest: null, agents,
       // motor real
       onb: null,  // { start, key } enquanto o tour está aberto
-      S: null, pid, draftMode: false, conn: 'carregando', busy: null, err: null, authState: 'checking', account: null,
+      S: null, pid, draftMode: false, conn: 'carregando', busy: null, err: null, authState: 'checking', account: null, signup: 'closed',
       resetToken: new URLSearchParams(window.location.search).get('reset'),
       // sem sessão: home pública (null) ou tela de acesso ('login' | 'signup'); ?entrar abre direto o login
       entry: new URLSearchParams(window.location.search).has('entrar') ? 'login' : null,
@@ -120,6 +120,7 @@ export default class App extends React.Component {
     // sessão expirou com o estúdio aberto: volta direto ao login (no primeiro /api/me sem sessão, fica a home)
     setLoggedOutHandler(() => this.setState((s) => ({ authState: 'out', account: null, entry: s.authState === 'in' ? 'login' : s.entry })));
     this.checkSession();
+    authConfig().then((c) => this.setState({ signup: c.signup || 'closed' })).catch(() => {});  // cadastro: quem decide é o servidor
     this.later(() => this.rootEl && this.rootEl.focus({ preventScroll: true }), 80);
   }
   componentWillUnmount() { clearInterval(this.iv); clearInterval(this.poll); this.timers.forEach(clearTimeout); window.removeEventListener('resize', this.measure); }
@@ -1056,9 +1057,9 @@ export default class App extends React.Component {
     if (this.state.authState === 'checking') return <div className="dotsbg" style={{ position: 'fixed', inset: 0 }} aria-busy="true" />;
     if (this.state.authState !== 'in') {
       if (!this.state.resetToken && !this.state.entry) {
-        return <React.Suspense fallback={<div style={{ position: 'fixed', inset: 0, background: '#FBF7EE' }} />}><Landing signupOpen={SIGNUP_OPEN} onEnter={(entry) => this.setState({ entry })} /></React.Suspense>;
+        return <React.Suspense fallback={<div style={{ position: 'fixed', inset: 0, background: '#FBF7EE' }} />}><Landing signupOpen={this.state.signup !== 'closed'} onEnter={(entry) => this.setState({ entry })} /></React.Suspense>;
       }
-      return <AuthScreen key={this.state.entry} resetToken={this.state.resetToken} initialMode={this.state.entry} onBack={() => this.setState({ entry: null })}
+      return <AuthScreen key={this.state.entry} signup={this.state.signup} resetToken={this.state.resetToken} initialMode={this.state.entry} onBack={() => this.setState({ entry: null })}
         onDone={() => this.setState({ resetToken: null, entry: null }, () => this.checkSession())} />;
     }
     const v = this.viewModel();

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -114,7 +115,10 @@ def _admin(settings, args) -> int:
                               **({} if args.acao == "allow-real" else {"mode": "simulated"}))
             print("modo real " + ("liberado" if args.acao == "allow-real" else "bloqueado (voltou para DEMO)"))
         elif args.acao == "reset-link":
-            print(f"link (válido 30 min): http://127.0.0.1:8765/?reset={acc.start_reset(args.email)}")
+            from .runtime import ServerConfig
+            cfg = ServerConfig.from_env()
+            base = f"https://{cfg.public_host}" if cfg.public_host else f"http://127.0.0.1:{cfg.port}"
+            print(f"link (válido 30 min): {base}/?reset={acc.start_reset(args.email)}")
         elif args.acao in ("grant-credits", "adjust-credits", "credits"):
             from .credits import Ledger, fmt
             led = Ledger(db)
@@ -205,12 +209,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--credits", type=float, help="quantidade de créditos (grant-credits/adjust-credits; ajuste aceita negativo)")
     p.add_argument("--note", default="", help="motivo do lançamento (aparece no extrato)")
 
-    p = sub.add_parser("ui", help="abre o escritório dos agentes no navegador (somente local)")
-    p.add_argument("--port", type=int, default=8765)
+    p = sub.add_parser("ui", help="serve o escritório dos agentes (padrão: só local; ver STUDIO_HOST e docs/RUNBOOK.md)")
+    p.add_argument("--port", type=int, default=None, help="padrão: STUDIO_PORT, PORT ou 8765")
+    p.add_argument("--host", default=None, help="padrão: STUDIO_HOST ou 127.0.0.1 (em contêiner, 0.0.0.0)")
     p.add_argument("--no-browser", action="store_true")
 
     p = sub.add_parser("publish", help="coloca o estúdio na internet por um túnel da Cloudflare (cadastro só por convite)")
-    p.add_argument("--port", type=int, default=8765)
+    p.add_argument("--port", type=int, default=None)
 
     p = sub.add_parser("final")
     p.add_argument("pid")
@@ -220,7 +225,8 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     overrides = {"mode": "simulated"} if args.cmd == "demo" else {}
     settings = load_settings(**overrides)
-    setup_logging(settings.data_dir / "logs", settings.secret_values(), args.verbose)
+    serving = args.cmd in ("ui", "publish") and os.environ.get("STUDIO_LOG_FORMAT", "json").lower() != "text"
+    setup_logging(settings.data_dir / "logs", settings.secret_values(), args.verbose, json_stdout=serving)
 
     if args.cmd == "doctor":
         print(f"modo: {settings.mode} | chamadas pagas permitidas: {settings.allow_paid_calls}")
@@ -241,7 +247,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "ui":
         from .web.server import serve
 
-        serve(port=args.port, open_browser=not args.no_browser)
+        serve(port=args.port, open_browser=not args.no_browser, host=args.host)
         return 0
 
     if args.cmd == "publish":

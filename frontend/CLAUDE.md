@@ -71,8 +71,8 @@ src/
 ## Como o estado funciona
 - Sem sessão, `App` mostra `AuthScreen`; o escritório só monta depois do login (por isso `setRoot` mede a tela ao montar).
   Se o workspace mudar neste navegador (`bc.ws`), a produção aberta (`bc.pid`) é esquecida.
-- Fora de localhost/127.0.0.1, `Auth.jsx` esconde a aba Criar conta: em `studio publish` o servidor recusa cadastro (só convite).
-- Acesso (`ui/Auth.jsx`): componentes shadcn (Button/Input/Label) com os tokens da home; `GET /api/auth/config` diz se há cadastro, Google e envio de e-mail.
+- Cadastro: quem decide é o servidor (`STUDIO_SIGNUP` = closed | invite | open, padrão closed), lido em `GET /api/config`; `Auth.jsx`/`Landing` só oferecem Criar conta se não for `closed` (com `invite`, aparece o campo do código).
+- Acesso (`ui/Auth.jsx`): componentes shadcn (Button/Input/Label) com os tokens da home; `GET /api/config` diz o modo de cadastro, se há Google e envio de e-mail.
   Depois do cadastro vem a etapa do código (`/api/auth/verify`, `/api/auth/resend`; pode confirmar depois: a conta já entra em DEMO; `user.email_verified` em `/api/me`).
   Google é OAuth no servidor (`/api/auth/google/start` → `callback`), só com `STUDIO_GOOGLE_CLIENT_ID/SECRET`; erros voltam como `/?entrar&erro=<código>`.
   Sem `STUDIO_SMTP_HOST`, código e link de nova senha vão para o log do servidor (`src/studio/mailer.py`). Não há Clerk: a sessão continua sendo a do servidor Python.

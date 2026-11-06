@@ -13,8 +13,7 @@ import './auth.css';
 // Acesso ao Kiroo: entrar, criar conta, confirmar e-mail, esqueci a senha e nova senha (?reset=token).
 // Mesma sessão de sempre (cookie HttpOnly do servidor Python); Google só aparece quando o servidor tem as credenciais.
 
-// O servidor recusa cadastro em endereço público (só convite); /api/auth/config confirma ao abrir.
-export const SIGNUP_OPEN = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+// Quem decide se há cadastro é o servidor (STUDIO_SIGNUP: closed | invite | open), via GET /api/config.
 
 const MIN_PASSWORD = 10;
 const RESEND_S = 45;
@@ -165,11 +164,11 @@ function Showcase() {
   );
 }
 
-export default function AuthScreen({ onDone, resetToken, initialMode, onBack }) {
+export default function AuthScreen({ onDone, resetToken, initialMode, onBack, signup = 'closed' }) {
   const params = React.useMemo(() => new URLSearchParams(window.location.search), []);
-  const [cfg, setCfg] = React.useState({ signup: SIGNUP_OPEN, google: false, email: false });
-  const [mode, setMode] = React.useState(resetToken ? 'reset' : initialMode === 'signup' && SIGNUP_OPEN ? 'signup' : 'login');
-  const [f, setF] = React.useState({ name: '', email: '', password: '', code: '' });
+  const [cfg, setCfg] = React.useState({ signup, google: false, email: false });
+  const [mode, setMode] = React.useState(resetToken ? 'reset' : initialMode === 'signup' && signup !== 'closed' ? 'signup' : 'login');
+  const [f, setF] = React.useState({ name: '', email: '', password: '', code: '', invite: '' });
   const [msg, setMsg] = React.useState(() => (GOOGLE_ERRORS[params.get('erro')] ? { ok: false, text: GOOGLE_ERRORS[params.get('erro')] } : null));
   const [busy, setBusy] = React.useState(false);
   const [about, setAbout] = React.useState(false);
@@ -182,7 +181,7 @@ export default function AuthScreen({ onDone, resetToken, initialMode, onBack }) 
     authConfig().then((c) => setCfg(c)).catch(() => {});
     if (params.has('erro')) window.history.replaceState(null, '', window.location.pathname);  // a mensagem já está na tela
   }, [params]);
-  React.useEffect(() => { if (!cfg.signup && mode === 'signup') setMode('login'); }, [cfg.signup, mode]);
+  React.useEffect(() => { if (cfg.signup === 'closed' && mode === 'signup') setMode('login'); }, [cfg.signup, mode]);
   React.useEffect(() => { document.title = mode === 'signup' ? 'Kiroo — Criar conta' : 'Kiroo — Entrar'; }, [mode]);
   // a cada troca de etapa, o foco vai para o título (leitor de tela anuncia a etapa nova)
   React.useEffect(() => { if (first.current) { first.current = false; return; } headRef.current?.focus(); }, [mode]);
@@ -208,7 +207,7 @@ export default function AuthScreen({ onDone, resetToken, initialMode, onBack }) 
     run(async () => {
       if (mode === 'login') { await auth('login', { email: f.email, password: f.password }); enter(); }
       else if (mode === 'signup') {
-        const r = await auth('signup', { name: f.name, email: f.email, password: f.password });
+        const r = await auth('signup', { name: f.name, email: f.email, password: f.password, invite: f.invite });
         setSentInfo({ sent: !!r.sent }); setCooldown(RESEND_S); go('verify');
       } else if (mode === 'forgot') {
         const r = await auth('forgot', { email: f.email });
@@ -237,7 +236,7 @@ export default function AuthScreen({ onDone, resetToken, initialMode, onBack }) 
   const pwOk = f.password.length >= MIN_PASSWORD;
   const errInvalid = msg && !msg.ok;
   const showGoogle = cfg.google && (mode === 'login' || mode === 'signup');
-  const showTabs = cfg.signup && (mode === 'login' || mode === 'signup');
+  const showTabs = cfg.signup !== 'closed' && (mode === 'login' || mode === 'signup');
 
   let sub = copy.sub;
   if (mode === 'verify') sub = sentInfo?.sent
@@ -304,6 +303,12 @@ export default function AuthScreen({ onDone, resetToken, initialMode, onBack }) 
                   <Field id="au-name" label="Seu nome">
                     <Input id="au-name" value={f.name} onChange={(e) => set('name')(e.target.value)} autoComplete="name" maxLength={80}
                       placeholder="Como a equipe vai te chamar" className={inputCls} autoFocus />
+                  </Field>
+                )}
+                {mode === 'signup' && cfg.signup === 'invite' && (
+                  <Field id="au-invite" label="Código de convite">
+                    <Input id="au-invite" value={f.invite} onChange={(e) => set('invite')(e.target.value)} autoComplete="off"
+                      spellCheck={false} required className={inputCls} />
                   </Field>
                 )}
                 {(mode === 'login' || mode === 'signup' || mode === 'forgot') && (

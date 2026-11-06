@@ -11,9 +11,12 @@ Proteções:
 from __future__ import annotations
 
 import dataclasses
+import gzip
 import hmac
 import json
 import secrets
+import signal
+import sys
 import urllib.error
 import urllib.request
 import logging
@@ -25,6 +28,7 @@ import subprocess
 import threading
 import time
 import webbrowser
+import zlib
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -32,17 +36,20 @@ from urllib.parse import parse_qs, unquote, urlencode, urlparse
 
 from .. import agent_config, creative_options, mailer
 from ..agent_chat import AgentChat
-from ..accounts import Accounts, AuthError
+from ..accounts import LOGIN_WINDOW_MIN, Accounts, AuthError
 from ..config import load_settings
 from ..credits import Ledger
 from ..db import Database
 from ..factory import build
+from ..logs import REQUEST_INFO
 from ..models import ProductInput
 from ..orchestrator import OrchestratorError
 from ..profiles import KINDS, available_versions, load_profile
 from ..profiles import snapshot as snapshot_profiles
 from ..providers.simulated import SimulationScript
+from ..runtime import InstanceLockError, ServerConfig, acquire_instance_lock, client_ip, release_instance_lock
 from ..spend import spend_report
+from ..states import TERMINAL, ProductionStatus as PS
 from ..storage import ProductionStorage, StorageError
 from .uploads import UploadError, build_product, parse_creative, save_uploads
 from .view import snapshot
@@ -60,7 +67,42 @@ BRAND_FILES = {"favicon.ico": "image/x-icon", "favicon.svg": "image/svg+xml", "a
                "og-image.png": "image/png", "manifest.webmanifest": "application/manifest+json"}
 MAX_BODY = 150 * 1024 * 1024  # uploads em base64
 MAX_AUTH_BODY = 64 * 1024  # rotas sem sessão não recebem envio grande
-SECURITY_HEADERS = {"X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer"}
+SECURITY_HEADERS = {"X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer",
+                    "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()"}
+# CSP do app (React + Phaser, tudo servido pela própria origem). Phaser decodifica texturas/áudio de blob:/data:.
+# Sem 'unsafe-eval' e sem scripts inline. O painel legado (/painel) tem um <script> inline e usa CSP própria.
+CSP_APP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
+           "media-src 'self' blob:; font-src 'self' data:; connect-src 'self' data: blob:; worker-src 'self' blob:; "
+           "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'")
+CSP_PANEL = CSP_APP.replace("script-src 'self'", "script-src 'self' 'unsafe-inline'")
+HSTS = "max-age=31536000"
+HASHED_ASSET = re.compile(r".+-[A-Za-z0-9_-]{8,}\.[A-Za-z0-9]+$")   # nome com hash do Vite: index-BO_rcp--.js
+COMPRESSIBLE = {"text/html", "text/css", "text/javascript", "application/javascript", "application/json", "image/svg+xml",
+                "application/manifest+json", "text/plain"}
+GZIP_MIN, GZIP_MAX = 512, 8 * 1024 * 1024
+_gzip_cache: dict = {}
+_gzip_lock = threading.Lock()
+
+
+def security_headers(secure: bool, panel: bool = False) -> dict:
+    h = {**SECURITY_HEADERS, "Content-Security-Policy": CSP_PANEL if panel else CSP_APP}
+    if secure:
+        h["Strict-Transport-Security"] = HSTS   # só quando o site é servido por HTTPS (STUDIO_SECURE_COOKIE=1)
+    return h
+
+
+def _gzipped(key, produce) -> bytes:
+    """Compressão com cache em memória (arquivos com hash não mudam; a chave inclui tamanho e mtime)."""
+    with _gzip_lock:
+        hit = _gzip_cache.get(key)
+    if hit is not None:
+        return hit
+    data = gzip.compress(produce(), compresslevel=6, mtime=0)
+    with _gzip_lock:
+        if len(_gzip_cache) >= 128:
+            _gzip_cache.pop(next(iter(_gzip_cache)))
+        _gzip_cache[key] = data
+    return data
 FORM_DEFAULTS = {"name": "x", "variant": "x", "affiliate_link": "https://shopee.com.br/x"}
 COOKIE = "studio_session"
 CLIENT_HEADER = "X-Studio-Client"   # obrigatório em cadastro/login (não é enviável por formulário de outro site)
@@ -85,6 +127,7 @@ class Response:
     body: bytes = b""
     file: Path | None = None
     headers: dict = field(default_factory=dict)
+    compress: bool = False   # estático de texto: o handler comprime em gzip se o navegador aceitar
 
 
 def _json(status: int, data, headers: dict | None = None) -> Response:
@@ -103,17 +146,24 @@ def _cookie(headers: dict, name: str = COOKIE) -> str | None:
 class App:
     def __init__(self, port: int = 8765, *, settings_loader=load_settings, sim_pacing: bool = True,
                  allowed_hosts: set[str] | None = None, secure_cookie: bool | None = None,
-                 public_host: str | None = None):
+                 public_host: str | None = None, signup: str | None = None, trust_proxy: str | None = None,
+                 config: ServerConfig | None = None):
+        cfg = config or ServerConfig.from_env()
+        self.cfg = cfg
         self.port = port
         self.load_settings = settings_loader
         self.sim_pacing = sim_pacing
-        extra = {h.strip() for h in (os.environ.get("STUDIO_ALLOWED_HOSTS") or "").split(",") if h.strip()}
-        self.allowed_hosts = allowed_hosts or ({f"127.0.0.1:{port}", f"localhost:{port}"} | extra)
-        # Endereço público (túnel): o cadastro fecha (só convite pela CLI) e o cookie desse endereço vira Secure.
-        self.public_host = public_host or os.environ.get("STUDIO_PUBLIC_HOST") or None
+        self.allowed_hosts = {h.lower() for h in (allowed_hosts or ({f"127.0.0.1:{port}", f"localhost:{port}"} | set(cfg.allowed_hosts)))}
+        # Endereço público (ex.: app.kiroo.app): o cookie dele vira Secure e os links de e-mail usam https.
+        self.public_host = (public_host or cfg.public_host or "").lower() or None
         if self.public_host:
             self.allowed_hosts = self.allowed_hosts | {self.public_host}
-        self.secure_cookie = secure_cookie if secure_cookie is not None else (os.environ.get("STUDIO_SECURE_COOKIE") == "1")
+        self.secure_cookie = secure_cookie if secure_cookie is not None else cfg.secure_cookie
+        self.signup = signup or cfg.signup           # closed | invite | open (padrão closed; não depende do host)
+        if self.signup not in ("closed", "invite", "open"):
+            raise ValueError("signup deve ser closed, invite ou open")
+        self.trust_proxy = trust_proxy or cfg.trust_proxy   # none | cloudflare | forwarded
+        self.stopping = threading.Event()   # SIGTERM: sem jobs novos; os laços de produção param entre etapas
         self.runs: dict[str, threading.Thread] = {}
         self.errors: dict[str, str] = {}
         self.lock = threading.Lock()
@@ -179,35 +229,131 @@ class App:
         t = self.runs.get(pid)
         return bool(t and t.is_alive())
 
-    def start_run(self, pid: str) -> bool:
+    def start_run(self, pid: str, *, resume_attempts: int | None = None) -> bool:
         with self.lock:
-            if self.is_running(pid):
+            if self.stopping.is_set() or self.is_running(pid):
                 return False
             self.errors.pop(pid, None)
+            self._mark_run(pid, "running", resume_attempts=resume_attempts,
+                           note="retomada automática após reinício" if resume_attempts else "")
             t = threading.Thread(target=self._run, args=(pid,), daemon=True, name=f"run-{pid}")
             self.runs[pid] = t
             t.start()
             return True
 
+    def _mark_run(self, pid: str, state: str, *, resume_attempts: int | None = None, reset_attempts: bool = False,
+                  note: str = "") -> None:
+        """Registra no banco o estado do processo da produção (para retomar após reinício). Nunca derruba quem chama."""
+        try:
+            db = Database(self.settings().db_path)
+            try:
+                db.set_run_state(pid, state, resume_attempts=resume_attempts, reset_attempts=reset_attempts)
+                if state in ("interrupted", "abandoned") or (state == "running" and resume_attempts):
+                    db.add_event(pid, {"interrupted": "interrupted", "abandoned": "resume_abandoned", "running": "resumed"}[state],
+                                 note)
+            finally:
+                db.close()
+        except Exception as exc:  # noqa: BLE001
+            log.warning("não foi possível registrar o estado de execução (%s)", type(exc).__name__, extra={"pid": pid})
+
     def _run(self, pid: str) -> None:
         orch = None
+        interrupted = False
         try:
             orch = self.orch_for(pid)
+            orch.stop_event = self.stopping
             orch.run(pid)
+            interrupted = orch.stopped
         except Exception as exc:  # noqa: BLE001 — mostrado na interface
             self.errors[pid] = f"{type(exc).__name__}: {exc}"[:500]
         finally:
             if orch is not None:
                 orch.db.close()
+            if interrupted:
+                self._mark_run(pid, "interrupted", note="servidor desligando: a produção será retomada na próxima subida")
+            else:
+                self._mark_run(pid, "idle", reset_attempts=True)
+
+    def shutdown(self, grace_s: float | None = None) -> list[str]:
+        """Para de aceitar jobs, espera até `grace_s` os laços terminarem a etapa e marca o resto como interrompido."""
+        grace = self.cfg.shutdown_grace_s if grace_s is None else grace_s
+        self.stopping.set()
+        deadline = time.monotonic() + max(grace, 0)
+        with self.lock:
+            threads = dict(self.runs)
+        for t in threads.values():
+            if t.is_alive():
+                t.join(max(deadline - time.monotonic(), 0))
+        left = [pid for pid, t in threads.items() if t.is_alive()]
+        for pid in left:   # ainda no meio de uma chamada: o estado salvo permite retomar sem refazer o que já foi pago
+            self._mark_run(pid, "interrupted", note="desligamento: a etapa em andamento será retomada na próxima subida")
+        if left:
+            log.warning("desligamento: %d produção(ões) ainda em andamento marcadas como interrompidas", len(left))
+        return left
+
+    def resume_pending(self) -> list[str]:
+        """Ao subir: retoma produções `running` (o processo morreu) ou `interrupted` (desligamento), até o limite de tentativas.
+        A retomada reabre o laço do orquestrador: tentativas e operações remotas salvas são reaproveitadas (nada pago é
+        refeito) e reservas órfãs de créditos seguem sendo liberadas pelo livro-razão em 15 min."""
+        started: list[str] = []
+        s, db, _ = self._db()
+        try:
+            rows = db.run_states("running", "interrupted")
+            for r in rows:
+                pid = r["production_id"]
+                try:
+                    status = PS(db.production(pid)["status"])
+                except KeyError:
+                    db.set_run_state(pid, "idle")
+                    continue
+                if self.is_running(pid):
+                    continue
+                if status in TERMINAL or status in {PS.PAUSED, PS.AWAITING_FINAL_REVIEW}:
+                    db.set_run_state(pid, "idle", reset_attempts=True)
+                    continue
+                if r["resume_attempts"] >= self.cfg.resume_max_attempts:
+                    db.set_run_state(pid, "abandoned")
+                    db.add_event(pid, "resume_abandoned", f"{r['resume_attempts']} tentativas de retomada automática sem sucesso")
+                    db.set_production_status(pid, PS.PAUSED, "retomada automática esgotada: retome manualmente")
+                    continue
+                if self.start_run(pid, resume_attempts=r["resume_attempts"] + 1):
+                    started.append(pid)
+        finally:
+            db.close()
+        return started
+
+    def bootstrap_admin(self) -> str | None:
+        """Cria o administrador de STUDIO_BOOTSTRAP_ADMIN_EMAIL se ainda não existir. Sem senha: manda o link de definir senha."""
+        email = self.cfg.bootstrap_admin_email
+        if not email:
+            return None
+        s, db, acc = self._db()
+        try:
+            if acc.user_by_email(email):
+                return "exists"
+            uid, wid = acc.create_user(email, None, "", admin=True, verified=True, no_password=True)
+            acc.assign_orphans(wid)
+            acc.set_workspace(wid, allow_real=1, credits_exempt=1)
+            token = acc.start_reset(email)
+        finally:
+            db.close()
+        sent = self.send_mail(email, "Kiroo: defina a senha do administrador",
+                              f"Abra o link para definir a senha (vale por 30 minutos):\n\n{self.base_url()}/?reset={token}\n")
+        if not sent:
+            log.warning("administrador criado por STUDIO_BOOTSTRAP_ADMIN_EMAIL, mas o link de senha não foi enviado "
+                        "(SMTP ausente). Gere um com: studio admin reset-link --email <e-mail>")
+        return "created"
+
+    def base_url(self) -> str:
+        return f"https://{self.public_host}" if self.public_host else f"http://127.0.0.1:{self.port}"
 
     def _is_public(self, headers: dict) -> bool:
-        return bool(self.public_host) and headers.get("Host") == self.public_host
+        return bool(self.public_host) and headers.get("Host", "").lower() == self.public_host
 
-    def _client_ip(self, headers: dict) -> str:
-        """IP real só vem do túnel, que sobrescreve este cabeçalho. X-Forwarded-For seria falsificável pelo cliente."""
-        if not self._is_public(headers):
-            return "local"
-        return next((v for k, v in headers.items() if k.lower() == "cf-connecting-ip"), "") or "publico"
+    def _client_ip(self, headers: dict, peer: str = "") -> str:
+        """IP real do cliente. Cabeçalhos de proxy só são lidos quando STUDIO_TRUST_PROXY os declara confiáveis."""
+        h = {k.title(): v for k, v in headers.items()}
+        return client_ip(h, self.trust_proxy, peer or h.get("_Peer", ""))
 
     def _set_cookie(self, token: str, max_age: int, *, secure: bool = False) -> dict:
         flags = f"{COOKIE}={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={max_age}"
@@ -229,12 +375,6 @@ class App:
         return self.send_mail(email, f"Kiroo: seu código é {code}",
                               f"Seu código de confirmação do Kiroo é {code}.\n\nEle vale por 30 minutos. "
                               "Se você não criou uma conta no Kiroo, ignore este e-mail.")
-
-    def _first_account(self, acc: Accounts, s, uid: str, wid: str) -> None:
-        """Primeira conta = administrador: recebe as produções existentes e o modo/teto atuais."""
-        acc.db.conn.execute("UPDATE users SET is_platform_admin=1 WHERE id=?", (uid,))
-        acc.assign_orphans(wid)
-        acc.set_workspace(wid, allow_real=1, mode=s.mode, monthly_cap_usd=s.monthly_cap_usd, credits_exempt=1)
 
     # --- login com Google (OAuth 2.0, código no servidor; o segredo nunca vai ao navegador)
     def _google(self, path: str, url, headers: dict) -> Response:
@@ -275,44 +415,76 @@ class App:
             return back("google_failed")
         s, db, acc = self._db()
         try:
-            first = db.conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
             try:
-                uid, created = acc.google_user(str(info["sub"]), info["email"], info.get("name") or "",
-                                               bool(info.get("email_verified")), allow_create=not self.public_host)
+                uid, _created = acc.google_user(str(info["sub"]), info["email"], info.get("name") or "",
+                                               bool(info.get("email_verified")), allow_create=self.signup == "open")
             except AuthError as exc:
                 return back("convite" if "convite" in str(exc) else "google_unverified")
             wid = acc.workspaces_of(uid)[0]["id"]
-            if created and first:
-                self._first_account(acc, s, uid, wid)
             token, _ = acc.create_session(uid, wid)
         finally:
             db.close()
         return back(None, [self._set_cookie(token, 30 * 86400, secure=secure)["Set-Cookie"]])
 
     # ----------------------------------------------------------------- rotas
-    def handle(self, method: str, raw_path: str, headers: dict, body: bytes) -> Response:
-        if headers.get("Host", "") not in self.allowed_hosts:
-            return _json(403, {"error": "host não permitido"})
+    def health(self, path: str) -> Response:
+        """/healthz: o processo está vivo (não toca no banco). /readyz: abre o SQLite e confere escrita em STUDIO_DATA_DIR.
+        Sem autenticação e sem dado sensível: só ok/falha por verificação."""
+        if path == "/healthz":
+            return _json(200, {"status": "ok"})
+        checks = {"db": False, "data_dir": False, "accepting": not self.stopping.is_set()}
+        try:
+            s = self.settings()
+            probe = s.data_dir / f".readyz-{os.getpid()}-{threading.get_ident()}"
+            s.data_dir.mkdir(parents=True, exist_ok=True)
+            probe.write_bytes(b"ok")
+            probe.unlink()
+            checks["data_dir"] = True
+            db = Database(s.db_path)
+            try:
+                db.conn.execute("BEGIN IMMEDIATE")   # exige poder escrever no banco
+                db.conn.execute("ROLLBACK")
+                db.conn.execute("SELECT 1").fetchone()
+                checks["db"] = True
+            finally:
+                db.close()
+        except Exception:  # noqa: BLE001 — o detalhe vai para o log, não para quem consulta
+            log.error("readyz falhou", exc_info=True)
+        ok = all(checks.values())
+        return _json(200 if ok else 503, {"status": "ready" if ok else "unavailable", "checks": checks})
+
+    def handle(self, method: str, raw_path: str, headers: dict, body: bytes, peer: str = "") -> Response:
+        headers = {k.title(): v for k, v in headers.items() if k.title() != "_Peer"}   # chaves canônicas; _Peer não vem do cliente
+        if peer:
+            headers["_Peer"] = peer
         url = urlparse(raw_path)
         path = url.path
+        if method == "GET" and path in ("/healthz", "/readyz"):   # antes da lista de hosts: sondas de contêiner/balanceador
+            return self.health(path)
+        if headers.get("Host", "").lower() not in self.allowed_hosts:
+            return _json(403, {"error": "host não permitido"})
         try:
             # --- públicas: o jogo (que mostra a tela de entrar) e seus arquivos
             if method == "GET" and path in ("/", "/index.html") and (GAME_DIST / "index.html").is_file():
-                return Response(200, "text/html; charset=utf-8", (GAME_DIST / "index.html").read_bytes())
+                return Response(200, "text/html; charset=utf-8", (GAME_DIST / "index.html").read_bytes(),
+                                headers={"Cache-Control": "no-cache"}, compress=True)
             if method == "GET" and path.startswith("/assets/"):
                 f = (GAME_DIST / path.lstrip("/")).resolve()
                 if GAME_DIST.resolve() not in f.parents or not f.is_file():
                     return _json(404, {"error": "não encontrado"})
                 ctype = mimetypes.guess_type(f.name)[0] or "application/octet-stream"
-                return Response(200, "text/javascript; charset=utf-8" if f.suffix == ".js" else ctype, file=f)
+                ctype = "text/javascript; charset=utf-8" if f.suffix == ".js" else ctype
+                cache = "public, max-age=31536000, immutable" if HASHED_ASSET.match(f.name) else "no-cache"
+                return Response(200, ctype, file=f, headers={"Cache-Control": cache},
+                                compress=ctype.split(";")[0] in COMPRESSIBLE)
             if method == "GET" and path.lstrip("/") in BRAND_FILES and (GAME_DIST / path.lstrip("/")).is_file():
                 f = GAME_DIST / path.lstrip("/")  # ícones, manifest e og-image da marca (frontend/public, gerados por script)
-                return Response(200, BRAND_FILES[f.name], file=f)
+                return Response(200, BRAND_FILES[f.name], file=f, headers={"Cache-Control": "public, max-age=86400"},
+                                compress=BRAND_FILES[f.name].split(";")[0] in COMPRESSIBLE)
             if method == "POST" and path.startswith("/api/auth/"):
                 return self._auth(path, headers, json.loads(body or b"{}"))
-            if method == "GET" and path == "/api/auth/config":  # o que a tela de acesso pode oferecer
-                return _json(200, {"signup": not self.public_host, "google": self.google_enabled,
-                                   "email": mailer.configured()})
+            if method == "GET" and path in ("/api/config", "/api/auth/config"):  # o que a tela de acesso pode oferecer
+                return _json(200, {"signup": self.signup, "google": self.google_enabled, "email": mailer.configured()})
             if method == "GET" and path.startswith("/api/auth/google/"):
                 return self._google(path, url, headers)
 
@@ -325,6 +497,9 @@ class App:
                 workspaces = acc.workspaces_of(sess["user_id"]) if sess else []
             finally:
                 db.close()
+            info = REQUEST_INFO.get()
+            if info is not None and ws is not None:
+                info["workspace_id"] = ws["id"]
             if not sess:
                 if method == "GET" and path in ("/painel", "/painel/", "/"):
                     return Response(302, "text/plain", b"", headers={"Location": "/"}) if path != "/" else _json(401, {"error": "entre na sua conta"})
@@ -353,17 +528,26 @@ class App:
         s, db, acc = self._db()
         try:
             if path == "/api/auth/signup":
-                if self.public_host:
+                if self.signup == "closed":   # independe do host público: fechado é fechado
                     return _json(403, {"error": "Cadastro só por convite: peça sua conta ao administrador."})
-                first = db.conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
-                uid, wid = acc.create_user(p.get("email", ""), p.get("password", ""), p.get("name", ""), admin=first,
+                if self.signup == "invite":
+                    key = f"s:{ip}"
+                    code = str(p.get("invite") or "")
+                    if acc.throttled(key):
+                        return _json(429, {"error": f"muitas tentativas; espere {LOGIN_WINDOW_MIN} minutos"})
+                    # tempo constante: compara com todos os códigos, sem parar no primeiro que bate
+                    matched = 0
+                    for c in self.cfg.invite_codes:
+                        matched |= hmac.compare_digest(code.encode(), c.encode())
+                    if not matched:
+                        acc.record_fail(key)
+                        return _json(403, {"error": "código de convite inválido"})
+                uid, wid = acc.create_user(p.get("email", ""), p.get("password", ""), p.get("name", ""), admin=False,
                                            workspace_name=p.get("workspace") or None)
-                if first:
-                    self._first_account(acc, s, uid, wid)
                 token, info = acc.create_session(uid, wid)
                 # a conta já entra (modo DEMO); o código de confirmação vai para o e-mail
                 sent = self._send_verification(acc, uid, acc.user(uid)["email"])
-                return _json(200, {"ok": True, "admin": first, "verify": True, "sent": sent},
+                return _json(200, {"ok": True, "admin": False, "verify": True, "sent": sent},
                              self._set_cookie(token, 30 * 86400, secure=secure))
             if path == "/api/auth/login":
                 token, info = acc.login(p.get("email", ""), p.get("password", ""), ip)
@@ -484,6 +668,8 @@ class App:
     # --- escrita
     def _post(self, path: str, payload: dict, ctx, token: str) -> Response:
         s, wid = ctx["s"], ctx["wid"]
+        if self.stopping.is_set() and (path.startswith("/api/productions") or path == "/api/demo"):
+            return _json(503, {"error": "o servidor está reiniciando; tente de novo em instantes"}, {"Retry-After": "30"})
         if path == "/api/config":
             if not ctx["admin"]:
                 return _json(403, {"error": "configuração técnica restrita ao administrador"})
@@ -659,7 +845,7 @@ class App:
         ctype = mimetypes.guess_type(f.name)[0] or "application/octet-stream"
         if ctype.startswith("text/") or f.suffix in (".md", ".json"):
             ctype = ("text/markdown" if f.suffix == ".md" else ctype) + "; charset=utf-8"
-        return Response(200, ctype, file=f)
+        return Response(200, ctype, file=f, headers={"Cache-Control": "private, no-store"})
 
     def _action(self, pid: str, action: str, payload: dict, s) -> Response:
         if action == "run":
@@ -750,24 +936,51 @@ def make_handler(app: App):
     class Handler(BaseHTTPRequestHandler):
         server_version = "StudioUI/1"
 
-        def log_message(self, fmt, *args):  # silencioso no terminal
+        def log_message(self, fmt, *args):  # o log de acesso é nosso (JSON, sem query string nem corpo)
             pass
 
-        def _send(self, resp: Response) -> None:
+        def _accepts_gzip(self) -> bool:
+            return "gzip" in (self.headers.get("Accept-Encoding") or "").lower()
+
+        def _head(self, resp: Response, rid: str, route: str, status: int | None = None) -> None:
+            self.send_response(status or resp.status)
+            headers = {"Cache-Control": "no-store", "X-Request-Id": rid,
+                       **security_headers(app.secure_cookie, panel=route in ("/painel", "/painel/")), **resp.headers}
+            for k, v in headers.items():
+                for item in (v if isinstance(v, list) else [v]):  # vários Set-Cookie na mesma resposta
+                    self.send_header(k, item)
+
+        def _send(self, resp: Response, rid: str = "-", route: str = "") -> None:
             if resp.file is None:
-                self.send_response(resp.status)
+                body = resp.body
+                encoded = {}
+                if resp.compress:
+                    encoded["Vary"] = "Accept-Encoding"
+                    if self._accepts_gzip() and len(body) >= GZIP_MIN:
+                        body = _gzipped(("b", zlib.crc32(body), len(body)), lambda: resp.body)
+                        encoded["Content-Encoding"] = "gzip"
+                resp = dataclasses.replace(resp, headers={**resp.headers, **encoded})
+                self._head(resp, rid, route)
                 self.send_header("Content-Type", resp.content_type)
-                self.send_header("Content-Length", str(len(resp.body)))
-                self.send_header("Cache-Control", "no-store")
-                for k, v in {**SECURITY_HEADERS, **resp.headers}.items():
-                    for item in (v if isinstance(v, list) else [v]):  # vários Set-Cookie na mesma resposta
-                        self.send_header(k, item)
+                self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
-                self.wfile.write(resp.body)
+                self.wfile.write(body)
                 return
-            size = resp.file.stat().st_size
+            st = resp.file.stat()
+            size = st.st_size
+            ranged = self.headers.get("Range")
+            if resp.compress and not ranged and self._accepts_gzip() and GZIP_MIN <= size <= GZIP_MAX:
+                data = _gzipped(("f", str(resp.file), st.st_mtime_ns, size), resp.file.read_bytes)
+                resp = dataclasses.replace(resp, headers={**resp.headers, "Content-Encoding": "gzip", "Vary": "Accept-Encoding"})
+                self._head(resp, rid, route)
+                self.send_header("Content-Type", resp.content_type)
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+                return
             start, end = 0, size - 1
-            m = re.fullmatch(r"bytes=(\d*)-(\d*)", self.headers.get("Range") or "")
+            m = re.fullmatch(r"bytes=(\d*)-(\d*)", ranged or "")
+            partial = False
             if m and (m.group(1) or m.group(2)):
                 if m.group(1):
                     start = int(m.group(1))
@@ -775,14 +988,14 @@ def make_handler(app: App):
                 else:
                     start = max(size - int(m.group(2)), 0)
                 end = min(end, size - 1)
-                self.send_response(206)
+                partial = True
+            if resp.compress:
+                resp = dataclasses.replace(resp, headers={**resp.headers, "Vary": "Accept-Encoding"})
+            self._head(resp, rid, route, 206 if partial else None)
+            if partial:
                 self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
-            else:
-                self.send_response(200)
             self.send_header("Content-Type", resp.content_type)
             self.send_header("Accept-Ranges", "bytes")
-            for k, v in SECURITY_HEADERS.items():
-                self.send_header(k, v)
             self.send_header("Content-Length", str(end - start + 1))
             self.end_headers()
             with open(resp.file, "rb") as f:
@@ -798,18 +1011,45 @@ def make_handler(app: App):
                         return
                     remaining -= len(chunk)
 
+        def _serve(self, method: str) -> None:
+            """Uma requisição: id, resposta e uma linha de log JSON (rota sem query, status, duração, workspace)."""
+            t0 = time.perf_counter()
+            info = {"request_id": secrets.token_hex(6)}
+            token = REQUEST_INFO.set(info)
+            route = urlparse(self.path).path
+            status = 500
+            try:
+                try:
+                    body = b""
+                    if method == "POST":
+                        length = int(self.headers.get("Content-Length") or 0)
+                        if self.path.startswith("/api/auth/") and length > MAX_AUTH_BODY:
+                            resp = _json(413, {"error": "envio grande demais"})
+                        elif length > MAX_BODY:
+                            resp = _json(413, {"error": "envio grande demais (máx. 150 MB por vez)"})
+                        else:
+                            body = self.rfile.read(length)
+                            resp = None
+                    else:
+                        resp = None
+                    if resp is None:
+                        resp = app.handle(method, self.path, dict(self.headers), body, peer=self.client_address[0])
+                except Exception:  # noqa: BLE001 — a resposta não vaza detalhe; o log tem só o tipo da exceção
+                    log.error("erro interno", exc_info=True)
+                    resp = _json(500, {"error": "erro interno"})
+                status = resp.status
+                self._send(resp, info["request_id"], route)
+            finally:
+                level = logging.DEBUG if route in ("/healthz", "/readyz") else logging.INFO
+                log.log(level, "request", extra={"method": method, "route": route, "status": status,
+                                                 "duration_ms": round((time.perf_counter() - t0) * 1000, 1)})
+                REQUEST_INFO.reset(token)
+
         def do_GET(self):
-            self._send(app.handle("GET", self.path, dict(self.headers), b""))
+            self._serve("GET")
 
         def do_POST(self):
-            length = int(self.headers.get("Content-Length") or 0)
-            if self.path.startswith("/api/auth/") and length > MAX_AUTH_BODY:
-                self._send(_json(413, {"error": "envio grande demais"}))
-                return
-            if length > MAX_BODY:
-                self._send(_json(413, {"error": "envio grande demais (máx. 150 MB por vez)"}))
-                return
-            self._send(app.handle("POST", self.path, dict(self.headers), self.rfile.read(length)))
+            self._serve("POST")
 
     return Handler
 
@@ -817,24 +1057,73 @@ def make_handler(app: App):
 class StudioHTTPServer(ThreadingHTTPServer):
     # No Windows, reutilizar o endereço deixa dois servidores na mesma porta, e o antigo continua respondendo.
     allow_reuse_address = os.name != "nt"
+    daemon_threads = True
 
 
-def serve(port: int = 8765, open_browser: bool = True, public_host: str | None = None) -> None:
-    app = App(port, public_host=public_host)
+def serve(port: int | None = None, open_browser: bool = True, public_host: str | None = None, *,
+          host: str | None = None, trust_proxy: str | None = None) -> None:
+    cfg = ServerConfig.from_env()
+    port = cfg.port if port is None else port
+    host = host or cfg.host
+    app = App(port, public_host=public_host, trust_proxy=trust_proxy, config=cfg)
     try:
-        httpd = StudioHTTPServer(("127.0.0.1", port), make_handler(app))
+        httpd = StudioHTTPServer((host, port), make_handler(app))
     except OSError as exc:
         raise SystemExit(f"A porta {port} já está em uso: pare o outro servidor do estúdio e tente de novo.") from exc
-    url = f"http://127.0.0.1:{port}/"
-    print(f"Kiroo em {url}  (Ctrl+C para sair)", flush=True)
+    try:   # uma instância só por pasta de dados (SQLite e livro de créditos não suportam dois processos)
+        lock = acquire_instance_lock(app.settings().data_dir)
+    except InstanceLockError as exc:
+        httpd.server_close()
+        raise SystemExit(str(exc)) from exc
+
+    shown = "127.0.0.1" if host in ("0.0.0.0", "::", "") else host
+    url = f"http://{shown}:{port}/"
+    log.info("Kiroo em %s (escutando em %s:%s)", url, host, port, extra={"event": "start"})
     if open_browser:
+        print(f"Kiroo em {url}  (Ctrl+C para sair)", flush=True)
         webbrowser.open(url)
+    if app.secure_cookie and not mailer.configured():
+        log.warning("STUDIO_SMTP_HOST ausente com STUDIO_SECURE_COOKIE=1: códigos de confirmação e links de senha NÃO são "
+                    "registrados no log. Sem SMTP, a confirmação de e-mail e o 'esqueci a senha' ficam indisponíveis; "
+                    "use `studio admin reset-link`.")
+    try:
+        app.bootstrap_admin()
+    except Exception as exc:  # noqa: BLE001
+        log.error("falha ao criar o administrador inicial (%s)", type(exc).__name__)
+    try:
+        resumed = app.resume_pending()
+        if resumed:
+            log.info("retomando %d produção(ões) interrompida(s)", len(resumed), extra={"event": "resume"})
+    except Exception as exc:  # noqa: BLE001
+        log.error("falha ao retomar produções (%s)", type(exc).__name__)
+
+    draining = threading.Event()
+
+    def drain():   # em outra thread: httpd.shutdown() não pode ser chamado de quem roda serve_forever
+        app.shutdown()
+        httpd.shutdown()
+
+    def on_term(signum, frame):
+        if not draining.is_set():
+            draining.set()
+            log.info("SIGTERM: parando de aceitar jobs; aguardando até %ss", app.cfg.shutdown_grace_s, extra={"event": "stop"})
+            threading.Thread(target=drain, daemon=True, name="drain").start()
+
+    # SIGTERM (Linux/contêiner). No Windows o SIGTERM não chega ao handler (vira TerminateProcess); o desligamento
+    # gracioso lá é o CTRL_BREAK_EVENT, que o Python entrega como SIGBREAK.
+    for name in ("SIGTERM", "SIGBREAK"):
+        if hasattr(signal, name):
+            try:
+                signal.signal(getattr(signal, name), on_term)
+            except (ValueError, OSError):  # fora da thread principal (testes)
+                pass
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
-        pass
+        app.shutdown(3.0)
     finally:
         httpd.server_close()
+        release_instance_lock(lock)
 
 
 def _find_cloudflared() -> str | None:
@@ -847,8 +1136,9 @@ def _find_cloudflared() -> str | None:
     return next((str(c) for c in candidates if c.is_file()), None)
 
 
-def publish(port: int = 8765, timeout_s: float = 60.0) -> None:
+def publish(port: int | None = None, timeout_s: float = 60.0) -> None:
     """Coloca o estúdio na internet por um túnel rápido da Cloudflare. O servidor continua escutando só em 127.0.0.1."""
+    port = ServerConfig.from_env().port if port is None else port
     exe = _find_cloudflared()
     if not exe:
         raise OrchestratorError("cloudflared não encontrado: winget install Cloudflare.cloudflared")
@@ -870,6 +1160,6 @@ def publish(port: int = 8765, timeout_s: float = 60.0) -> None:
             raise OrchestratorError("o túnel não informou o endereço público a tempo")
         print(f"Endereço público: https://{hosts[0]}  (muda a cada vez que este comando reinicia)", flush=True)
         print("Cadastro fechado: crie contas com  studio admin create-user --email ... --name ...", flush=True)
-        serve(port, open_browser=False, public_host=hosts[0])
+        serve(port, open_browser=False, public_host=hosts[0], trust_proxy="cloudflare")
     finally:
         tunnel.terminate()
