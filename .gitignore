@@ -8,6 +8,7 @@ __pycache__/
 .env
 .env.*
 !.env.example
+!.env.docker.example
 
 # Dados de produção e referências pessoais (fotos, vídeos gerados)
 data/
@@ -27,3 +28,12 @@ tools/out/
 
 # Configuração local do editor
 /.vscode/
+
+# Projeto de terceiros na raiz, "<nome>-office/" (fora do deploy), sobras do Vite e referência pessoal montada por volume
+/*-office/
+*.timestamp-*.mjs
+/reference/
+/pacote-assets/
+
+# Configuração local do editor/launcher (contém caminho absoluto da máquina)
+/.claude/launch.json
