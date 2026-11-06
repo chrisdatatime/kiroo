@@ -71,6 +71,12 @@ class Settings:
     x264_preset: str
     monthly_cap_usd: float = 0.0  # teto de gasto real no mês (0 = chamadas pagas bloqueadas)
     gemini_api_key: str | None = field(default=None, repr=False)
+    reference_dir: Path | None = None  # STUDIO_REFERENCE_DIR: referências pessoais (foto da apresentadora), fora dos assets da imagem
+
+    @property
+    def reference_root(self) -> Path:
+        """Onde ficam as referências pessoais (ex.: bia/PERFIL BIA.jpg). Sem STUDIO_REFERENCE_DIR, o mesmo que assets_dir."""
+        return self.reference_dir or self.assets_dir
 
     @property
     def db_path(self) -> Path:
@@ -112,6 +118,7 @@ def load_settings(env_file: Path | None = None, **overrides) -> Settings:
         x264_preset=env("STUDIO_X264_PRESET") or "medium",
         monthly_cap_usd=float(env("STUDIO_MONTHLY_CAP_USD") or 0),
         gemini_api_key=env("GEMINI_API_KEY") or None,
+        reference_dir=_path(env("STUDIO_REFERENCE_DIR"), PROJECT_ROOT / "assets") if env("STUDIO_REFERENCE_DIR") else None,
     )
     # Ajustes feitos pela interface (data/agents.json): só campos não sensíveis e já validados.
     from .agent_config import load as load_agent_config, validate_settings

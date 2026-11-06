@@ -203,7 +203,8 @@ class App:
         real = ws["mode"] == "real" and bool(ws["allow_real"]) and bool(s.gemini_api_key)
         return dataclasses.replace(s, mode="real" if real else "simulated", allow_paid_calls=real,
                                    monthly_cap_usd=ws["monthly_cap_usd"],
-                                   assets_dir=s.assets_dir if owner_admin else assets)
+                                   assets_dir=s.assets_dir if owner_admin else assets,
+                                   reference_dir=s.reference_dir if owner_admin else None)
 
     def _workspace_of_production(self, pid: str):
         s, db, acc = self._db()
@@ -634,7 +635,7 @@ class App:
             return self._media(path, ctx)
         if path == "/api/creative/options":
             q = parse_qs(url.query)
-            has_bia = (s.assets_dir / "bia" / "PERFIL BIA.jpg").is_file()
+            has_bia = (s.reference_root / "bia" / "PERFIL BIA.jpg").is_file()
             return _json(200, {**creative_options.catalogue(),
                                **creative_options.ideas(q.get("name", [""])[0], q.get("category", [""])[0], has_bia)})
         if path in ("/api/chat/quota", "/api/chat/spend"):

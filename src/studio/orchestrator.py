@@ -218,7 +218,7 @@ class Orchestrator:
         product = ProductInput.model_validate_json(row["product_json"])
         st = self._storage(pid)
         mode = profiles["format"]["data"]["presenter_mode"]
-        sheet = prepare_product(product, st, profiles["presenter"]["data"], mode, self.s.assets_dir, self.base_dir)
+        sheet = prepare_product(product, st, profiles["presenter"]["data"], mode, self.s.reference_root, self.base_dir)
         self.db.update_production(pid, sheet_json=sheet.model_dump_json())
         st.write_json("sheet.json", sheet.model_dump(mode="json"))
         for issue in sheet.issues:

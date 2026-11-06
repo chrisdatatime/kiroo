@@ -237,8 +237,12 @@ def main(argv: list[str] | None = None) -> int:
         print(f"dados: {settings.data_dir} | assets: {settings.assets_dir}")
         print(f"modelos: imagem={settings.image_model}@{settings.image_size} vídeo={settings.video_model}@"
               f"{settings.video_resolution} planner={settings.planner_model} revisor={settings.reviewer_model}")
-        bia = settings.assets_dir / "bia" / "PERFIL BIA.jpg"
-        print(f"referência Bia: {'ok' if bia.exists() else 'AUSENTE em ' + str(bia)}")
+        print(f"referências pessoais: {settings.reference_root}")
+        bia = settings.reference_root / "bia" / "PERFIL BIA.jpg"
+        print(f"referência Bia: {'ok' if bia.exists() else 'AUSENTE em ' + str(bia) + ' (monte o volume da referência pessoal; ver docs/DOCKER.md)'}")
+        from .web.server import GAME_DIST
+
+        print(f"frontend/dist: {'ok' if (GAME_DIST / 'index.html').is_file() else 'AUSENTE em ' + str(GAME_DIST)}")
         return 0
 
     if args.cmd == "admin":
