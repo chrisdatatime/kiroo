@@ -1,11 +1,10 @@
 import React from 'react';
-import { Bot, CircleDollarSign, GraduationCap, Info, Map as MapIcon, Settings, UserRound, X } from 'lucide-react';
+import { Bot, CircleDollarSign, GraduationCap, Info, Settings, UserRound, X } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { AccountContent } from './Account.jsx';
 import { PilotContent } from './Pilot.jsx';
 import { CreditsContent } from './Credits.jsx';
 import { AboutContent } from './About.jsx';
-import { WORLD, setWorld } from '../game/worldFlag.js';
 
 // Preferências: um modal com navegação à esquerda (padrão de layout de apps de escritório virtual) no lugar das janelas
 // soltas de Conta, Piloto, Créditos e Sobre. A aba é o próprio `win` do App (prefs | account | pilot | credits | about).
@@ -45,14 +44,6 @@ function General({ v }) {
         <h3 className="pref-sec-h">Aparência</h3>
         <Row title="Modo de cor" desc="O Kiroo usa o tema claro. O modo escuro vem depois.">
           <span className="pref-static">Claro</span>
-        </Row>
-      </section>
-      <section className="pref-sec">
-        <h3 className="pref-sec-h">Escritório</h3>
-        <Row title="Visual da sede" desc={WORLD === 'phaser' ? 'Mapa em tileset (padrão). Trocar recarrega a página.' : 'Visual antigo (escolha salva neste navegador). Trocar recarrega a página.'}>
-          <button type="button" className="pw-btn" onClick={() => setWorld(WORLD === 'phaser' ? 'canvas' : 'phaser')}>
-            <MapIcon size={15} aria-hidden="true" />{WORLD === 'phaser' ? 'Usar o visual antigo' : 'Usar o mapa novo'}
-          </button>
         </Row>
       </section>
       <section className="pref-sec">

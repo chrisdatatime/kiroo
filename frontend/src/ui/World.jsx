@@ -1,3 +1,5 @@
+// LEGADO ISOLADO: renderizador antigo (Canvas 2D). Nada importa este arquivo; o único mundo é o Phaser (ui/WorldPhaser.jsx).
+// Não é uma opção do produto. Não religar sem decisão explícita.
 import React from 'react';
 import { GRID } from '../game/data.js';
 import PixelOffice from '../game/pixel/renderer.js';

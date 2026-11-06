@@ -260,7 +260,7 @@ function Palette({ v, onClose }) {
     ...VIEWS.map((x) => ({ id: `v-${x.id}`, label: `Ir para ${x.label}`, hint: 'Navegar', icon: 'flow', run: () => v.setView(x.id) })),
     { id: 'new', label: 'Nova missão', hint: 'Ação', icon: 'plus', run: () => { v.setView('missao'); v.newProd(); } },
     ...(v.nextLabel ? [{ id: 'next', label: v.nextLabel, hint: v.nextLong, icon: 'arrow', run: v.goNext }] : []),
-    ...v.rooms.filter((r) => r.placed || v.world !== 'phaser').map((r) => ({ id: `r-${r.id}`, label: `Ir à sala ${r.name}`, hint: 'Escritório', icon: 'flow', run: () => { v.setView('escritorio'); r.go(); } })),
+    ...v.rooms.filter((r) => r.placed).map((r) => ({ id: `r-${r.id}`, label: `Ir à sala ${r.name}`, hint: 'Escritório', icon: 'flow', run: () => { v.setView('escritorio'); r.go(); } })),
     { id: 'credits', label: 'Créditos e extrato', hint: 'Conta', icon: 'coin', run: () => v.openPrefs('credits') },
     { id: 'pilot', label: 'Configurar piloto', hint: 'Automação', icon: 'pilot', run: () => v.openPrefs('pilot') },
     { id: 'prefs', label: 'Preferências', hint: 'Conta', icon: 'user', run: () => v.openPrefs('prefs') },

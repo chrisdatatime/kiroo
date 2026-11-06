@@ -1,16 +1,14 @@
-// Dados do Kiroo: agentes, etapas e cenas. O mapa da sede vem de game/map.js (renderizador antigo) ou do
-// assets/maps/office.tmj (Phaser, SPEC-VIS-001 Fase 2), conforme a flag em game/worldFlag.js.
+// Dados do Kiroo: agentes, etapas e cenas. O mapa da sede vem do assets/maps/office.tmj (Phaser, SPEC-VIS-001).
+// game/map.js (grade 16 px do renderizador antigo) só fornece o catálogo de salas e os helpers de tile; não há mais escolha de renderizador.
 import * as OLD from './map.js';
-import { WORLD } from './worldFlag.js';
 import { buildWorld } from './world/tmjWorld.js';
 import officeRaw from '../../../assets/maps/office.tmj?raw';
 
-export const TMJ = WORLD === 'phaser' ? JSON.parse(officeRaw) : null;
-const M = TMJ ? buildWorld(TMJ, OLD.ROOMS) : OLD;
+export const TMJ = JSON.parse(officeRaw);
+const M = buildWorld(TMJ, OLD.ROOMS);
 
 export const { GRID, ROOMS, CHAIRS, FURNITURE, INTERACT, BLOCKED, SPOTS, SPAWN } = M;
 export { COMMON, WALLS, DOORS, RUGS, WALL_DECOR, LOGO_WALL, MY_DESK, MY_SEAT, BOARD, COFFEE, GAMES_TILE, MUSIC_SHELF, tilesOf } from './map.js';
-export { WORLD };
 
 export const AGENTS = [
   { id: 'nina', name: 'Nina', role: 'Preparação', tab: 'produto', mug: '#FF8FC0', look: { shirt: '#FF8FC0', acc: 'bone' } },

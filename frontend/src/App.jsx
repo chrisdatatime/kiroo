@@ -1,12 +1,11 @@
 import React from 'react';
-import { GRID, AGENTS, TABS, STAGES, STAGE_LABELS, BLOCKED, SPOTS, ROOMS, CHAIRS, FURNITURE, INTERACT, SPAWN, tilesOf, WORLD } from './game/data.js';
+import { GRID, AGENTS, TABS, STAGES, STAGE_LABELS, BLOCKED, SPOTS, ROOMS, CHAIRS, FURNITURE, INTERACT, SPAWN, tilesOf } from './game/data.js';
 import { bfs, screenToTile, facing } from './game/geometry.js';
 import { initialAgent, stepSeated } from './game/agentLife.js';
 import { lazyChunk } from './lib/lazyChunk.jsx';
 import SectorsWindow from './ui/Sectors.jsx';
 import TrainingWindow, { LearnPanel } from './ui/Training.jsx';
 import MusicWindow from './ui/Music.jsx';
-import World from './ui/World.jsx';
 // Phaser (~1 MB) só carrega com a flag ligada e depois do login: chunk separado (SPEC-VIS-001, Fase 2)
 const WorldPhaser = lazyChunk(() => import('./ui/WorldPhaser.jsx'));
 import Hud from './ui/Hud.jsx';
@@ -45,7 +44,6 @@ import { buildPipeline, attention } from './shell/pipeline.js';
 const AGM = {}; AGENTS.forEach((a) => { AGM[a.id] = a; });
 const blocked = {}; BLOCKED.forEach((t) => { blocked[t[0] + ',' + t[1]] = true; });
 const WALK_SPOTS = SPOTS;
-const PHASER = WORLD === 'phaser';
 const T = GRID.T;
 const SC = T / 16;          // escala do personagem: 1 no mapa antigo (16 px), 2 no .tmj (32 px)
 const placedRoom = (r) => !!r && r.placed !== false;
@@ -89,7 +87,7 @@ export default class App extends React.Component {
     const agents = {};
     // agente sem sala no mapa (seat null, mapa novo da Fase 2) fica fora do mundo: i/j = -1
     // mundo Phaser (Fase 6): agentes fixos na cadeira da própria sala; o canvas antigo mantém o passeio
-    AGENTS.forEach((a) => { agents[a.id] = PHASER ? initialAgent(a.seat) : { i: a.seat ? a.seat[0] : -1, j: a.seat ? a.seat[1] : -1, path: [], dir: 'up', rest: 4 + Math.floor(Math.random() * 8), moving: false }; });
+    AGENTS.forEach((a) => { agents[a.id] = initialAgent(a.seat); });
     const pid = LS.get('bc.pid', null);
     const view0 = LS.get('bc.view', 'central');
     this.state = {
@@ -235,7 +233,7 @@ export default class App extends React.Component {
   // ---------- IA de movimento dos agentes ----------
   stepAgent(a, st) {
     if (!a.seat) return st;
-    if (PHASER) return stepSeated(a.seat, st, this.state.ui.win === 'chat' && this.state.ui.who === a.id ? 'talk' : this.statusOf(a.id));
+    return stepSeated(a.seat, st, this.state.ui.win === 'chat' && this.state.ui.who === a.id ? 'talk' : this.statusOf(a.id));
     let { i, j, path, dir, rest } = st;
     if (path.length) {
       const n = path[0];
@@ -322,7 +320,7 @@ export default class App extends React.Component {
       this.setState({ player: { ...p, path, seat: null }, pending: { type: 'sit', id: c.id }, dest: [c.x, c.y], ui: { ...this.state.ui, win: null } });
       return;
     }
-    if (this.isAdjacent(t) || (PHASER && t.type === 'agent')) { this.doAction(t); return; }  // conversa a 1 clique, sem andar
+    if (this.isAdjacent(t) || t.type === 'agent') { this.doAction(t); return; }  // conversa a 1 clique, sem andar
     const tiles = this.targetTiles(t);
     const path = bfs([p.i, p.j], (u, v) => this.passP(u, v) && tiles.some((x) => Math.max(Math.abs(x[0] - u), Math.abs(x[1] - v)) <= 1), (u, v) => this.passP(u, v));
     if (!path) { this.toast('Não dá para chegar lá agora.'); return; }
@@ -348,7 +346,7 @@ export default class App extends React.Component {
   doAction(t) {
     this.dismissTut();
     // mundo Phaser (Fase 6): agente abre direto o painel de conversa; o canvas antigo mantém o diálogo roteirizado
-    if (t.type === 'agent') this.setUI(PHASER ? { win: 'chat', who: t.id } : { win: 'dialog', who: t.id, dlgTalk: false });
+    if (t.type === 'agent') this.setUI({ win: 'chat', who: t.id });
     else if (t.type === 'monitor') this.openRoomWork(t.room);
     else if (t.type === 'sit') this.sit(t.id);
     else if (t.type === 'chair') this.goInteract(t);
@@ -765,7 +763,7 @@ export default class App extends React.Component {
       const room = ROOMS.find((r) => r.agent === a.id);
       return {
         // sentado trabalhando: de costas, olhando o monitor; precisando de você ou livre: vira para a tela
-        id: a.id, i: ast.i, j: ast.j, walking: !!ast.moving, seated, face: seated ? (PHASER ? ast.dir : (status === 'work' ? 'up' : 'down')) : null,
+        id: a.id, i: ast.i, j: ast.j, walking: !!ast.moving, seated, face: seated ? ast.dir : null,
         l: (ast.i + 0.5) * T - 8 * SC, t: (ast.j + 1) * T - (seated ? 28 : 24) * SC, z: 10 + ast.j, w: 16 * SC, h: 22 * SC,
         look: a.look, anim, need: status === 'need', work: status === 'work', near: !!isNear, status: this.roomStatus(room),
         name: a.name, role: a.role, room: room ? room.id : null,
@@ -973,7 +971,7 @@ export default class App extends React.Component {
       view: s.view, setView: (id) => { if (s.ui.win === 'dialog') this.closeWin(); this.setState({ view: id }); }, shell: true,
       pipeline, attn, statuses: P ? statuses : { ...statuses, nina: 'idle' }, hasProd: !!P, openStep: (tab) => this.openProd(tab),
       // mundo
-      scale, zoom, camX, camY, vw: s.vw, vh: s.vh, setup: su, desks, highlight, dest, world: WORLD,
+      scale, zoom, camX, camY, vw: s.vw, vh: s.vh, setup: su, desks, highlight, dest,
       openTour: () => this.openTour(), tourOpen: !!s.onb,
       openAbout: () => { this.dismissTut(); this.setUI({ win: 'about' }); },
       openPrefs: (tab) => { this.dismissTut(); this.setUI({ win: tab || 'prefs' }); },
@@ -1069,7 +1067,7 @@ export default class App extends React.Component {
         {v.view === 'missao' && <MissionView v={v} />}
         {v.view === 'equipe' && <TeamView v={v} />}
         {v.view === 'escritorio' && (<>
-          {WORLD === 'phaser' ? <React.Suspense fallback={null}><WorldPhaser v={v} /></React.Suspense> : <World v={v} />}
+          <React.Suspense fallback={null}><WorldPhaser v={v} /></React.Suspense>
           <Hud v={v} />
           {v.showTut && !v.tourOpen && <Tutorial v={v} />}
         </>)}
