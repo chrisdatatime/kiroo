@@ -94,17 +94,37 @@ def graceful(proc):
 
 
 def q(data: Path, sql: str, *a):
-    con = sqlite3.connect(data / "studio.sqlite3", timeout=10)
-    con.row_factory = sqlite3.Row
-    try:
-        return con.execute(sql, a).fetchall()
-    finally:
-        con.close()
+    # Leitura do banco CONFIRMADO (o SQLite recupera o WAL sozinho). No Windows, logo após um kill, a primeira leitura pode
+    # dar "disk I/O error" enquanto o -shm do processo morto é liberado: repete algumas vezes antes de desistir.
+    for attempt in range(8):
+        con = sqlite3.connect(data / "studio.sqlite3", timeout=10)
+        con.row_factory = sqlite3.Row
+        try:
+            return con.execute(sql, a).fetchall()
+        except sqlite3.OperationalError:
+            if attempt == 7:
+                raise
+            time.sleep(0.4)
+        finally:
+            con.close()
 
 
 def snapshot(data: Path, pid: str):
     att = [tuple(r) for r in q(data, "SELECT id, scene_idx, kind, attempt_no, remote_op_id FROM attempts WHERE production_id=? ORDER BY created_at", pid)]
     return att
+
+
+def preserved(before, after) -> tuple[bool, list]:
+    """Invariante da retomada sobre tuplas (id, cena, tipo, nº, remote_op_id): toda tentativa confirmada antes da interrupção
+    mantém id/cena/tipo/nº; um remote_op_id já confirmado (não nulo) permanece igual; um nulo PODE ganhar valor na retomada
+    (created -> submitted) sem trocar o id nem duplicar a operação. Tentativa desaparecida ou op trocada = violação."""
+    now = {a[0]: a for a in after}
+    bad = []
+    for b in before:
+        a = now.get(b[0])
+        if a is None or a[1:4] != b[1:4] or (b[4] is not None and a[4] != b[4]):
+            bad.append((b, a))
+    return not bad, bad
 
 
 def png() -> str:
@@ -139,12 +159,15 @@ def run_scenario(label: str, data: Path, abrupt: bool) -> None:
     pid = body["pid"]
     got = wait_for(lambda: q(data, "SELECT COUNT(*) FROM attempts WHERE production_id=?", pid)[0][0] >= 1, 40)
     check(f"{label}: produção em andamento antes do sinal", bool(got), f"({pid}, {prod_status(data, pid)})")
-    before = snapshot(data, pid)
+    # O snapshot "antes" é tirado DEPOIS que o processo parou (abaixo): enquanto o servidor vive ele continua gravando
+    # (created -> submitted com remote_op_id), então um snapshot anterior ao sinal compara com um estado que já mudou
+    # legitimamente. O estado confirmado após a parada é o que a retomada precisa preservar.
     if abrupt:
         t0 = time.time()
         proc.kill()   # equivalente a kill -9 (TerminateProcess no Windows)
         proc.wait(10)
         check(f"{label}: processo morreu de repente", proc.returncode is not None)
+        before = snapshot(data, pid)
         state = q(data, "SELECT state FROM run_state WHERE production_id=?", pid)
         check(f"{label}: run_state ficou 'running' (ninguém marcou)", bool(state) and state[0][0] == "running", str(state and state[0][0]))
         lock_free = True
@@ -162,6 +185,7 @@ def run_scenario(label: str, data: Path, abrupt: bool) -> None:
                 pass
             time.sleep(0.1)
         took = time.time() - t0
+        before = snapshot(data, pid)
         check(f"{label}: /readyz virou 503 durante o desligamento", seen503)
         check(f"{label}: processo saiu dentro da tolerância", proc.poll() is not None and took <= GRACE + 2, f"({took:.1f}s de {GRACE}s)")
         state = q(data, "SELECT state, resume_attempts FROM run_state WHERE production_id=?", pid)
@@ -188,10 +212,12 @@ def run_scenario(label: str, data: Path, abrupt: bool) -> None:
     final = prod_status(data, pid)
     check(f"{label}: produção retomou e terminou", bool(done) and final in ("awaiting_final_review", "completed"), f"(status={final})")
     after = snapshot(data, pid)
-    kept = all(b in after for b in before)
+    kept, _bad = preserved(before, after)
+    ops = [a[4] for a in after if a[4]]
     keys = [(a[1], a[2], a[3]) for a in after]
     check(f"{label}: tentativas já registradas preservadas (mesmos ids e ops remotas)", kept, f"({len(before)} antes, {len(after)} depois)")
     check(f"{label}: nenhuma etapa duplicada (cena, tipo, nº da tentativa)", len(keys) == len(set(keys)))
+    check(f"{label}: nenhuma operação remota duplicada", len(ops) == len(set(ops)))
     # segunda instância na mesma pasta
     proc3 = subprocess.run([sys.executable, "-m", "studio", "ui", "--no-browser"], cwd=ROOT, text=True, encoding="utf-8",
                            errors="replace", capture_output=True, timeout=60,
