@@ -177,6 +177,7 @@ class Orchestrator:
             elif status == PS.SCRIPTED:
                 self.db.set_production_status(pid, PS.PRODUCING)
             elif status == PS.PRODUCING:
+                self._reconcile_autopilot(pid)
                 outcome = self._step_scenes(pid)
                 if outcome == "done":
                     self.db.set_production_status(pid, PS.EDITING, "todas as cenas aprovadas")
@@ -819,13 +820,32 @@ class Orchestrator:
         if mode in ("assistido", "automatico"):
             self.set_go_ahead(pid, "all")
             # cenas que já esperam você e o piloto aprovaria: aplica a regra agora
-            for row in self.db.scenes(pid):
-                st = SS(row["status"])
-                if st in (SS.AWAITING_IMAGE_APPROVAL, SS.AWAITING_VIDEO_APPROVAL):
-                    kind = "image" if st == SS.AWAITING_IMAGE_APPROVAL else "video"
-                    reviews = [r for r in self.db.reviews_for_attempt(row[f"current_{kind}_attempt"]) if r["reviewer"].startswith("auto:")]
-                    if reviews and ReviewDecision(reviews[-1]["decision"]) in AUTO_APPROVE[mode]:
-                        self.approve(pid, row["idx"], kind, f"aprovado pelo piloto ({mode})", reviewer="piloto")
+            self._reconcile_autopilot(pid)
+
+    def _reconcile_autopilot(self, pid: str) -> int:
+        """Aplica a regra do piloto às cenas que JÁ esperam aprovação. A revisão e a aprovação automática são passos
+        separados no banco: se o processo morre entre eles, a cena fica em `awaiting_*` e nada mais a aprovaria (a produção
+        ficava em `producing` com o laço ocioso para sempre). Idempotente: só age sobre cenas ainda aguardando."""
+        mode = self._autonomy(pid)
+        if mode not in AUTO_APPROVE:
+            return 0
+        done = 0
+        for row in self.db.scenes(pid):
+            st = SS(row["status"])
+            if st not in (SS.AWAITING_IMAGE_APPROVAL, SS.AWAITING_VIDEO_APPROVAL):
+                continue
+            kind = "image" if st == SS.AWAITING_IMAGE_APPROVAL else "video"
+            att_id = row[f"current_{kind}_attempt"]
+            if not att_id:
+                continue
+            reviews = [r for r in self.db.reviews_for_attempt(att_id) if r["reviewer"].startswith("auto:")]
+            if reviews and ReviewDecision(reviews[-1]["decision"]) in AUTO_APPROVE[mode]:
+                try:
+                    self.approve(pid, row["idx"], kind, f"aprovado pelo piloto ({mode})", reviewer="piloto")
+                    done += 1
+                except OrchestratorError:
+                    pass
+        return done
 
     def set_go_ahead(self, pid: str, stage: str) -> None:
         """Libera a próxima etapa paga (o operador viu a estimativa). Nunca retrocede."""

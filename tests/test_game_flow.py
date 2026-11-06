@@ -200,3 +200,17 @@ def test_real_reviews_run_in_background(settings, product, tmp_path):
     orch.run(pid)
     assert orch.db.scene(pid, 1)["status"] == SS.AWAITING_IMAGE_APPROVAL
     assert [a["kind"] for a in orch.db.attempts(pid, 1)].count("review_image") == 1
+
+
+def test_resume_approves_scene_left_waiting_by_a_crash_between_review_and_approval(make_orch, product):
+    """Regressão do travamento do kill -9: o processo morre depois de gravar a revisão e antes da aprovação do piloto.
+    A cena fica em awaiting_* e, sem reconciliação, a produção ficava em `producing` com o laço ocioso para sempre."""
+    orch = make_orch(SimulationScript(image_reviews=[RD.APPROVED] * 3))
+    pid = _create_auto(orch, product, "manual")
+    orch.run(pid)
+    waiting = [s["idx"] for s in orch.db.scenes(pid) if s["status"] == SS.AWAITING_IMAGE_APPROVAL]
+    assert waiting  # estado idêntico ao deixado pela morte: revisão automática gravada, aprovação não
+    orch.db.update_production(pid, autonomy="assistido")  # sem set_autonomy: nada reconcilia a não ser o laço
+    orch.run(pid)
+    assert not any(s["status"] == SS.AWAITING_IMAGE_APPROVAL for s in orch.db.scenes(pid))
+    assert orch._reconcile_autopilot(pid) == 0  # idempotente
