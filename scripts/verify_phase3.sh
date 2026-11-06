@@ -147,13 +147,15 @@ c_2a_layers_values(){ layers_guard 2a-layers-values || return
   if [ "$(jget "$LAYERS_JSON" "any(d['secret_in_content'].values())")" = True ]; then rec 2a-layers-values FAIL "valor de credencial R2 encontrado em camada: $(jget "$LAYERS_JSON" "d['secret_in_content']")"
   else rec 2a-layers-values PASS "os 3 valores reais não aparecem em nenhum dos $(jget "$LAYERS_JSON" "d['files_scanned']") arquivos varridos"; fi; }
 
-c_2a_fs(){ local out rc; out=$(dk run --rm --entrypoint sh "$IMG" -c 'find / -xdev \( -name "*.zip" -o -name "*kiroo-licensed*" \) 2>/dev/null | head -20; echo "---LIC"; ls /app/licenses 2>/dev/null; echo "---ASSETS"; ls /app/assets 2>/dev/null; ls -d /app/assets/bia /reference/bia 2>/dev/null' 2>&1); rc=$?
-  { [ $rc -ne 0 ] || ! printf '%s' "$out" | grep -q -- '---LIC'; } && { rec 2a-fs NAO_VERIFICADO "docker run falhou ou saída incompleta (rc=$rc)"; return; }
+c_2a_fs(){ local out rc; out=$(dk run --rm --entrypoint sh "$IMG" -c 'find / -xdev \( -name "*.zip" -o -name "*kiroo-licensed*" \) 2>/dev/null | head -20; echo "---LIC"; ls /app/licenses 2>/dev/null; echo "---ASSETS"; ls /app/assets 2>/dev/null; ls -d /app/assets/bia /reference/bia 2>/dev/null; echo "---END"' 2>&1); rc=$?
+  # O `ls -d` termina com 2 quando bia NÃO existe (o resultado desejado): por isso o script do contêiner fecha com um marcador
+  # (---END) e o rc do `docker run` passa a refletir só falha real; saída sem marcador continua sendo NAO_VERIFICADO.
+  { [ $rc -ne 0 ] || ! printf '%s' "$out" | grep -q -- '---LIC' || ! printf '%s' "$out" | grep -q -- '---END'; } && { rec 2a-fs NAO_VERIFICADO "docker run falhou ou saída incompleta (rc=$rc; fim: $(printf '%s' "$out" | tail -n 3 | tr '\n' '|' | cut -c1-200))"; return; }
   has_tb <(printf '%s' "$out") && { rec 2a-fs FAIL "Traceback na saída"; return; }
   local zips lic bia; zips=$(printf '%s
 ' "$out" | awk '/^---LIC/{exit} NF' | wc -l); lic=$(printf '%s
 ' "$out" | awk '/^---LIC/{f=1;next} /^---ASSETS/{f=0} f' | grep -c -i limezu); bia=$(printf '%s
-' "$out" | awk '/^---ASSETS/{f=1;next} f' | grep -c bia)
+' "$out" | awk '/^---ASSETS/{f=1;next} /^---END/{f=0} f' | grep -c bia)
   if [ "$zips" -gt 0 ] || [ "$bia" -gt 0 ]; then rec 2a-fs FAIL "$zips arquivo(s) .zip/pacote e $bia caminho(s) bia na imagem"
   elif [ "$lic" -lt 1 ]; then rec 2a-fs FAIL "licenças LimeZu não encontradas em /app/licenses"
   else rec 2a-fs PASS "nenhum *.zip; $lic licença(s) LimeZu em /app/licenses; sem /app/assets/bia nem /reference/bia na imagem"; fi; }
