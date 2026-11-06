@@ -25,7 +25,12 @@ def send(to: str, subject: str, text: str) -> bool:
     """Envia o e-mail. Devolve True se saiu por SMTP, False se só foi registrado no log."""
     host = os.environ.get("STUDIO_SMTP_HOST")
     if not host:
-        log.warning("E-mail para %s (sem SMTP configurado) | %s\n%s", to, subject, text)
+        if os.environ.get("STUDIO_SECURE_COOKIE") == "1":
+            # Produção: nunca despeja código de confirmação nem link de senha no log. Falha fechado (devolve False).
+            log.warning("E-mail não enviado: STUDIO_SMTP_HOST não está configurado. Em produção os códigos e links "
+                        "não vão para o log; configure o SMTP ou use `studio admin reset-link`.")
+        else:  # desenvolvimento local: o operador lê o código aqui
+            log.warning("E-mail para %s (sem SMTP configurado) | %s\n%s", to, subject, text)
         return False
     port = int(os.environ.get("STUDIO_SMTP_PORT") or 587)
     user = os.environ.get("STUDIO_SMTP_USER") or ""
@@ -50,5 +55,5 @@ def send(to: str, subject: str, text: str) -> bool:
                 s.send_message(msg)
         return True
     except (OSError, smtplib.SMTPException) as exc:
-        log.error("Falha ao enviar e-mail para %s: %s", to, exc)
+        log.error("Falha ao enviar e-mail por SMTP (%s)", type(exc).__name__)
         return False
