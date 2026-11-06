@@ -50,7 +50,7 @@ Tudo é gravado em disco local, sem camada de abstração para objeto (S3/R2).
 | `data/sim_ops`, `data/logs`, `data/demo_inputs`, `data/agents.json` | estado do modo simulado, logs, config da UI | ~1 MB | ignorado |
 | `data/workspaces/<ws_id>/assets/` | referências próprias de cada workspace | (ainda não criado) | ignorado |
 | `assets/bia/` | foto de referência da apresentadora (3,2 MB) | 3,2 MB | ignorado |
-| `assets/characters/` | spritesheets LimeZu/PIVOO (5,2 MB) | 5,2 MB | **ignorado (licença)** |
+| `assets/characters/` | spritesheets LimeZu e do estúdio (5,2 MB) | 5,2 MB | **ignorado (licença)** |
 | `assets/tilesets/` | tilesets LimeZu (3,3 MB) | 3,3 MB | **ignorado (licença)** |
 | `assets/maps/` | `office.tmj/.tmx` (324 KB) | 324 KB | versionado |
 | `frontend/src/assets/home/` | imagens da landing geradas por `tools/render_home.py` | — | **ignorado** |
@@ -62,7 +62,7 @@ Pontos específicos:
 - **`assets/characters/` e `assets/tilesets/` são incorporados ao build do frontend** via `import.meta.glob` em tempo de build ([WorldPhaser.jsx:15](../frontend/src/ui/WorldPhaser.jsx:15), [WorldPhaser.jsx:22](../frontend/src/ui/WorldPhaser.jsx:22)). Num clone limpo, sem esses diretórios, o `npm run build` **passa** (é o que a CI faz), mas gera um jogo sem personagens e sem tilesets (cai no "feijão"). O mesmo vale para `frontend/src/assets/home/` e a landing ([art.js:3](../frontend/src/landing/art.js:3)). Para o build de produção, os assets precisam ser entregues ao builder por fora do git (volume, secret store, bucket privado).
 - **Licença:** os tilesets e personagens são de licença comercial e, quando o `dist/` é publicado, os PNGs seguem para o navegador do usuário. Confirmar que a licença LimeZu cobre essa distribuição num SaaS.
 - `assets/bia/PERFIL BIA.jpg` é lido pelo `doctor` e pelo preparo do produto como referência da apresentadora. Sem ela, o modo real perde a referência. É uma foto pessoal (por isso o ignore).
-- Diretório untracked `pivoo-office/` (6,3 MB, projeto de terceiros com `Procfile`/`netlify.toml`/`yarn.lock`, licença própria): **não é parte do deploy** e não deve ser commitado por engano. Também há um `vite.config.js.timestamp-*.mjs` untracked na pasta do frontend, sobra do Vite.
+- Diretório untracked de terceiros (escritório virtual) (6,3 MB, projeto de terceiros com `Procfile`/`netlify.toml`/`yarn.lock`, licença própria): **não é parte do deploy** e não deve ser commitado por engano. Também há um `vite.config.js.timestamp-*.mjs` untracked na pasta do frontend, sobra do Vite.
 - Mídia é servida pela própria API em `/media/<prod_id>/…` com checagem de dono e suporte a `Range`. Funciona, mas toda leitura de vídeo passa pelo processo Python.
 
 ## 4. Orquestrador de vídeo (`orchestrator.py`)
@@ -194,7 +194,7 @@ Ordenados por gravidade. Esforço: **P** = até ~½ dia, **M** = 1–3 dias, **G
 | 11 | **Médio** | **Créditos sem compra:** sem Mercado Pago (Fase D), sem CNPJ; só admin concede via CLI. Dá para lançar fechado/por convite, mas não como SaaS autoatendido. Preços e política (`LLM_PRICES`, margem 3×, câmbio 5,40) estão hardcoded/provisórios e precisam de revisão antes de cobrar. | G |
 | 12 | **Médio** | **Mídia servida pelo processo Python** (`/media/…` com Range), em servidor `ThreadingHTTPServer` simples, sem compressão, sem cache e sem limites de conexão. Servir `/assets` e `/media` pelo proxy/CDN. | M |
 | 13 | **Baixo** | `npm audit`: 8 vulnerabilidades, todas só de dev (Vite 5 alta, `shadcn` e outras). Produção limpa. Atualizar Vite e `shadcn`; podar `extraneous` (`three`, geist) e checar `cn`. | P |
-| 14 | **Baixo** | Higiene do repositório: `pivoo-office/` e `vite.config.js.timestamp-*.mjs` untracked, `data/studio.db` vazio, `.claude/launch.json` com caminho absoluto versionado, docs com sintaxe Windows. | P |
+| 14 | **Baixo** | Higiene do repositório: o diretório untracked de terceiros (escritório virtual) e `vite.config.js.timestamp-*.mjs` untracked, `data/studio.db` vazio, `.claude/launch.json` com caminho absoluto versionado, docs com sintaxe Windows. | P |
 | 15 | **Baixo** | Operação: sem painel admin web (tudo pela CLI), sem monitoramento, sem logs estruturados, sem rate-limit global fora do login e do chat. | M |
 
 **Rota mínima sugerida (lançamento fechado, 1 instância):** itens 1, 2, 3 (mínimo), 4, 5, 6, 7 e 8. Estimativa total: **~1–2 semanas** de trabalho focado. Os itens 9 e 11 definem o salto para SaaS aberto.
