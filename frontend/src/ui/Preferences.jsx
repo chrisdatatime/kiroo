@@ -49,9 +49,9 @@ function General({ v }) {
       </section>
       <section className="pref-sec">
         <h3 className="pref-sec-h">Escritório</h3>
-        <Row title="Visual da sede" desc={WORLD === 'phaser' ? 'Mapa novo em tileset (em teste). Trocar recarrega a página.' : 'Visual atual. O mapa novo em tileset está em teste; trocar recarrega a página.'}>
+        <Row title="Visual da sede" desc={WORLD === 'phaser' ? 'Mapa em tileset (padrão). Trocar recarrega a página.' : 'Visual antigo (escolha salva neste navegador). Trocar recarrega a página.'}>
           <button type="button" className="pw-btn" onClick={() => setWorld(WORLD === 'phaser' ? 'canvas' : 'phaser')}>
-            <MapIcon size={15} aria-hidden="true" />{WORLD === 'phaser' ? 'Voltar ao visual atual' : 'Testar o mapa novo'}
+            <MapIcon size={15} aria-hidden="true" />{WORLD === 'phaser' ? 'Usar o visual antigo' : 'Usar o mapa novo'}
           </button>
         </Row>
       </section>

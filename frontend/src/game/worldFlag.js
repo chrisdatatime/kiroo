@@ -1,17 +1,18 @@
 // Feature flag do renderizador do mundo (SPEC-VIS-001, Fase 2).
-//   canvas = renderizador antigo em Canvas 2D (padrão até a validação)   phaser = .tmj do Tiled no Phaser 3
-// Escolha: ?world=phaser|canvas na URL (fica salvo) ou o botão em Minha conta. Lido uma vez, ao carregar a página.
+//   phaser = .tmj do Tiled no Phaser 3 (padrão)   canvas = renderizador antigo em Canvas 2D (opt-in: ?world=canvas ou o botão)
+// Escolha: ?world=phaser|canvas na URL (fica salvo em localStorage 'bc.world') ou o botão em Minha conta. Lido uma vez, ao carregar a página.
+// Só quem escolheu 'canvas' explicitamente continua nele; sem escolha salva, o mundo é o Phaser.
 const KEY = 'bc.world';
 
 function read() {
   try {
     const q = new URLSearchParams(window.location.search).get('world');
     if (q === 'phaser' || q === 'canvas') { localStorage.setItem(KEY, q); return q; }
-    return localStorage.getItem(KEY) === 'phaser' ? 'phaser' : 'canvas';
-  } catch { return 'canvas'; }
+    return localStorage.getItem(KEY) === 'canvas' ? 'canvas' : 'phaser';
+  } catch { return 'phaser'; }
 }
 
-export const WORLD = typeof window === 'undefined' ? 'canvas' : read();
+export const WORLD = typeof window === 'undefined' ? 'phaser' : read();
 
 // Troca o renderizador: o mapa muda de grade (16 → 32 px), então recarrega a página.
 export function setWorld(mode) {
