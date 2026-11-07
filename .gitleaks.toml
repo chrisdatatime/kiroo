@@ -6,9 +6,9 @@ useDefault = true
 
 # Exceção da regra generic-api-key (allowlist DENTRO da regra: no gitleaks 8.28 o targetRules de uma
 # allowlist global não casou com a regra herdada, então a exceção é declarada na própria regra).
-# Isenta apenas: esta regra + estes quatro arquivos + este literal exato, a senha fictícia de teste
-# (contas descartáveis, e-mails *.test, banco temporário). Qualquer outro segredo, em qualquer arquivo
-# (inclusive estes), e o mesmo literal em qualquer outro arquivo continuam sendo detectados.
+# Isenta apenas: esta regra + os arquivos listados em cada bloco + o literal exato do bloco (senhas fictícias
+# de teste: contas descartáveis, banco temporário). Qualquer outro segredo, em qualquer arquivo (inclusive
+# estes), e os mesmos literais em qualquer outro arquivo continuam sendo detectados.
 [[rules]]
 id = "generic-api-key"
 
@@ -20,8 +20,22 @@ paths = [
   '''^tests/test_hardening\.py$''',
   '''^tests/test_public_mode\.py$''',
   '''^scripts/csp-check\.mjs$''',
+  '''^tests/test_mail\.py$''',
+  '''^tests/test_signup_privacy\.py$''',
 ]
 regexTarget = "secret"
 regexes = [
   '''^senha-forte-123$''',
+]
+
+# Segunda senha fictícia, só no teste de "esqueci a senha" (a senha nova definida pelo link, conta descartável).
+[[rules.allowlists]]
+description = "senha nova fictícia do teste de redefinição de senha"
+condition = "AND"
+paths = [
+  '''^tests/test_mail\.py$''',
+]
+regexTarget = "secret"
+regexes = [
+  '''^outra-senha-456$''',
 ]
