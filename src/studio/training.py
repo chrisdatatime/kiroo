@@ -213,25 +213,13 @@ def _hash(cfg: dict) -> str:
     return hashlib.sha256(json.dumps(cfg, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:16]
 
 
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS training_state (
-  workspace_id TEXT NOT NULL, agent_id TEXT NOT NULL, draft_json TEXT, active_version INTEGER NOT NULL DEFAULT 0, updated_at TEXT,
-  PRIMARY KEY (workspace_id, agent_id));
-CREATE TABLE IF NOT EXISTS training_versions (
-  workspace_id TEXT NOT NULL, agent_id TEXT NOT NULL, version INTEGER NOT NULL, config_json TEXT NOT NULL, note TEXT, changes_json TEXT, created_at TEXT NOT NULL,
-  PRIMARY KEY (workspace_id, agent_id, version));
-CREATE TABLE IF NOT EXISTS training_tests (
-  id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, agent_id TEXT NOT NULL, draft_hash TEXT NOT NULL, task TEXT, executed INTEGER NOT NULL DEFAULT 0,
-  simulated INTEGER NOT NULL DEFAULT 1, current_prompt TEXT, draft_prompt TEXT, current_result TEXT, draft_result TEXT, estimated_cost_usd REAL NOT NULL DEFAULT 0,
-  cost_usd REAL NOT NULL DEFAULT 0, created_at TEXT NOT NULL);
-"""
+# O schema vive em migrations.py (PRAGMA user_version).
 
 
 class Training:
     def __init__(self, db: Database, data_dir: Path):
         self.db = db
         self.data_dir = Path(data_dir)
-        db.conn.executescript(SCHEMA)
 
     @staticmethod
     def _check(agent: str) -> None:

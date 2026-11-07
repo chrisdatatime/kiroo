@@ -119,8 +119,10 @@ def test_migration_marks_existing_admin_exempt(settings):
     acc = Accounts(db)
     _, wid_admin = acc.create_user("dono@example.com", "senha-forte-123", admin=True)
     _, wid_cli = acc.create_user("cli@example.com", "senha-forte-123")
-    db.conn.execute("ALTER TABLE workspaces DROP COLUMN credits_exempt")  # banco da Fase B
-    Accounts(db)
+    db.conn.execute("ALTER TABLE workspaces DROP COLUMN credits_exempt")  # banco da Fase B (anterior ao versionamento)
+    db.conn.execute("PRAGMA user_version=0")
+    db.close()
+    db = Database(settings.db_path)   # a migração 1 reconhece o banco antigo, completa a coluna e preenche
     led = Ledger(db)
     assert led.exempt(wid_admin) and not led.exempt(wid_cli)
 

@@ -212,11 +212,15 @@ def test_verify_needs_session_and_limits_tries(app, settings):
 
 
 def test_existing_users_stay_verified_after_migration(settings):
+    import sqlite3
+    settings.db_path.parent.mkdir(parents=True, exist_ok=True)
+    con = sqlite3.connect(settings.db_path)   # banco anterior ao versionamento: users sem as colunas novas
+    con.executescript("CREATE TABLE users (id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE COLLATE NOCASE, name TEXT NOT NULL,"
+                      " pw_hash TEXT NOT NULL, is_platform_admin INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL);"
+                      "INSERT INTO users VALUES ('usr_old', 'old@x.com', 'Old', 'x', 0, '2026-01-01T00:00:00+00:00');")
+    con.commit()
+    con.close()
     db = Database(settings.db_path)
-    db.conn.executescript("CREATE TABLE users (id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE COLLATE NOCASE, name TEXT NOT NULL,"
-                          " pw_hash TEXT NOT NULL, is_platform_admin INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL);"
-                          "INSERT INTO users VALUES ('usr_old', 'old@x.com', 'Old', 'x', 0, '2026-01-01T00:00:00+00:00');")
-    Accounts(db)
     row = db.conn.execute("SELECT email_verified_at FROM users WHERE id='usr_old'").fetchone()
     assert row[0] == "2026-01-01T00:00:00+00:00"
     db.close()

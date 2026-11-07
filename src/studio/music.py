@@ -24,12 +24,7 @@ MODES = ("auto", "pick", "mine", "none", "platform")
 # Clima, gênero e energia da biblioteca sintetizada do estúdio
 BUILTIN_META = {"batida_pop_120": {"genre": "pop eletrônico", "energy": "alta", "vocal": "instrumental", "tags": "demonstração cortes rápidos cozinha casa tecnologia"},
                 "lofi_90": {"genre": "lo-fi", "energy": "baixa", "vocal": "instrumental", "tags": "calmo beleza casa decoração detalhe"}}
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS music_tracks (
-  id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, title TEXT NOT NULL, file TEXT NOT NULL, duration_s REAL, bpm REAL, mood TEXT, genre TEXT, energy TEXT, vocal TEXT,
-  collection TEXT, favorite INTEGER NOT NULL DEFAULT 0, start_s REAL NOT NULL DEFAULT 0, origin TEXT, usage_terms TEXT, authorized_at TEXT NOT NULL, reference_url TEXT, created_at TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS music_favorites (workspace_id TEXT NOT NULL, track_id TEXT NOT NULL, PRIMARY KEY (workspace_id, track_id));
-"""
+# O schema vive em migrations.py (PRAGMA user_version).
 
 
 class MusicError(ValueError):
@@ -69,7 +64,6 @@ def clean_choice(raw: dict) -> dict:
 class MusicLibrary:
     def __init__(self, db: Database, settings):
         self.db, self.s = db, settings
-        db.conn.executescript(SCHEMA)
 
     def _dir(self, wid: str) -> Path:
         d = Path(self.s.data_dir) / "music" / wid

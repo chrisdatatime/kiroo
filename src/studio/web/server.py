@@ -1077,6 +1077,14 @@ def serve(port: int | None = None, open_browser: bool = True, public_host: str |
         httpd.server_close()
         raise SystemExit(str(exc)) from exc
 
+    try:   # schema versionado: migra UMA vez no boot (sob o lock de instância); falha aqui impede o servidor de subir
+        Database(app.settings().db_path).close()
+        log.info("banco pronto", extra={"event": "db_ready"})
+    except Exception as exc:  # noqa: BLE001
+        httpd.server_close()
+        release_instance_lock(lock)
+        raise SystemExit(f"Falha ao preparar o banco ({type(exc).__name__}): {exc}") from exc
+
     shown = "127.0.0.1" if host in ("0.0.0.0", "::", "") else host
     url = f"http://{shown}:{port}/"
     log.info("Kiroo em %s (escutando em %s:%s)", url, host, port, extra={"event": "start"})

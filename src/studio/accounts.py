@@ -26,56 +26,7 @@ LOGIN_WINDOW_MIN = 15
 LOGIN_MAX_FAILS = 8
 EMAIL_RE = re.compile(r"^[^@\s]{1,64}@[^@\s]{1,190}\.[a-z]{2,24}$", re.I)
 
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS users (
-    id TEXT PRIMARY KEY,
-    email TEXT NOT NULL UNIQUE COLLATE NOCASE,
-    name TEXT NOT NULL,
-    pw_hash TEXT NOT NULL,
-    is_platform_admin INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS workspaces (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    owner_id TEXT NOT NULL REFERENCES users(id),
-    mode TEXT NOT NULL DEFAULT 'simulated',
-    allow_real INTEGER NOT NULL DEFAULT 0,
-    monthly_cap_usd REAL NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS memberships (
-    user_id TEXT NOT NULL REFERENCES users(id),
-    workspace_id TEXT NOT NULL REFERENCES workspaces(id),
-    role TEXT NOT NULL DEFAULT 'owner',
-    PRIMARY KEY (user_id, workspace_id)
-);
-CREATE TABLE IF NOT EXISTS sessions (
-    token_hash TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL REFERENCES users(id),
-    workspace_id TEXT NOT NULL REFERENCES workspaces(id),
-    csrf TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    expires_at TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS login_attempts (
-    key TEXT NOT NULL,
-    ts TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS email_codes (
-    user_id TEXT PRIMARY KEY REFERENCES users(id),
-    code_hash TEXT NOT NULL,
-    expires_at TEXT NOT NULL,
-    sent_at TEXT NOT NULL,
-    tries INTEGER NOT NULL DEFAULT 0
-);
-CREATE TABLE IF NOT EXISTS password_resets (
-    token_hash TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL REFERENCES users(id),
-    expires_at TEXT NOT NULL,
-    used_at TEXT
-);
-"""
+# O schema vive em migrations.py (PRAGMA user_version).
 
 
 class AuthError(ValueError):
@@ -111,25 +62,6 @@ def validate_password(password: str) -> None:
 class Accounts:
     def __init__(self, db: Database):
         self.db = db
-        db.conn.executescript(SCHEMA)
-        cols = {r[1] for r in db.conn.execute("PRAGMA table_info(productions)")}
-        if "workspace_id" not in cols:
-            db.conn.execute("ALTER TABLE productions ADD COLUMN workspace_id TEXT")
-        ws_cols = {r[1] for r in db.conn.execute("PRAGMA table_info(workspaces)")}
-        if "credits_exempt" not in ws_cols:  # dono da plataforma: consumo registrado, saldo não exigido (Fase C)
-            db.conn.execute("ALTER TABLE workspaces ADD COLUMN credits_exempt INTEGER NOT NULL DEFAULT 0")
-            db.conn.execute("UPDATE workspaces SET credits_exempt=1 WHERE owner_id IN"
-                            " (SELECT id FROM users WHERE is_platform_admin=1)")
-        user_cols = {r[1] for r in db.conn.execute("PRAGMA table_info(users)")}
-        if "onboarding_done_at" not in user_cols:  # kit de onboarding (Fase 5): concluído/pulado vale em qualquer dispositivo
-            db.conn.execute("ALTER TABLE users ADD COLUMN onboarding_done_at TEXT")
-        if "onboarding_step" not in user_cols:
-            db.conn.execute("ALTER TABLE users ADD COLUMN onboarding_step INTEGER NOT NULL DEFAULT 0")
-        if "email_verified_at" not in user_cols:  # verificação de e-mail: quem já tinha conta continua entrando sem nada a fazer
-            db.conn.execute("ALTER TABLE users ADD COLUMN email_verified_at TEXT")
-            db.conn.execute("UPDATE users SET email_verified_at=created_at")
-        if "google_sub" not in user_cols:  # login com Google (id estável da conta Google)
-            db.conn.execute("ALTER TABLE users ADD COLUMN google_sub TEXT")
 
     # ----------------------------------------------------------- usuários
     def create_user(self, email: str, password: str | None, name: str = "", *, admin: bool = False,

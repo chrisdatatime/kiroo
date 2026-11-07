@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from . import migrations
 from .states import (
     ProductionStatus,
     SceneStatus,
@@ -20,101 +21,7 @@ from .states import (
     check_scene_transition,
 )
 
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS productions (
-    id TEXT PRIMARY KEY,
-    status TEXT NOT NULL,
-    resume_status TEXT,
-    status_reason TEXT,
-    mode TEXT NOT NULL,
-    format_id TEXT NOT NULL,
-    product_json TEXT NOT NULL,
-    sheet_json TEXT,
-    script_json TEXT,
-    profiles_json TEXT NOT NULL,
-    budget_usd REAL NOT NULL,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS scenes (
-    production_id TEXT NOT NULL REFERENCES productions(id),
-    idx INTEGER NOT NULL,
-    status TEXT NOT NULL,
-    spec_json TEXT NOT NULL,
-    spec_hash TEXT NOT NULL,
-    current_image_attempt TEXT,
-    approved_image_attempt TEXT,
-    current_video_attempt TEXT,
-    approved_video_attempt TEXT,
-    image_correction TEXT,
-    video_correction TEXT,
-    extra_image_attempts INTEGER NOT NULL DEFAULT 0,
-    extra_video_attempts INTEGER NOT NULL DEFAULT 0,
-    updated_at TEXT NOT NULL,
-    PRIMARY KEY (production_id, idx)
-);
-CREATE TABLE IF NOT EXISTS attempts (
-    id TEXT PRIMARY KEY,
-    production_id TEXT NOT NULL,
-    scene_idx INTEGER,
-    kind TEXT NOT NULL,              -- image | video | plan | review_image | review_video
-    attempt_no INTEGER NOT NULL,
-    status TEXT NOT NULL,            -- created | submitted | succeeded | failed
-    provider TEXT NOT NULL,
-    model TEXT NOT NULL,
-    simulated INTEGER NOT NULL,
-    input_hash TEXT NOT NULL,
-    prompt TEXT,
-    params_json TEXT,
-    references_json TEXT,
-    remote_op_id TEXT,
-    output_path TEXT,
-    output_sha256 TEXT,
-    error TEXT,
-    error_permanent INTEGER,
-    transient_retries INTEGER NOT NULL DEFAULT 0,
-    next_retry_at TEXT,
-    estimated_cost_usd REAL NOT NULL DEFAULT 0,
-    confirmed_cost_usd REAL,
-    pricing_source TEXT,
-    usage_json TEXT,
-    superseded INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL,
-    submitted_at TEXT,
-    finished_at TEXT
-);
-CREATE INDEX IF NOT EXISTS ix_attempts_prod ON attempts(production_id, scene_idx, kind);
-CREATE INDEX IF NOT EXISTS ix_attempts_hash ON attempts(input_hash);
-CREATE TABLE IF NOT EXISTS reviews (
-    id TEXT PRIMARY KEY,
-    production_id TEXT NOT NULL,
-    scene_idx INTEGER,
-    attempt_id TEXT,
-    stage TEXT NOT NULL,             -- image | video | final
-    reviewer TEXT NOT NULL,          -- auto:<modelo> | human | demo-auto
-    decision TEXT NOT NULL,
-    result_json TEXT NOT NULL,
-    created_at TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS events (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    production_id TEXT NOT NULL,
-    scene_idx INTEGER,
-    ts TEXT NOT NULL,
-    type TEXT NOT NULL,
-    from_state TEXT,
-    to_state TEXT,
-    message TEXT,
-    data_json TEXT
-);
--- Estado do processo que executa a produção (não é o estado da produção): running | idle | interrupted | abandoned.
-CREATE TABLE IF NOT EXISTS run_state (
-    production_id TEXT PRIMARY KEY,
-    state TEXT NOT NULL,
-    resume_attempts INTEGER NOT NULL DEFAULT 0,
-    updated_at TEXT NOT NULL
-);
-"""
+# O schema vive em migrations.py (PRAGMA user_version).
 
 
 def now() -> str:
@@ -125,32 +32,46 @@ def new_id(prefix: str) -> str:
     return f"{prefix}_{uuid.uuid4().hex[:10]}"
 
 
+BUSY_TIMEOUT_MS = 30_000
+
+
+def connect(path: Path) -> sqlite3.Connection:
+    """Abre uma conexão SQLite configurada (uma por requisição; não compartilhe entre requisições).
+
+    WAL + synchronous=NORMAL (durável contra queda do processo; num corte de energia pode perder as últimas
+    transações, nunca corromper), busy_timeout para esperar o lock de escrita em vez de falhar na hora,
+    chaves estrangeiras ligadas. O checkpoint automático do WAL fica no padrão do SQLite (1000 páginas) e o app
+    ainda roda checkpoints PASSIVE periódicos (`checkpoint`): PASSIVE nunca bloqueia leitores/escritores nem
+    atrapalha o Litestream."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(path, isolation_level=None, timeout=BUSY_TIMEOUT_MS / 1000, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    conn.execute(f"PRAGMA busy_timeout={BUSY_TIMEOUT_MS}")
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
+    conn.execute("PRAGMA foreign_keys=ON")
+    return conn
+
+
+def checkpoint(path: Path) -> tuple[int, int, int]:
+    """Checkpoint PASSIVE do WAL (busy, páginas no WAL, páginas copiadas). Seguro com o Litestream rodando."""
+    conn = connect(path)
+    try:
+        r = conn.execute("PRAGMA wal_checkpoint(PASSIVE)").fetchone()
+        return int(r[0]), int(r[1]), int(r[2])
+    finally:
+        conn.close()
+
+
 class Database:
     def __init__(self, path: Path):
-        path.parent.mkdir(parents=True, exist_ok=True)
         self.path = path
-        self.conn = sqlite3.connect(path, isolation_level=None, timeout=15, check_same_thread=False)
-        self.conn.row_factory = sqlite3.Row
-        self.conn.execute("PRAGMA journal_mode=WAL")
-        self.conn.execute("PRAGMA foreign_keys=ON")
-        self.conn.executescript(SCHEMA)
-        self._migrate()
-
-    def _migrate(self) -> None:
-        """Migrações aditivas para bancos criados por versões anteriores."""
-        cols = {r[1] for r in self.conn.execute("PRAGMA table_info(productions)")}
-        if "go_ahead" not in cols:  # liberação explícita das etapas pagas (padrão antigo: tudo liberado)
-            self.conn.execute("ALTER TABLE productions ADD COLUMN go_ahead TEXT NOT NULL DEFAULT 'all'")
-        if "autonomy" not in cols:  # piloto: manual | assistido | automatico | classico (comportamento original)
-            self.conn.execute("ALTER TABLE productions ADD COLUMN autonomy TEXT NOT NULL DEFAULT 'classico'")
-        if "edit_style" not in cols:  # editor: dinamico | suave | limpo; trilha: auto (do estilo) | none | id
-            self.conn.execute("ALTER TABLE productions ADD COLUMN edit_style TEXT NOT NULL DEFAULT 'dinamico'")
-            self.conn.execute("ALTER TABLE productions ADD COLUMN music_id TEXT NOT NULL DEFAULT 'auto'")
-        cols = {r[1] for r in self.conn.execute("PRAGMA table_info(productions)")}
-        if "training_json" not in cols:
-            self.conn.execute("ALTER TABLE productions ADD COLUMN training_json TEXT")
-        if "music_json" not in cols:
-            self.conn.execute("ALTER TABLE productions ADD COLUMN music_json TEXT")
+        self.conn = connect(path)
+        try:
+            migrations.migrate(self.conn)   # banco em dia: só um PRAGMA user_version
+        except BaseException:
+            self.conn.close()
+            raise
 
     def close(self) -> None:
         self.conn.close()

@@ -23,6 +23,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Callable
 
+from . import migrations
+
 AGENTS = {
     "nina": ("Nina", "Preparação",
              "Você confere a ficha do produto: link, nome, variante e as fotos oficiais. Só vale o que está nas fotos e no que o usuário confirmou; nada de características inventadas."),
@@ -106,22 +108,7 @@ class ChatConfig:
         )
 
 
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS chat_log (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id TEXT NOT NULL,
-    workspace_id TEXT,
-    agent TEXT NOT NULL,
-    at REAL NOT NULL,
-    source TEXT NOT NULL,          -- llm | atalho | sem_ia | falha
-    input_tokens INTEGER NOT NULL DEFAULT 0,
-    output_tokens INTEGER NOT NULL DEFAULT 0,
-    cache_read_tokens INTEGER NOT NULL DEFAULT 0,
-    cost_usd REAL NOT NULL DEFAULT 0
-);
-CREATE INDEX IF NOT EXISTS chat_log_user_at ON chat_log(user_id, at);
-CREATE INDEX IF NOT EXISTS chat_log_at ON chat_log(at);
-"""
+# O schema vive em migrations.py (PRAGMA user_version).
 
 # --------------------------------------------------------------------------- texto
 
@@ -302,7 +289,7 @@ class AgentChat:
     # ----- registro e cotas (no SQLite do estúdio)
     @staticmethod
     def ensure_schema(conn) -> None:
-        conn.executescript(SCHEMA)
+        migrations.migrate(conn)   # no-op quando a conexão vem do Database (já migrada)
 
     def _usage(self, conn, user_id: str, now: float) -> dict:
         day0 = _day_start(now)
