@@ -80,6 +80,8 @@ restaurado (`verify_restore.py --json`).
 
 **Esperado:** lista de objetos em `ensaio/db` (gerações/snapshots/WAL), `banco vivo` e `restauracao` com a
 mesma linha de contagens, `PASS`.
+O restore mostra `restore.sh --db-only codigo 5 (midia incompleta, esperado com --db-only)`: o banco
+restaurado aponta para mídia que não foi restaurada. Isso é normal neste passo. Só um código diferente de 0 e de 5 é falha.
 
 **Se falhar:**
 - `/readyz nao ficou 200` → o script mostra as 40 últimas linhas do log; procure `entrypoint:` (variável faltando) ou erro do Litestream.
@@ -129,14 +131,40 @@ Faz (container descartável com o volume do ensaio em `/data`, servidor parado):
 `backup_media.sh` recusa origem vazia com código 3); `backup_media.sh --dry-run`; `backup_media.sh` real; altera
 o marcador para `versao-2`; roda de novo; lista `ensaio/media/archive/` e lê o marcador arquivado e o atual.
 
+Cada execução mostra o código com o significado (`0 ok`, `1 FALHA do rclone`, `2 uso/config invalida`,
+`3 recusado: origem vazia`, `4 outra execucao em andamento`) e a linha
+`objetos enviados: N; origem: X objetos, Y bytes (Z MB); manifesto: ...`. Com código diferente de 0 também mostra
+as linhas `ERRO`/`FALHOU` do `backup_media.sh`.
+
 **Esperado:** códigos 0, 0, 0; `em archive/: <AAAA-MM-DDTHHMMSSZ>/productions/ensaio-marcador.txt`;
 `archive contem 'versao-1'; current contem 'versao-2'`; `PASS`.
 
 **Se falhar:**
+- código 1 com `manifesto: NAO GRAVADO` e `501` → os objetos enviados ficam no bucket (nada é apagado); rode o
+  diagnóstico abaixo antes de mexer no script.
 - código 3 → alguma pasta de usuário vazia que o script não cobriu; a mensagem diz qual.
 - código 4 → outra execução com o mesmo lock (não deveria ocorrer em container novo).
 - nada em `archive/` → o `--backup-dir` não foi usado/aceito; veja a saída do rclone.
 - `pare o container do ensaio antes` → rode o passo 3.
+
+### Diagnóstico do 501 (`-Passo 4 -Diagnostico`)
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ensaio_backup.ps1 -Passo 4 -Diagnostico
+```
+
+Faz **uma** operação de escrita: `rclone copyto` de um arquivo de ~40 bytes, gerado dentro do container, para
+`ensaio/diag/<AAAA-MM-DDTHHMMSSZ>.txt` (objeto novo; nada existente é sobrescrito nem apagado), com
+`-vv --dump headers --retries 1 --low-level-retries 1`. **Nunca** `--dump auth`. Mostra os cabeçalhos da
+requisição e da resposta e grava a saída em `<pasta>\diag-<data>.txt`.
+
+Antes de imprimir ou gravar, a saída passa por `Mask-Cred`: troca os valores de `BACKUP_R2_ACCESS_KEY_ID`,
+`BACKUP_R2_SECRET_ACCESS_KEY` e `BACKUP_R2_ENDPOINT` por `***NOME***`, apaga o valor de `Authorization`,
+`X-Amz-Security-Token`, `Cookie`, `Credential=`/`Signature=` e o id da conta em `<id>.r2.cloudflarestorage.com`.
+A máscara é testada com valores fictícios em `scripts	est_ensaio_backup.ps1`.
+
+Leitura: com `501`, compare os cabeçalhos da **requisição** com a lista de cabeçalhos que o R2 não implementa.
+O suspeito anotado em BACKUP.md é `X-Amz-Acl: private`. `PASS` = o envio deu certo (código 0).
 
 ## Passo 5 — Restore cronometrado
 
