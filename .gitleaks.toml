@@ -1,0 +1,27 @@
+# Configuração do gitleaks (CI: job "gitleaks" em .github/workflows/check.yml).
+# Mantém TODAS as regras padrão e abre uma única exceção, bem estreita.
+
+[extend]
+useDefault = true
+
+# Exceção da regra generic-api-key (allowlist DENTRO da regra: no gitleaks 8.28 o targetRules de uma
+# allowlist global não casou com a regra herdada, então a exceção é declarada na própria regra).
+# Isenta apenas: esta regra + estes quatro arquivos + este literal exato, a senha fictícia de teste
+# (contas descartáveis, e-mails *.test, banco temporário). Qualquer outro segredo, em qualquer arquivo
+# (inclusive estes), e o mesmo literal em qualquer outro arquivo continuam sendo detectados.
+[[rules]]
+id = "generic-api-key"
+
+[[rules.allowlists]]
+description = "senha fictícia de teste (conta descartável) nos testes e scripts de verificação"
+condition = "AND"
+paths = [
+  '''^tests/test_accounts\.py$''',
+  '''^tests/test_hardening\.py$''',
+  '''^tests/test_public_mode\.py$''',
+  '''^scripts/csp-check\.mjs$''',
+]
+regexTarget = "secret"
+regexes = [
+  '''^senha-forte-123$''',
+]

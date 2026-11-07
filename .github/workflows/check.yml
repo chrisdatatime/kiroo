@@ -71,4 +71,4 @@ jobs:
       - name: gitleaks git
         run: >-
           docker run --rm --user "$(id -u):$(id -g)" -v "$GITHUB_WORKSPACE:/repo"
-          ghcr.io/gitleaks/gitleaks:v8.28.0 git /repo --redact --no-banner --exit-code 1
+          ghcr.io/gitleaks/gitleaks:v8.28.0 git /repo --config /repo/.gitleaks.toml --redact --no-banner --exit-code 1
