@@ -4,7 +4,8 @@
 #   STUDIO_ENV=production bash scripts/backup_media.sh [--dry-run] [--allow-empty] [--data-dir DIR]
 #
 # Layout no bucket:
-#   <bucket>/<ambiente>/media/current/<pasta>/...                 espelho do estado mais recente
+#   (<prefixo> = BACKUP_R2_PREFIX, padrao STUDIO_ENV)
+#   <bucket>/<prefixo>/media/current/<pasta>/...                 espelho do estado mais recente
 #   <bucket>/<ambiente>/media/archive/<AAAA-MM-DDTHHMMSSZ>/<pasta>/...   versões SUBSTITUÍDAS ou REMOVIDAS na origem
 #   <bucket>/<ambiente>/media/manifests/<AAAA-MM-DDTHHMMSSZ>.json   tamanhos/contagens desta execução
 #
@@ -46,13 +47,15 @@ export RCLONE_CONFIG_KBK_SECRET_ACCESS_KEY="$BACKUP_R2_SECRET_ACCESS_KEY"
 export RCLONE_CONFIG_KBK_NO_CHECK_BUCKET=true      # o token só lê/escreve objetos; não cria bucket
 
 BUCKET="${BACKUP_BUCKET:-kiroo-backups}"
-ROOT="KBK:${BUCKET}/${STUDIO_ENV}/media"
+PREFIX="${BACKUP_R2_PREFIX:-$STUDIO_ENV}"      # prefixo no bucket; padrao = STUDIO_ENV
+case "$PREFIX" in ""|*[!a-z0-9_-]*) die "BACKUP_R2_PREFIX invalido (use a-z 0-9 _ -)";; esac
+ROOT="KBK:${BUCKET}/${PREFIX}/media"
 TS="$(date -u +%Y-%m-%dT%H%M%SZ)"
 
 # Impede duas execuções ao mesmo tempo (tarefa agendada que demorou mais que o intervalo).
 LOCK_DIR="${TMPDIR:-/tmp}"
 if command -v flock >/dev/null 2>&1; then
-  exec 9>"$LOCK_DIR/kiroo-backup-media-${STUDIO_ENV}.lock"
+  exec 9>"$LOCK_DIR/kiroo-backup-media-${PREFIX}.lock"
   flock -n 9 || die "outra execução do backup está em andamento" 4
 fi
 

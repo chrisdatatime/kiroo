@@ -46,11 +46,29 @@ if [ -n "${STUDIO_DATA_DIR:-}" ] && [ -d "${STUDIO_DATA_DIR}" ]; then
 fi
 
 BUCKET="${BACKUP_BUCKET:-kiroo-backups}"
+PREFIX="${BACKUP_R2_PREFIX:-${STUDIO_ENV:-}}"   # prefixo no bucket; padrao = STUDIO_ENV
+
+# Configuracao do Litestream: LITESTREAM_CONFIG (padrao /etc/litestream.yml, o caminho da imagem); se o padrao nao
+# existir e nada foi pedido, cai para o litestream.yml do repositorio (./ ou ao lado de scripts/).
+CFG=""
+if [ "$DO_DB" -eq 1 ] && [ -z "$LDB" ]; then
+  if [ -n "${LITESTREAM_CONFIG:-}" ]; then
+    [ -f "$LITESTREAM_CONFIG" ] || die "LITESTREAM_CONFIG aponta para arquivo inexistente: $LITESTREAM_CONFIG"
+    CFG="$LITESTREAM_CONFIG"
+  else
+    for c in /etc/litestream.yml ./litestream.yml "$HERE/../litestream.yml"; do
+      [ -f "$c" ] && { CFG="$c"; break; }
+    done
+    [ -n "$CFG" ] || die "configuracao do Litestream nao encontrada (procurei /etc/litestream.yml, ./litestream.yml e $HERE/../litestream.yml); defina LITESTREAM_CONFIG"
+  fi
+fi
+
 if [ -z "$LDB" ] && [ -z "$LMEDIA" ]; then
   case "${STUDIO_ENV:-}" in dev|staging|production) ;; *) die "defina STUDIO_ENV=dev|staging|production (ou use --local-db/--local-media)";; esac
   missing=""
   for v in BACKUP_R2_ENDPOINT BACKUP_R2_ACCESS_KEY_ID BACKUP_R2_SECRET_ACCESS_KEY; do [ -n "${!v:-}" ] || missing="$missing $v"; done
   [ -z "$missing" ] || die "variáveis ausentes (só os nomes):$missing"
+  case "$PREFIX" in ""|*[!a-z0-9_-]*) die "BACKUP_R2_PREFIX invalido (use a-z 0-9 _ -)";; esac
 fi
 
 if [ "$DO_DB" -eq 1 ]; then
@@ -67,13 +85,13 @@ PYEOF
   else
     command -v "${LITESTREAM:-litestream}" >/dev/null 2>&1 || die "litestream não encontrado no PATH"
     export LITESTREAM_ACCESS_KEY_ID="$BACKUP_R2_ACCESS_KEY_ID" LITESTREAM_SECRET_ACCESS_KEY="$BACKUP_R2_SECRET_ACCESS_KEY"
-    export BACKUP_BUCKET="$BUCKET"
+    export BACKUP_BUCKET="$BUCKET" BACKUP_R2_PREFIX="$PREFIX"
     # O caminho do banco só identifica a entrada no litestream.yml (mesma expansão usada na replicação).
     export STUDIO_DATA_DIR_SOURCE="${STUDIO_DATA_DIR_SOURCE:-/data}"
-    ARGS=(restore -config "$HERE/../litestream.yml" -o "$DEST/studio.sqlite3")
+    ARGS=(restore -config "$CFG" -o "$DEST/studio.sqlite3")
     [ -z "$TS" ] || ARGS+=(-timestamp "$TS")
     STUDIO_DATA_DIR="$STUDIO_DATA_DIR_SOURCE" "${LITESTREAM:-litestream}" "${ARGS[@]}" "$STUDIO_DATA_DIR_SOURCE/studio.sqlite3" \
-      || die "litestream restore falhou (há réplica para STUDIO_ENV=${STUDIO_ENV}? timestamp válido?)" 4
+      || die "litestream restore falhou (há réplica em ${PREFIX}/db? timestamp válido?)" 4
   fi
 fi
 
@@ -88,7 +106,7 @@ if [ "$DO_MEDIA" -eq 1 ]; then
     export RCLONE_CONFIG_KBK_ENDPOINT="$BACKUP_R2_ENDPOINT" RCLONE_CONFIG_KBK_ACCESS_KEY_ID="$BACKUP_R2_ACCESS_KEY_ID"
     export RCLONE_CONFIG_KBK_SECRET_ACCESS_KEY="$BACKUP_R2_SECRET_ACCESS_KEY"
     # `copy` (nunca sync/delete) e só o espelho "current"; versões antigas ficam em archive/ para recuperação manual.
-    "${RCLONE:-rclone}" copy "KBK:${BUCKET}/${STUDIO_ENV}/media/current" "$DEST" --fast-list --transfers 4 --checkers 8 --retries 3 \
+    "${RCLONE:-rclone}" copy "KBK:${BUCKET}/${PREFIX}/media/current" "$DEST" --fast-list --transfers 4 --checkers 8 --retries 3 \
       || die "rclone copy falhou" 4
   fi
 fi

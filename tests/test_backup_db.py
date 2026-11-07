@@ -59,7 +59,7 @@ def test_readyz_warns_when_backup_missing_in_staging(app, monkeypatch):
 
 def test_litestream_config_and_lock_have_no_credentials():
     text = (ROOT / "litestream.yml").read_text(encoding="utf-8")
-    assert "${BACKUP_R2_ENDPOINT}" in text and "${STUDIO_ENV}/db" in text and "${STUDIO_DATA_DIR}/studio.sqlite3" in text
+    assert "${BACKUP_R2_ENDPOINT}" in text and "${BACKUP_R2_PREFIX}/db" in text and "${STUDIO_DATA_DIR}/studio.sqlite3" in text
     assert not re.search(r"(access-key-id|secret-access-key)\s*:\s*[^$\s]", text)          # nunca valor literal
     assert not re.search(r"[0-9a-f]{32,}", text)
 

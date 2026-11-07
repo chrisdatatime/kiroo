@@ -29,6 +29,8 @@ Status: **implementado e testado com bancos, volumes, `rclone` e `litestream` de
 | `BACKUP_R2_ACCESS_KEY_ID` | ambiente | sim | Chave com leitura/escrita **restrita a `kiroo-backups`** |
 | `BACKUP_R2_SECRET_ACCESS_KEY` | ambiente | sim | idem |
 | `BACKUP_BUCKET` | ambiente | não | Padrão `kiroo-backups` |
+| `BACKUP_R2_PREFIX` | ambiente | não | Prefixo no bucket (`<prefixo>/db`, `<prefixo>/media`). Padrão: o valor de `STUDIO_ENV`. O ensaio usa `ensaio` |
+| `LITESTREAM_CONFIG` | ambiente | não | Configuração usada pelo `restore.sh`. Padrão `/etc/litestream.yml` (imagem); sem ele, `./litestream.yml` do repositório |
 | `STUDIO_ALLOW_NO_BACKUP` | ambiente | não | `1`: permite subir em `production` sem `BACKUP_R2_*` (então `/readyz` = 503). Só para emergência. |
 | `STUDIO_RESTORE_ON_EMPTY` | ambiente | não | `1`: se o volume não tiver banco e existir réplica, restaura antes de subir (nunca sobrescreve). Padrão desligado. |
 | `STUDIO_WAL_CHECKPOINT_S` | ambiente | não | Intervalo do checkpoint PASSIVE. |

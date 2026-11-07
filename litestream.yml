@@ -2,7 +2,7 @@
 #
 # NENHUMA credencial neste arquivo: o Litestream expande ${VAR} do ambiente do processo.
 #   STUDIO_DATA_DIR            pasta de dados (o banco é <STUDIO_DATA_DIR>/studio.sqlite3)
-#   STUDIO_ENV                 staging | production | dev  -> prefixo no bucket: <STUDIO_ENV>/db
+#   BACKUP_R2_PREFIX           prefixo no bucket: <BACKUP_R2_PREFIX>/db (o entrypoint/restore.sh usam STUDIO_ENV se vazio)
 #   BACKUP_BUCKET              bucket privado (docker/entrypoint.sh usa kiroo-backups se vazio)
 #   BACKUP_R2_ENDPOINT         https://<ID_DA_CONTA>.r2.cloudflarestorage.com
 #   LITESTREAM_ACCESS_KEY_ID / LITESTREAM_SECRET_ACCESS_KEY  (o entrypoint copia de BACKUP_R2_*)
@@ -14,7 +14,7 @@ dbs:
     replicas:
       - type: s3
         bucket: ${BACKUP_BUCKET}
-        path: ${STUDIO_ENV}/db
+        path: ${BACKUP_R2_PREFIX}/db
         endpoint: ${BACKUP_R2_ENDPOINT}
         region: auto
         force-path-style: true

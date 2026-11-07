@@ -35,6 +35,9 @@ fi
 export LITESTREAM_ACCESS_KEY_ID="$BACKUP_R2_ACCESS_KEY_ID"
 export LITESTREAM_SECRET_ACCESS_KEY="$BACKUP_R2_SECRET_ACCESS_KEY"
 export BACKUP_BUCKET="${BACKUP_BUCKET:-kiroo-backups}"
+# Prefixo no bucket (padrao: o proprio STUDIO_ENV). Ensaios usam outro (ex.: ensaio) para nunca misturar com staging real.
+export BACKUP_R2_PREFIX="${BACKUP_R2_PREFIX:-$ENVN}"
+case "$BACKUP_R2_PREFIX" in ""|*[!a-z0-9_-]*) echo "entrypoint: BACKUP_R2_PREFIX invalido (use a-z 0-9 _ -)" >&2; exit 2;; esac
 export STUDIO_DATA_DIR="$DATA" STUDIO_ENV="$ENVN"
 CFG="${LITESTREAM_CONFIG:-/etc/litestream.yml}"
 
