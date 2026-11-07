@@ -194,9 +194,50 @@ try {
     if ($r.Out -match 'RESULTADO passo 7' -or $r.Out -notmatch 'Rodadas') { $falhas++; Write-Host "FALHOU  -Rodadas 6 deveria ser recusado antes de rodar: $($r.Out)" }
     else { Write-Host 'ok      -Rodadas 6 recusado (1..5) antes de rodar' }
 
+    # -Tipos / -Carga: recusas ANTES de rodar (sem RESULTADO, sem docker) e anuncio/nome do arquivo quando valem
+    foreach ($c in @(@{ n = 'p7_tipos_b'; a = @('-Tipos', 'b'); m = "depende da rodada 'a'" }, @{ n = 'p7_tipos_bc'; a = @('-Tipos', 'b,c'); m = "depende da rodada 'a'" },
+            @{ n = 'p7_tipos_x'; a = @('-Tipos', 'x'); m = 'Tipos' }, @{ n = 'p7_carga_ruim'; a = @('-Carga', 'extrema'); m = 'Carga' })) {
+        $r = Rodar $c.n @{} $p4 (@('-Passo', '7') + $c.a) -ManterVolume
+        if ($r.Out -match 'RESULTADO passo 7' -or $r.Out -notmatch [regex]::Escape($c.m)) { $falhas++; Write-Host "FALHOU  $($c.a -join ' ') deveria ser recusado antes de rodar: $($r.Out)" }
+        else { Write-Host "ok      $($c.a -join ' ') recusado antes de rodar" }
+    }
+    $r = Rodar 'p7_tipos_a' @{ BACKUP_R2_ENDPOINT = $null } $p4 @('-Passo', '7', '-Tipos', 'a') -ManterVolume
+    Checa 'passo 7 -Tipos a: so rodadas a, arquivo p7-rodadas5-a-' $r 'NAO_VERIFICADO' @('5 rodada\(s\) de cada tipo \(a\); carga normal', 'p7-rodadas5-a-\d{8}-\d{6}\.log') -PassoN '7'
+    $r = Rodar 'p7_tipos_ac_alta' @{ BACKUP_R2_ENDPOINT = $null } $p4 @('-Passo', '7', '-Tipos', 'a,c', '-Carga', 'alta', '-Rodadas', '2') -ManterVolume
+    Checa 'passo 7 -Tipos a,c -Carga alta' $r 'NAO_VERIFICADO' @('2 rodada\(s\) de cada tipo \(a, c\); carga alta', 'p7-rodadas2-ac-alta-') -PassoN '7'
+    $r = Rodar 'p7_fumaca_a_baixa' @{ BACKUP_R2_ENDPOINT = $null } $p4 @('-Passo', '7', '-Fumaca', '-Tipos', 'a', '-Carga', 'baixa') -ManterVolume
+    Checa 'passo 7 -Fumaca -Tipos a -Carga baixa' $r 'NAO_VERIFICADO' @('FUMACA: 1 rodada de cada tipo \(a1\); carga baixa', 'p7-fumaca-a-baixa-') -PassoN '7'
+
     $chamadas = @(Get-Content (Join-Path $stubDir 'chamadas.log') -ErrorAction SilentlyContinue) | Select-Object -Skip $n0
     if ($chamadas -match '^(run|volume create|stop|kill)') { $falhas++; Write-Host "FALHOU  passo 7 NAO_VERIFICADO mexeu no docker: $($chamadas -join ' | ')" }
     else { Write-Host 'ok      passo 7 NAO_VERIFICADO nao cria container nem volume' }
+
+    # Sonda-WalP7 extraida do roteiro e chamada com docker falso em processo: volume SO LEITURA, rotulo do ensaio, --rm,
+    # nenhum -e (nenhuma credencial), python da imagem rodando /ensaio/sh/p7_wal.py; JSON lido mesmo com texto antes.
+    $ast = [System.Management.Automation.Language.Parser]::ParseFile($script, [ref]$null, [ref]$null)
+    $fn = $ast.FindAll({ param($x) $x -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $x.Name -eq 'Sonda-WalP7' }, $true) | Select-Object -First 1
+    . ([scriptblock]::Create($fn.Extent.Text))
+    $ROTULO = 'kiroo.ensaio=backup'; $Pasta = 'C:\ensaio-falso'; $IMAGEM = 'kiroo:dados'
+    $script:sondaArgs = $null; $script:sondaVol = $null; $script:sondaResp = $null
+    function Assert-VolumeP7([string]$N) { $script:sondaVol = $N }
+    function Invoke-Docker([string[]]$ArgList) { $script:sondaArgs = $ArgList; $script:sondaResp }
+    $script:sondaResp = @{ Code = 0; Out = ''; Stderr = ''; Stdout = "aviso qualquer`n{""db_bytes"": 8192, ""wal_arquivo_bytes"": null, ""page_size"": 4096, ""sombra_bytes"": 4152}" }
+    $s = Sonda-WalP7 'kiroo-ensaio-p7-a3'
+    $j = $script:sondaArgs -join ' '
+    $okArgs = ($script:sondaVol -eq 'kiroo-ensaio-p7-a3') -and ($script:sondaArgs -contains 'kiroo-ensaio-p7-a3:/data:ro') -and ($j -match '^run --rm --label kiroo\.ensaio=backup ') -and
+        ($script:sondaArgs -notcontains '-e') -and ($j -match '--entrypoint python kiroo:dados /ensaio/sh/p7_wal\.py /data$') -and ($j -notmatch 'BACKUP_|LITESTREAM_')
+    if (-not $okArgs -or $s -is [string] -or $s.sombra_bytes -ne 4152 -or $s.page_size -ne 4096) { $falhas++; Write-Host "FALHOU  sonda do WAL: args '$j' / resultado '$s'" }
+    else { Write-Host 'ok      sonda do WAL: volume :ro, rotulo, --rm, sem -e; JSON lido' }
+    $script:sondaResp = @{ Code = 125; Out = 'Error: no such image'; Stderr = ''; Stdout = '' }
+    $s = Sonda-WalP7 'kiroo-ensaio-p7-a3'
+    if (-not ($s -is [string] -and $s -match 'sonda do WAL falhou \(codigo 125\)')) { $falhas++; Write-Host "FALHOU  sonda do WAL com docker falhando deveria devolver o motivo: $s" }
+    else { Write-Host 'ok      sonda do WAL: falha do docker vira motivo (nao derruba a rodada)' }
+    Remove-Item Function:\Invoke-Docker, Function:\Assert-VolumeP7, Function:\Sonda-WalP7
+    # docker inspect da rodada "a": so ExitCode e FinishedAt (nunca Env nem a Config inteira)
+    $txtScript = Get-Content $script -Raw
+    if ($txtScript -notmatch [regex]::Escape("'{{.State.ExitCode}};{{.State.FinishedAt}}'") -or $txtScript -match '\.Config\.Env|\{\{json \.Config\}\}|\{\{json \.\}\}') {
+        $falhas++; Write-Host 'FALHOU  docker inspect do passo 7 deveria pedir so ExitCode e FinishedAt' }
+    else { Write-Host 'ok      docker inspect do passo 7 pede so {{.State.ExitCode}};{{.State.FinishedAt}}' }
 
     $log = (@(Get-Content (Join-Path $stubDir 'chamadas.log') -ErrorAction SilentlyContinue) -join "`n")
     if ($log -match 'image inspect --format \{\{index') { $falhas++; Write-Host 'FALHOU  passo 1 ainda usa {{index ...}} (quebra no PS 5.1)' }

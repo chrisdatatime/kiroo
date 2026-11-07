@@ -112,5 +112,117 @@ Ok 'veredito: falha domina' ((P7-Veredito @('x') @('y')) -eq 'FAIL')
 Ok 'veredito: so nao verificado' ((P7-Veredito @() @('y')) -eq 'NAO_VERIFICADO')
 Ok 'veredito: limpo = PASS' ((P7-Veredito @() @()) -eq 'PASS')
 
+# ------------------------------------------------------------------ WAL no fechamento x erro do Litestream
+# calcWALSize (Litestream v0.3.13, litestream.go): 32 + (24 + page_size) * n
+Ok 'limite: 1000 paginas de 4096 = 4.120.032 bytes' ((P7-LimiteWal 4096) -eq 4120032) (P7-LimiteWal 4096)
+Ok 'limite: 1000 paginas de 8192 = 8.216.032 bytes' ((P7-LimiteWal 8192) -eq 8216032)
+Ok 'limite: 1 pagina de 4096 = 4152 (o 1o segmento do log tem sz=4152)' ((P7-LimiteWal 4096 1) -eq 4152)
+Ok 'paginas: exatamente no limite = 1000' ((P7-PaginasWal 4120032 4096) -eq 1000)
+Ok 'paginas: 1 byte abaixo do limite = 999' ((P7-PaginasWal 4120031 4096) -eq 999)
+Ok 'paginas: so o cabecalho = 0; vazio = 0' ((P7-PaginasWal 32 4096) -eq 0 -and (P7-PaginasWal 0 4096) -eq 0)
+Ok 'paginas: sem bytes ou sem page_size = $null' ($null -eq (P7-PaginasWal $null 4096) -and $null -eq (P7-PaginasWal 5000 $null) -and $null -eq (P7-PaginasWal 5000 0))
+Ok 'paginas: a2 de 07/11 (4.268.352 bytes) = 1036' ((P7-PaginasWal 4268352 4096) -eq 1036)
+
+# horarios
+Ok 'utc: nanossegundos do docker truncados em ms' ((P7-Utc '2026-11-07T14:11:02.028396491Z') -eq '2026-11-07T14:11:02.028Z')
+Ok 'utc: sem fracao vira .000' ((P7-Utc '2026-11-07T14:11:02Z') -eq '2026-11-07T14:11:02.000Z')
+Ok 'utc: fracao curta completada' ((P7-Utc '2026-11-07T14:11:02.5Z') -eq '2026-11-07T14:11:02.500Z')
+Ok 'utc: ilegivel = $null' ($null -eq (P7-Utc '0001-01-01 lixo'))
+Ok 'seg: diferenca em segundos' ((P7-Seg '2026-11-07T14:10:36.346Z' '2026-11-07T14:11:02.028Z') -eq 25.682)
+
+# log de uma rodada com o erro (formato real do docker logs --timestamps de 07/11, encurtado)
+$logA = @(
+    '2026-11-07T14:10:23.464840969Z time=2026-11-07T14:10:23.464Z level=INFO msg="initialized db" path=/data/studio.sqlite3',
+    '2026-11-07T14:10:36.346287027Z time=2026-11-07T14:10:36.346Z level=INFO msg="signal received, litestream shutting down"',
+    '2026-11-07T14:10:36.346743627Z {"ts": "2026-11-07T14:10:36.346+00:00", "level": "INFO", "msg": "SIGTERM: parando de aceitar jobs; aguardando ate 25.0s", "event": "stop"}',
+    '2026-11-07T14:11:00.985391384Z time=2026-11-07T14:11:00.985Z level=INFO msg="wal segment written" db=/data/studio.sqlite3 replica=s3 position=ec535fa216d82639/00000003:3024112 elapsed=511ms sz=630360',
+    '2026-11-07T14:11:01.349172487Z {"ts": "2026-11-07T14:11:01.348+00:00", "level": "WARNING", "msg": "desligamento: 1 producao(oes) ainda em andamento marcadas como interrompidas"}',
+    '2026-11-07T14:11:01.486753005Z time=2026-11-07T14:11:01.483Z level=INFO msg="write wal segment" db=/data/studio.sqlite3 replica=s3 position=ec535fa216d82639/00000003:3654472',
+    '2026-11-07T14:11:02.028078548Z time=2026-11-07T14:11:02.027Z level=INFO msg="wal segment written" db=/data/studio.sqlite3 replica=s3 position=ec535fa216d82639/00000003:3654472 elapsed=544ms sz=613880',
+    '2026-11-07T14:11:02.028396491Z time=2026-11-07T14:11:02.028Z level=ERROR msg="error closing db" db=/data/studio.sqlite3 error="checkpoint: mode=PASSIVE err=release read lock: context canceled"',
+    '2026-11-07T14:11:02.028403885Z time=2026-11-07T14:11:02.028Z level=INFO msg="litestream shut down"',
+    '2026-11-07T14:11:02.028407222Z time=2026-11-07T14:11:02.028Z level=ERROR msg="failed to run" error="checkpoint: mode=PASSIVE err=release read lock: context canceled"')
+$wl = P7-WalDoLog $logA
+Ok 'wal do log: ultimo segmento enviado = offset + sz (3.654.472 + 613.880)' ($wl.bytes -eq 4268352 -and $wl.indice -eq '00000003' -and $wl.geracao -eq 'ec535fa216d82639') "$($wl.bytes)"
+Ok 'wal do log: sem segmento enviado = $null' ($null -eq (P7-WalDoLog @($logA[0], $logA[1])))
+$elA = P7-ErrosLitestream $logA $true
+Ok 'erro de checkpoint: detectado nas linhas ERROR' ((P7-ErroCheckpoint $elA) -eq $true)
+Ok 'erro de checkpoint: mode=RESTART tambem conta' ((P7-ErroCheckpoint @('x level=ERROR msg="error closing db" error="checkpoint: mode=RESTART err=release read lock: context canceled"')) -eq $true)
+Ok 'erro de checkpoint: so "monitor error" NAO e o erro da hipotese' ((P7-ErroCheckpoint @('x level=ERROR msg="monitor error" error="client write: RequestCanceled: request context canceled"')) -eq $false)
+Ok 'erro de checkpoint: nenhuma linha ERROR = falso' ((P7-ErroCheckpoint @()) -eq $false)
+Ok 'erro de checkpoint: erros nao contados = $null (NAO_VERIFICADO)' ($null -eq (P7-ErroCheckpoint $null))
+$mc = P7-Marcos $logA $elA
+Ok 'marcos: signal, SIGTERM do app, interrompidas e shut down' ($mc.signal_ls -eq '2026-11-07T14:10:36.346Z' -and $mc.sigterm_app -eq '2026-11-07T14:10:36.346Z' -and
+    $mc.interrompidas -eq '2026-11-07T14:11:01.349Z' -and $mc.ls_shutdown -eq '2026-11-07T14:11:02.028Z') ($mc | Out-String)
+Ok 'marcos: duas linhas ERROR com horario e msg' ($mc.erros.Count -eq 2 -and $mc.erros[0] -eq '2026-11-07T14:11:02.028Z error closing db' -and $mc.erros[1] -match 'failed to run$') ($mc.erros -join ' | ')
+$lt = P7-LinhaDoTempo $mc '2026-11-07T14:10:36.340Z' '2026-11-07T14:11:02.100Z'
+Ok 'linha do tempo: tempos relativos ao signal do Litestream' ($lt -match 'stop=2026-11-07T14:10:36\.340Z' -and $lt -match 'interrompidas=\+25\.003 s' -and
+    $lt -match 'ERROR\(error closing db\)=\+25\.682 s' -and $lt -match 'finished=\+25\.754 s') $lt
+$lt = P7-LinhaDoTempo (P7-Marcos @() @()) $null $null
+Ok 'linha do tempo: sem marcos = ? (sem quebrar)' ($lt -match 'signal_ls=\?' -and $lt -match 'finished=\?') $lt
+
+# fonte do WAL: sombra > log > arquivo
+$son = [pscustomobject]@{ sombra_bytes = 3353712; wal_arquivo_bytes = $null; page_size = 4096 }
+Ok 'fonte: sombra quando existe' ((P7-EscolheWal $son $wl).fonte -eq 'sombra' -and (P7-EscolheWal $son $wl).bytes -eq 3353712)
+$son2 = [pscustomobject]@{ sombra_bytes = $null; wal_arquivo_bytes = 9999999 }
+Ok 'fonte: log sem sombra (o -wal do volume fica por ultimo)' ((P7-EscolheWal $son2 $wl).fonte -eq 'log')
+Ok 'fonte: arquivo -wal so sem sombra e sem log' ((P7-EscolheWal $son2 $null).fonte -eq 'arquivo' -and (P7-EscolheWal $son2 $null).bytes -eq 9999999)
+Ok 'fonte: sonda falhou e sem log = nenhuma' ((P7-EscolheWal $null $null).fonte -eq 'nenhuma' -and $null -eq (P7-EscolheWal $null $null).bytes)
+
+# hipotese: casos a favor E contra (a funcao nao pode concordar com tudo)
+$h = P7-Hipotese 4268352 4096 $true
+Ok 'hipotese: acima do limite COM erro = consistente' ($h.classe -eq 'consistente' -and $h.previsto -eq $true -and $h.paginas -eq 1036) ($h | Out-String)
+$h = P7-Hipotese 3353712 4096 $false
+Ok 'hipotese: abaixo do limite SEM erro = consistente' ($h.classe -eq 'consistente' -and $h.previsto -eq $false)
+$h = P7-Hipotese 4120032 4096 $true
+Ok 'hipotese: exatamente 1000 paginas preve erro (>=)' ($h.previsto -eq $true -and $h.classe -eq 'consistente')
+$h = P7-Hipotese 5000000 4096 $false
+Ok 'hipotese CONTRARIADA: acima do limite SEM erro = contraexemplo' ($h.classe -eq 'contraexemplo' -and $h.motivo -match '1213 paginas \(>= 1000\) e SEM erro') $h.motivo
+$h = P7-Hipotese 2550312 4096 $true
+Ok 'hipotese CONTRARIADA: erro com WAL abaixo do limite = contraexemplo' ($h.classe -eq 'contraexemplo' -and $h.motivo -match 'erro de checkpoint com WAL de 619 paginas \(< 1000\)') $h.motivo
+Ok 'hipotese: sem WAL = indeterminada' ((P7-Hipotese $null 4096 $true).classe -eq 'indeterminada')
+Ok 'hipotese: sem page_size = indeterminada' ((P7-Hipotese 4268352 $null $true).classe -eq 'indeterminada')
+$h = P7-Hipotese 4268352 4096 $null
+Ok 'hipotese: erros NAO_VERIFICADO = indeterminada (nunca consistente)' ($h.classe -eq 'indeterminada' -and $h.motivo -match 'NAO_VERIFICADO')
+Ok 'hipotese: page_size 8192 usa o limite de 8192' ((P7-Hipotese 5000000 8192 $false).classe -eq 'consistente')
+
+# os 5 "a" de 07/11 (WAL pelo log; erro de checkpoint em a2, a3, a5): 5 de 5 consistentes
+function Rod7($rod, $bytes, $erro, $res = 'FAIL', $saida = '1') {
+    $h = P7-Hipotese $bytes 4096 $erro
+    [ordered]@{ rodada = $rod; carga = 'normal'; wal_bytes = $bytes; wal_fonte = 'log'; wal_paginas = $h.paginas; limite_paginas = 1000; saida = $saida;
+        erros_litestream = $(if ($erro) { 2 } else { 0 }); resultado = $res; hipotese = $h.classe; hipotese_motivo = $h.motivo }
+}
+$r0711 = @((Rod7 'a1' 2550312 $false 'FAIL' '0'), (Rod7 'a2' 4268352 $true), (Rod7 'a3' 4264232 $true), (Rod7 'a4' 3353712 $false 'PASS' '0'), (Rod7 'a5' 4890472 $true))
+$c = P7-Conclusao $r0711
+Ok 'conclusao: 07/11 = consistente em 5 de 5, sem contraexemplo' ($c -eq 'hipotese consistente em 5 de 5 rodadas / contraexemplos: nenhum') $c
+$mix = @((Rod7 'a1' 4268352 $true), (Rod7 'a2' 5000000 $false 'PASS' '0'), (Rod7 'a3' 1000000 $true), (Rod7 'a4' 3353712 $false 'PASS' '0'),
+    [ordered]@{ rodada = 'a5'; hipotese = 'indeterminada'; hipotese_motivo = 'WAL ou page_size desconhecido' }, [ordered]@{ rodada = 'a6' })
+$c = P7-Conclusao $mix
+Ok 'conclusao: contraexemplos listados com o motivo; indeterminadas fora do M' ($c -match '^hipotese consistente em 2 de 4 rodadas / contraexemplos: a2 \(WAL com 1213 paginas' -and
+    $c -match '; a3 \(erro de checkpoint com WAL de 242 paginas' -and $c -match 'indeterminadas: a5 \(WAL ou page_size desconhecido\); a6 \(sem medicao\)$') $c
+Ok 'conclusao: nada medido = 0 de 0' ((P7-Conclusao @()) -eq 'hipotese consistente em 0 de 0 rodadas / contraexemplos: nenhum')
+$tb = P7-Tabela $r0711
+Ok 'tabela: cabecalho + 1 linha por rodada' ($tb.Count -eq 6 -and $tb[0] -match '^rodada\s+carga\s+wal_bytes\s+fonte\s+wal_pag\s+limite\s+saida\s+erros_ls\s+resultado\s+hipotese$') ($tb -join "`n")
+Ok 'tabela: linha da a2 com os valores' ($tb[2] -match '^a2\s+normal\s+4268352\s+log\s+1036\s+1000\s+1\s+2\s+FAIL\s+consistente$') $tb[2]
+$tb = P7-Tabela @([ordered]@{ rodada = 'a9'; erros_litestream = 'NAO_VERIFICADO (Litestream inativo)'; resultado = 'NAO_VERIFICADO' })
+Ok 'tabela: campo ausente = ?; erros NAO_VERIFICADO abreviados' ($tb[1] -match '^a9\s+\?\s+\?\s+\?\s+\?\s+\?\s+\?\s+NAO_VERIF\s+NAO_VERIFICADO\s+\?$') $tb[1]
+
+# -Carga e -Tipos
+Ok 'carga: baixa = 1 escritor com 1 s de pausa' ((P7-Carga 'baixa').escritores -eq 1 -and (P7-Carga 'baixa').pausa_ms -eq 1000)
+Ok 'carga: normal = 1 escritor sem pausa (07/11)' ((P7-Carga 'normal').escritores -eq 1 -and (P7-Carga 'normal').pausa_ms -eq 0)
+Ok 'carga: alta = 3 escritores sem pausa' ((P7-Carga 'alta').escritores -eq 3 -and (P7-Carga 'alta').pausa_ms -eq 0)
+$ex = $null; try { P7-Carga 'extrema' | Out-Null } catch { $ex = $_.Exception.Message }
+Ok 'carga: valor desconhecido recusado' ($ex -match 'carga invalida') $ex
+Ok 'tipos: "a,c" (uma string, como chega do -File) = a, c' (((P7-Tipos @('a,c')) -join '') -eq 'ac')
+Ok 'tipos: ordem e repeticao normalizadas (c, A, a) = a, c' (((P7-Tipos @('c', 'A', 'a')) -join '') -eq 'ac')
+Ok 'tipos: so "a"' (((P7-Tipos @('a')) -join '') -eq 'a' -and @(P7-Tipos @('a')).Count -eq 1)
+Ok 'tipos: padrao a,b,c' (((P7-Tipos @('a', 'b', 'c')) -join '') -eq 'abc')
+foreach ($ruim in @(@('b'), @('b,c'), @('x'), @(''))) {
+    $ex = $null; try { P7-Tipos $ruim | Out-Null } catch { $ex = $_.Exception.Message }
+    Ok "tipos: '$($ruim -join ',')' recusado" ([bool]$ex) $ex
+}
+$ex = $null; try { P7-Tipos @('b') | Out-Null } catch { $ex = $_.Exception.Message }
+Ok 'tipos: "b" sem "a" explica a dependencia' ($ex -match "depende da rodada 'a'") $ex
+
 if ($falhas) { Write-Host "$falhas caso(s) falharam"; exit 1 }
 Write-Host 'todos os casos passaram'; exit 0
