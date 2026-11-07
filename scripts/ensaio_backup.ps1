@@ -66,18 +66,25 @@ function Mask-Cred([string]$t) {
 
 function Invoke-Native {
     # Roda um EXECUTAVEL (nunca uma funcao/alias de mesmo nome: "& 'docker'" resolvia a antiga funcao Docker e
-    # recursava ate estourar a pilha). Devolve @{Code; Out} (stdout+stderr como texto). Nao lanca excecao por stderr (PS 5.1).
+    # recursava ate estourar a pilha). Devolve @{Code; Out; Stdout; Stderr}: Out = stdout+stderr (para mensagens),
+    # Stdout/Stderr separados. LEITURA DE CONTEUDO usa SO .Stdout (o rclone escreve NOTICE no stderr). Nao lanca excecao por stderr (PS 5.1).
     # Se o executavel nao existe ou nao pode ser iniciado, lanca 'NAO_VERIFICADO: ...' (o comando nem rodou).
     param([string]$Exe, [string[]]$ArgList)
     $cmd = Get-Command -Name $Exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
     if (-not $cmd) { throw ('NAO_VERIFICADO: ' + "executavel '$Exe' nao encontrado no PATH") }
     $old = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
     $global:LASTEXITCODE = $null
-    try { $out = & $cmd.Source @ArgList 2>&1 | ForEach-Object { "$_" } }
+    $so = New-Object System.Collections.Generic.List[string]; $se = New-Object System.Collections.Generic.List[string]
+    try {
+        $out = & $cmd.Source @ArgList 2>&1 | ForEach-Object {
+            if ($_ -is [System.Management.Automation.ErrorRecord]) { $se.Add("$_") } else { $so.Add("$_") }
+            "$_"
+        }
+    }
     catch { throw ('NAO_VERIFICADO: ' + "nao foi possivel executar '$($cmd.Source)': $($_.Exception.Message)") }
     finally { $ErrorActionPreference = $old }
     if ($null -eq $LASTEXITCODE) { throw ('NAO_VERIFICADO: ' + "'$Exe' nao devolveu codigo de saida") }
-    return @{ Code = $LASTEXITCODE; Out = (@($out) -join "`n") }
+    return @{ Code = $LASTEXITCODE; Out = (@($out) -join "`n"); Stdout = (@($so) -join "`n"); Stderr = (@($se) -join "`n") }
 }
 
 function Invoke-Docker([string[]]$ArgList) { Invoke-Native 'docker' $ArgList }
@@ -161,7 +168,7 @@ function Run-NoVolume {
 function Lista-Bucket([string]$Sub) {
     $r = Run-Temp @() 'sh' @('/ensaio/sh/lista.sh', $Sub)
     if ($r.Code -ne 0) { throw "listagem de $Sub falhou (codigo $($r.Code)): $($r.Out)" }
-    return @($r.Out -split "`n" | Where-Object { $_.Trim() -ne '' })
+    return @($r.Stdout -split "`n" | Where-Object { $_.Trim() -ne '' })     # so stdout: NOTICE do rclone nao vira "objeto"
 }
 
 function Restore-Container([string]$Dest, [string[]]$Opts) {
@@ -174,7 +181,7 @@ function Contagens([string]$DataDirNoContainer, [switch]$Vivo) {
     if ($Vivo) { $r = Invoke-Docker @('exec', $CONTAINER, 'python', '/app/scripts/verify_restore.py', '--data-dir', $DataDirNoContainer, '--json') }
     else { $r = Run-Temp @() 'python' @('/app/scripts/verify_restore.py', '--data-dir', $DataDirNoContainer, '--json') }
     $j = $null
-    try { $j = $r.Out.Substring($r.Out.IndexOf('{')) | ConvertFrom-Json } catch { throw "verify_restore sem JSON (codigo $($r.Code)): $($r.Out)" }
+    try { $j = $r.Stdout.Substring($r.Stdout.IndexOf('{')) | ConvertFrom-Json } catch { throw "verify_restore sem JSON (codigo $($r.Code)): $($r.Out)" }
     $h = [ordered]@{}; foreach ($p in $j.counts.PSObject.Properties) { $h[$p.Name] = [int]$p.Value }
     return $h
 }
@@ -207,11 +214,30 @@ function Snapshot-Real {
     if ($i.Code -ne 0) { return $null }
     $df = Invoke-Docker @('system', 'df', '-v')
     $tam = $null
-    foreach ($l in ($df.Out -split "`n")) { if ($l -match ('^' + [regex]::Escape($VOLUME_REAL) + '\s+\d+\s+(\S+)')) { $tam = $Matches[1] } }
-    return @{ criado = $i.Out.Trim(); tamanho = $tam }
+    foreach ($l in ($df.Stdout -split "`n")) { if ($l -match ('^' + [regex]::Escape($VOLUME_REAL) + '\s+\d+\s+(\S+)')) { $tam = $Matches[1] } }
+    return @{ criado = $i.Stdout.Trim(); tamanho = $tam }
 }
 
 # ------------------------------------------------------------------ passos
+function Check-Revisao {
+    # So AVISA: commit gravado na imagem (rotulo org.opencontainers.image.revision) x HEAD da branch.
+    $lab = (Invoke-Docker @('image', 'inspect', '--format', '{{index .Config.Labels "org.opencontainers.image.revision"}}', $IMAGEM)).Stdout.Trim()
+    if (-not $lab -or $lab -eq '<no value>' -or $lab -eq 'desconhecido') {
+        Say "  AVISO: imagem $IMAGEM sem commit gravado (construa com --build-arg GIT_COMMIT=...; ver docs/DOCKER.md)"; return
+    }
+    $head = $null
+    try { $g = Invoke-Native 'git' @('-C', $REPO, 'rev-parse', 'HEAD'); if ($g.Code -eq 0) { $head = $g.Stdout.Trim() } } catch { }
+    if (-not $head) { Say "  AVISO: commit da imagem $lab; HEAD da branch NAO_VERIFICADO (git indisponivel)"; return }
+    if ($lab -eq $head) { Say "  imagem construida do HEAD atual ($($head.Substring(0, 7)))"; return }
+    Say "  AVISO: imagem construida do commit $lab, diferente do HEAD $head"
+    $d = $null
+    try { $d = Invoke-Native 'git' @('-C', $REPO, 'diff', '--name-only', "$lab..$head", '--', 'scripts', 'docker', 'litestream.yml', 'Dockerfile', 'src') } catch { }
+    if ($d -and $d.Code -eq 0 -and $d.Stdout.Trim()) {
+        Say '  arquivos que entram na imagem mudaram desde entao (mudancas em scripts exigem RECONSTRUIR a imagem):'
+        $d.Stdout -split "`n" | Where-Object { $_.Trim() } | ForEach-Object { Say "    $_" }
+    } else { Say '  mudancas em scripts exigem RECONSTRUIR a imagem; nao foi possivel listar o que mudou (commit fora da branch?)' }
+}
+
 function Passo1($e) {
     Say 'Passo 1: pre-requisitos'
     $ok = $true
@@ -227,7 +253,8 @@ function Passo1($e) {
     if ($d.Code -ne 0) { throw ('NAO_VERIFICADO: ' + "docker indisponivel: $($d.Out)") }
     $img = Invoke-Docker @('image', 'inspect', '--format', '{{.Id}}', $IMAGEM)
     if ($img.Code -ne 0) { throw ('NAO_VERIFICADO: ' + "imagem $IMAGEM nao encontrada") }
-    Say "  docker $($d.Out.Trim()); imagem $IMAGEM ok"
+    Say "  docker $($d.Stdout.Trim()); imagem $IMAGEM ok"
+    Check-Revisao
     # a imagem precisa ter a correcao (litestream.yml com BACKUP_R2_PREFIX e restore.sh com LITESTREAM_CONFIG);
     # imagem antiga replicaria em staging/ e o restore.sh nao acharia a configuracao.
     $g1 = Invoke-Docker @('run', '--rm', '--network', 'none', '--tmpfs', '/data', '--entrypoint', 'grep', $IMAGEM, '-c', 'BACKUP_R2_PREFIX', '/etc/litestream.yml', '/app/scripts/restore.sh', '/usr/local/bin/kiroo-entrypoint')
@@ -315,7 +342,7 @@ function Passo2($e) {
 function Passo3($e) {
     Say 'Passo 3: docker stop -t 40'
     $st = Invoke-Docker @('inspect', '--format', '{{.State.Running}}', $CONTAINER)
-    if ($st.Out.Trim() -ne 'true') { throw ('NAO_VERIFICADO: ' + "container $CONTAINER nao esta rodando (rode o passo 2)") }
+    if ($st.Stdout.Trim() -ne 'true') { throw ('NAO_VERIFICADO: ' + "container $CONTAINER nao esta rodando (rode o passo 2)") }
     # ultima escrita: uma conta nova, imediatamente antes do stop
     $ultima = "ultima-$(Get-Date -Format yyyyMMddHHmmssfff)@ensaio.test"
     Signup $ultima | Out-Null
@@ -336,7 +363,7 @@ function Passo3($e) {
     $r = Invoke-Docker @('stop', '-t', '40', $CONTAINER)
     $dur = ((Get-Date) - $t0).TotalSeconds
     $sondas = @(Receive-Job $job -Wait -AutoRemoveJob)
-    $exit = (Invoke-Docker @('inspect', '--format', '{{.State.ExitCode}}', $CONTAINER)).Out.Trim()
+    $exit = (Invoke-Docker @('inspect', '--format', '{{.State.ExitCode}}', $CONTAINER)).Stdout.Trim()
     Say ("  docker stop levou {0:N1} s (codigo do comando {1}); codigo de saida do container: {2}" -f $dur, $r.Code, $exit)
     $viu503 = $sondas -contains '503'
     Say "  /readyz durante a parada: $(($sondas | Group-Object | ForEach-Object { "$($_.Name)x$($_.Count)" }) -join ' ')"
@@ -349,12 +376,19 @@ function Passo3($e) {
     $rr = Restore-Container $dest @('--db-only')
     if ($rr.Code -ne 0 -and $rr.Code -ne 5) { throw "restore falhou: $($rr.Out)" }
     $q = Run-Temp @() 'python' @('/ensaio/sh/conta_email.py', "/ensaio/$dest/studio.sqlite3", $ultima)
-    $achou = $q.Out.Trim() -eq '1'
+    $achou = $q.Stdout.Trim() -ceq '1'
+    if ($q.Stderr) { Say "  (stderr da consulta: $($q.Stderr))" }
     Say "  restore depois do stop contem a ultima escrita: $achou"
     $e['stop_s'] = [math]::Round($dur, 1)
     if (-not $viu503) { Say '  AVISO: nenhum 503 capturado (sem producao em andamento o dreno pode ser rapido demais); sub-item NAO_VERIFICADO' }
     if ($achou -and $exit -eq '0' -and $dur -lt 40) { return 'PASS' }
     return 'FAIL'
+}
+
+function Assert-Vars {
+    # As 5 variaveis que os passos com bucket precisam. Faltando -> NAO_VERIFICADO com a lista (so nomes).
+    $falta = @(@('STUDIO_ENV') + $VARS_CRED | Where-Object { [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($_)) })
+    if ($falta.Count) { throw ('NAO_VERIFICADO: ' + "variaveis ausentes: $($falta -join ', ') (defina no terminal e rode de novo)") }
 }
 
 function Show-Backup([string]$Nome, $r) {
@@ -366,7 +400,8 @@ function Show-Backup([string]$Nome, $r) {
     if ($res -and $res -match 'enviados=(\d+) objetos.*objetos=(\d+) bytes=(\d+); manifesto: (.*)$') {
         Say ("    objetos enviados: {0}; origem: {1} objetos, {2:N0} bytes ({3:N1} MB); manifesto: {4}" -f $Matches[1], $Matches[2], [int64]$Matches[3], ([int64]$Matches[3] / 1MB), $Matches[4])
     } else { Say '    (sem linha de resumo do backup_media.sh)' }
-    if ($r.Code -ne 0) {
+    if ($r.Code -eq 2) { $txt -split "`n" | Where-Object { $_ -match 'backup_media:' } | ForEach-Object { Say "    $_" } }
+    elseif ($r.Code -ne 0) {
         $txt -split "`n" | Where-Object { $_ -match 'ERRO|FALHOU|501|Failed|nada foi apagado' } | Select-Object -Last 12 | ForEach-Object { Say "    $_" }
     }
     return ($r.Code -eq 0)
@@ -395,11 +430,12 @@ function Passo4Diag($e) {
 }
 
 function Passo4($e) {
+    Assert-Vars
     if ($Diagnostico) { return (Passo4Diag $e) }
     Say 'Passo 4: midia (backup_media.sh)'
     $inicio = (Get-Date).ToUniversalTime().AddSeconds(-2).ToString('yyyy-MM-ddTHHmmssZ')
     $st = Invoke-Docker @('inspect', '--format', '{{.State.Running}}', $CONTAINER)
-    if ($st.Code -eq 0 -and $st.Out.Trim() -eq 'true') { throw ('NAO_VERIFICADO: ' + 'pare o container do ensaio antes (passo 3)') }
+    if ($st.Code -eq 0 -and $st.Stdout.Trim() -eq 'true') { throw ('NAO_VERIFICADO: ' + 'pare o container do ensaio antes (passo 3)') }
     $r = Run-NoVolume 'sh' @('/ensaio/sh/prepara_midia.sh', 'versao-1')
     if ($r.Code -ne 0) { throw "preparar midia falhou: $($r.Out)" }
     $bk = { param($x) Run-NoVolume 'bash' (@('/app/scripts/backup_media.sh') + $x) }
@@ -416,13 +452,19 @@ function Passo4($e) {
     if (-not $arch) { return 'FAIL' }
     $velho = Run-Temp @() 'sh' @('/ensaio/sh/le.sh', "$PREFIXO/media/archive/$(@($arch)[-1])")
     $atual = Run-Temp @() 'sh' @('/ensaio/sh/le.sh', "$PREFIXO/media/current/productions/ensaio-marcador.txt")
-    Say "  archive contem '$($velho.Out.Trim())'; current contem '$($atual.Out.Trim())'"
-    if ($velho.Out.Trim() -eq 'versao-1' -and $atual.Out.Trim() -eq 'versao-2') { return 'PASS' }
+    # conteudo = SO stdout do rclone cat, comparado EXATAMENTE (o arquivo e gravado com printf %s, sem quebra de linha)
+    foreach ($x in @(@('archive', $velho), @('current', $atual))) {
+        if ($x[1].Code -ne 0) { Say "  leitura de $($x[0]) falhou (codigo $($x[1].Code)): $($x[1].Stderr)"; return 'FAIL' }
+        if ($x[1].Stderr) { Say "  (stderr do rclone em $($x[0]), ignorado na comparacao: $($x[1].Stderr))" }
+    }
+    Say "  archive contem '$($velho.Stdout)'; current contem '$($atual.Stdout)'"
+    if ($velho.Stdout -ceq 'versao-1' -and $atual.Stdout -ceq 'versao-2') { return 'PASS' }
     return 'FAIL'
 }
 
 function Passo5($e) {
     Say 'Passo 5: restore cronometrado (pastas novas)'
+    Assert-Vars
     $ts = Get-Date -Format HHmmss
     $t = [Diagnostics.Stopwatch]::StartNew(); $a = Restore-Container "p5-banco-$ts" @('--db-only'); $tb = $t.Elapsed.TotalSeconds
     $t = [Diagnostics.Stopwatch]::StartNew(); $b = Restore-Container "p5-midia-$ts" @('--media-only'); $tm = $t.Elapsed.TotalSeconds
@@ -437,14 +479,14 @@ function Passo5($e) {
 
 function Passo6($e) {
     Say 'Passo 6: limpeza (so o que tem o rotulo do ensaio)'
-    $ids = (Invoke-Docker @('ps', '-a', '-q', '--filter', "label=$ROTULO")).Out -split "`n" | Where-Object { $_.Trim() }
+    $ids = (Invoke-Docker @('ps', '-a', '-q', '--filter', "label=$ROTULO")).Stdout -split "`n" | Where-Object { $_.Trim() }
     foreach ($id in $ids) { $r = Invoke-Docker @('rm', '-f', $id.Trim()); Say "  container $($id.Trim()) removido (codigo $($r.Code))" }
     $v = Invoke-Docker @('volume', 'inspect', '--format', '{{json .Labels}}', $VOLUME_ENSAIO)
     if ($v.Code -eq 0) {
         Assert-VolumeEnsaio
         $r = Invoke-Docker @('volume', 'rm', $VOLUME_ENSAIO); Say "  volume $VOLUME_ENSAIO removido (codigo $($r.Code))"
     } else { Say "  volume $VOLUME_ENSAIO ja nao existe" }
-    $resto = (Invoke-Docker @('volume', 'ls', '-q', '--filter', "label=$ROTULO")).Out.Trim()
+    $resto = (Invoke-Docker @('volume', 'ls', '-q', '--filter', "label=$ROTULO")).Stdout.Trim()
     if ($resto) { Say "  AINDA existem volumes com o rotulo: $resto (nao removidos automaticamente)" }
     $depois = Snapshot-Real
     $antes = $e['real_antes']
