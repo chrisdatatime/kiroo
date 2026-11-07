@@ -37,13 +37,16 @@ RUN python fetch_assets.py --lock assets.lock --map office.tmj --out /out --work
 FROM node:22-bookworm-slim AS frontend
 WORKDIR /app/frontend
 COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci
+# Pico de memória baixo (o Railway constrói estágios em paralelo e já matou o `npm ci` com 137): sem audit/fund,
+# poucas conexões e heap do Node limitado SÓ nestes RUN (NODE_OPTIONS por comando, nunca ENV). Sem cache mount:
+# o Railway exige `id=` próprio nele, não dá para validar aqui, e o `npm ci` leva ~10 s sem cache.
+RUN NODE_OPTIONS=--max-old-space-size=1536 npm ci --no-audit --no-fund --prefer-offline --maxsockets=2
 COPY frontend/ ./
 COPY assets/maps/ /app/assets/maps/
 # arte licenciada entra aqui, antes do build (vite embute as folhas e os tilesets no bundle)
 COPY --from=assets /out/assets/ /app/assets/
 COPY --from=assets /out/frontend/src/assets/home/ ./src/assets/home/
-RUN npm run build
+RUN NODE_OPTIONS=--max-old-space-size=1536 npm run build
 
 # ---------------------------------------------------------------- 2b) Litestream (backup contínuo do SQLite)
 # Versão e SHA-256 fixados em docker/litestream.lock. O build FALHA se o hash estiver "PENDING" ou não bater.
@@ -55,7 +58,11 @@ RUN python fetch_litestream.py --lock litestream.lock --out /out/litestream
 # ---------------------------------------------------------------- 3) runtime
 FROM python:3.12-slim AS runtime
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1
-RUN apt-get update \
+# Serialização: este COPY faz o runtime esperar o estágio `frontend` terminar, então o apt-get (207 pacotes do
+# ffmpeg) não roda ao mesmo tempo que `npm ci`/`vite build`. É um arquivo pequeno e estável (package.json), logo
+# só invalida o cache do apt quando as dependências do frontend mudam. O arquivo é apagado no mesmo RUN.
+COPY --from=frontend /app/frontend/package.json /tmp/serialize-frontend.json
+RUN rm -f /tmp/serialize-frontend.json  && apt-get update \
  && apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core tini rclone util-linux \
  && rm -rf /var/lib/apt/lists/* \
  && command -v setpriv >/dev/null
