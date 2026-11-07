@@ -567,3 +567,16 @@ def test_lockfiles_com_versoes_exatas():
     main = (ROOT / "docker/requirements.lock").read_text(encoding="utf-8")
     for pkg in ("google-genai==", "anthropic==", "pydantic==", "python-dotenv=="):
         assert pkg in main
+
+
+def test_build_do_frontend_com_memoria_limitada_e_runtime_serializado():
+    """Railway matou `npm ci` com 137 (memória, estágios em paralelo): limites só nos RUN e apt depois do frontend."""
+    code = _dockerfile_logico((ROOT / "Dockerfile").read_text(encoding="utf-8"))
+    stages = dockerfile_stages(code)
+    front = stages["frontend"]
+    assert re.search(r"^RUN NODE_OPTIONS=--max-old-space-size=1536 npm ci --no-audit --no-fund --prefer-offline --maxsockets=\d+$", front, re.M)
+    assert re.search(r"^RUN NODE_OPTIONS=--max-old-space-size=1536 npm run build$", front, re.M)
+    assert not re.search(r"^\s*ENV\b[^\n]*NODE_OPTIONS", code, re.M)  # nunca no ENV (nem final)
+    rt = stages["runtime"]
+    dep = rt.find("COPY --from=frontend")
+    assert 0 <= dep < rt.find("apt-get install"), "o runtime precisa esperar o frontend antes do apt-get"
