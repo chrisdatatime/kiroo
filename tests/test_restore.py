@@ -4,13 +4,14 @@ from .backup_common import _clean_backup_env  # noqa: F401
 from .test_accounts import app  # noqa: F401
 
 import verify_restore  # noqa: E402
+from studio.migrations import LATEST  # noqa: E402
 
 
 # ------------------------------------------------------------------ verify_restore
 def test_verify_restore_ok_missing_media_corruption_and_hash(tmp_path):
     info = make_data(tmp_path / "ok")
     r = verify_restore.verify(tmp_path / "ok")
-    assert r["ok"] and r["code"] == 0 and r["counts"]["users"] == 1 and r["schema_version"] == 1
+    assert r["ok"] and r["code"] == 0 and r["counts"]["users"] == 1 and r["schema_version"] == LATEST
 
     (tmp_path / "ok" / "productions" / info["pid"] / info["rel"]).write_bytes(b"adulterado")
     assert verify_restore.verify(tmp_path / "ok")["code"] == 0                       # sem --hash não vê
