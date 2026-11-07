@@ -141,3 +141,53 @@ def test_four_processes_booting_together(tmp_path):
     assert con.execute("PRAGMA user_version").fetchone()[0] == 1
     assert con.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
     con.close()
+
+
+def test_eight_processes_booting_together(tmp_path):
+    path = tmp_path / "s.sqlite3"
+    code = "import sys; from pathlib import Path; from studio.db import Database; Database(Path(sys.argv[1])).close()"
+    env = {**os.environ, "PYTHONPATH": os.pathsep.join(sys.path)}
+    procs = [subprocess.Popen([sys.executable, "-c", code, str(path)], env=env) for _ in range(8)]
+    assert [p.wait(60) for p in procs] == [0] * 8
+    con = sqlite3.connect(path)
+    assert con.execute("PRAGMA user_version").fetchone()[0] == 1
+    assert con.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+    assert con.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    con.close()
+
+
+class _FlakyWal:
+    """Conexão falsa: o PRAGMA journal_mode=WAL falha com 'database is locked' N vezes e depois funciona."""
+
+    def __init__(self, failures, message="database is locked"):
+        self.failures, self.message, self.calls = failures, message, 0
+
+    def execute(self, sql):
+        self.calls += 1
+        if self.calls <= self.failures:
+            raise sqlite3.OperationalError(self.message)
+        return self
+
+    def fetchone(self):
+        return ("wal",)
+
+
+def test_wal_switch_retries_transient_lock(monkeypatch):
+    monkeypatch.setattr("studio.db.WAL_RETRY_SLEEP_S", 0)
+    conn = _FlakyWal(failures=7)
+    db_module = sys.modules["studio.db"]
+    db_module._enable_wal(conn)
+    assert conn.calls == 8
+
+
+def test_wal_switch_gives_up_and_does_not_retry_other_errors(monkeypatch):
+    monkeypatch.setattr("studio.db.WAL_RETRY_SLEEP_S", 0)
+    db_module = sys.modules["studio.db"]
+    stuck = _FlakyWal(failures=10_000)
+    with pytest.raises(sqlite3.OperationalError, match="locked"):
+        db_module._enable_wal(stuck)
+    assert stuck.calls == db_module.WAL_ATTEMPTS
+    other = _FlakyWal(failures=10_000, message="disk I/O error")
+    with pytest.raises(sqlite3.OperationalError, match="I/O"):
+        db_module._enable_wal(other)
+    assert other.calls == 1

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -33,6 +34,27 @@ def new_id(prefix: str) -> str:
 
 
 BUSY_TIMEOUT_MS = 30_000
+WAL_ATTEMPTS = 50          # tentativas de trocar para WAL num banco novo
+WAL_RETRY_SLEEP_S = 0.1
+
+
+def _enable_wal(conn: sqlite3.Connection) -> None:
+    """Troca o journal_mode para WAL tolerando disputa. A troca num arquivo novo exige lock exclusivo e, quando
+    outra conexão está fazendo o mesmo, o SQLite devolve SQLITE_BUSY na hora (sem passar pelo busy_timeout, para
+    evitar deadlock). Aqui isso é transitório: tenta de novo por até ~5 s. Só erros de "locked/busy" são repetidos."""
+    for attempt in range(WAL_ATTEMPTS):
+        try:
+            mode = conn.execute("PRAGMA journal_mode=WAL").fetchone()[0]
+            if str(mode).lower() == "wal":
+                return
+        except sqlite3.OperationalError as e:
+            msg = str(e).lower()
+            if "locked" not in msg and "busy" not in msg:
+                raise
+            if attempt == WAL_ATTEMPTS - 1:
+                raise
+        time.sleep(WAL_RETRY_SLEEP_S)
+    raise sqlite3.OperationalError("não foi possível ativar o modo WAL (journal_mode != wal)")
 
 
 def connect(path: Path) -> sqlite3.Connection:
@@ -47,7 +69,7 @@ def connect(path: Path) -> sqlite3.Connection:
     conn = sqlite3.connect(path, isolation_level=None, timeout=BUSY_TIMEOUT_MS / 1000, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute(f"PRAGMA busy_timeout={BUSY_TIMEOUT_MS}")
-    conn.execute("PRAGMA journal_mode=WAL")
+    _enable_wal(conn)
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("PRAGMA foreign_keys=ON")
     return conn
