@@ -1,12 +1,13 @@
 # Ensaio de backup e restauração (staging, Windows)
 
 Roteiro único para provar, na sua máquina, o backup do banco (Litestream), o backup da mídia (rclone) e a
-restauração, contra o bucket real `kiroo-backups` no prefixo `staging/`. Tudo roda em PowerShell nativo pelo
+restauração, contra o bucket real `kiroo-backups` no prefixo **`ensaio/`** (`BACKUP_R2_PREFIX=ensaio`, passado
+aos containers pelo script), nunca em `staging/`. Tudo roda em PowerShell nativo pelo
 [`scripts/ensaio_backup.ps1`](../scripts/ensaio_backup.ps1). Contexto técnico: [BACKUP.md](BACKUP.md).
 
 **Estado deste documento:** o script foi escrito e checado só quanto à sintaxe e aos caminhos de recusa
 (sem credenciais: passo 1 → `NAO_VERIFICADO`; `-Volume kiroo_kiroo-data` → recusado; passo 3 sem pasta →
-`NAO_VERIFICADO`). **Nenhum passo foi executado contra o R2 ou com containers.** Os resultados abaixo ficam
+`NAO_VERIFICADO`; a checagem de imagem detecta que a `kiroo:dados` de `523cacd` não tem `BACKUP_R2_PREFIX`). **Nenhum passo foi executado contra o R2 ou com containers.** Os resultados abaixo ficam
 em branco até você rodar.
 
 ## Regras de segurança (embutidas no script)
@@ -17,8 +18,9 @@ em branco até você rodar.
 | Só o volume do ensaio | Nome fixo `kiroo-ensaio-dados`, criado com o rótulo `kiroo.ensaio=backup`. Outro nome → recusado. Antes de usar/remover, confere o rótulo. |
 | `kiroo_kiroo-data` intocado | Nunca montado. Só `docker volume inspect` (data de criação) e `docker system df -v` (tamanho), no passo 1 e no 6. |
 | Containers descartáveis | Todos com `--label kiroo.ensaio=backup`; os temporários com `--rm --tmpfs /data` (sem volume anônimo). |
-| Bucket só leitura no ensaio | Conferências usam `rclone lsf` / `rclone cat`. Escritas no bucket vêm apenas do próprio produto (Litestream e `backup_media.sh`) em `staging/`. Nada é apagado. |
-| Prefixo `staging/` vazio | O passo 1 lista `staging/db` e `staging/media`; se houver objetos, para (o ensaio misturaria gerações do Litestream com dados reais de staging). Só prossegue com `-PermitirPrefixoComDados`, que você usa sabendo que é lixo de ensaio. |
+| Bucket só leitura no ensaio | Conferências usam `rclone lsf` / `rclone cat`. Escritas no bucket vêm apenas do próprio produto (Litestream e `backup_media.sh`) em `ensaio/`. Nada é apagado. |
+| Prefixo exclusivo `ensaio/` | Fixo no script. O passo 1 lista `ensaio/db` e `ensaio/media`: aceita vazio ou sobras de ensaios anteriores (o prefixo só é usado pelo ensaio). O restore usa a geração mais recente do Litestream e o passo 4 só considera `archive/` posterior ao seu início. |
+| Imagem com a correção | O passo 1 confere que `/etc/litestream.yml`, `restore.sh` e o entrypoint da imagem conhecem `BACKUP_R2_PREFIX`. Imagem antiga (que replicaria em `staging/`) → `NAO_VERIFICADO`. |
 
 ## Antes de começar
 
@@ -30,8 +32,9 @@ $env:BACKUP_BUCKET = 'kiroo-backups'
 # BACKUP_R2_ENDPOINT, BACKUP_R2_ACCESS_KEY_ID, BACKUP_R2_SECRET_ACCESS_KEY: defina sem ecoar
 ```
 
-Pré-condições: Docker Desktop rodando, imagem `kiroo:dados` construída a partir de `deploy/dados`
-(`523cacd`), repositório nesse commit (o script monta `litestream.yml` do repo).
+Pré-condições: Docker Desktop rodando e imagem `kiroo:dados` **reconstruída** a partir do `deploy/dados` atual
+(com a correção do `restore.sh` e o `BACKUP_R2_PREFIX`). A imagem construída em `523cacd` é recusada pelo passo 1.
+`STUDIO_ENV` continua `staging` (comportamento do servidor); só o prefixo no bucket muda.
 
 Pasta do ensaio: `%TEMP%\kiroo-ensaio` (troque com `-Pasta`). Ela recebe `estado.json` (resultados e ids, sem
 credenciais), os scripts auxiliares, os restores e o log do passo 3. Porta do container: `127.0.0.1:8799`.
@@ -48,18 +51,17 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ensaio_backup.ps1 -P
 ```
 
 Faz: confere `STUDIO_ENV=staging`, as 4 variáveis (`BACKUP_R2_ENDPOINT`, `BACKUP_R2_ACCESS_KEY_ID`,
-`BACKUP_R2_SECRET_ACCESS_KEY`, `BACKUP_BUCKET=kiroo-backups`) sem imprimir valores; Docker e imagem; cria a
-pasta (com marcador) e o volume `kiroo-ensaio-dados` com rótulo; lista `staging/db` e `staging/media` (prova
+`BACKUP_R2_SECRET_ACCESS_KEY`, `BACKUP_BUCKET=kiroo-backups`) sem imprimir valores; Docker, imagem e se ela suporta
+`BACKUP_R2_PREFIX`; cria a pasta (com marcador) e o volume `kiroo-ensaio-dados` com rótulo; lista `ensaio/db` e `ensaio/media` (prova
 leitura no bucket); anota data de criação e tamanho de `kiroo_kiroo-data`.
 
 **Esperado:** quatro linhas `presente`, `volume kiroo-ensaio-dados criado com rotulo`, `objetos ja existentes:
-staging/db=0 staging/media=0`, `RESULTADO passo 1: PASS`.
+ensaio/db=0 ensaio/media=0` (ou o aviso de sobras de ensaio anterior), `RESULTADO passo 1: PASS`.
 
 **Se falhar:**
 - `AUSENTE` / `STUDIO_ENV deve ser 'staging'` → defina no terminal e rode de novo (`NAO_VERIFICADO`, nada foi criado).
-- `imagem kiroo:dados nao encontrada` → construa a imagem do `deploy/dados`.
+- `imagem kiroo:dados nao encontrada` ou `sem suporte a BACKUP_R2_PREFIX` → reconstrua a imagem do `deploy/dados` atual.
 - `listagem ... falhou` → endpoint/chave errados ou token sem permissão de leitura no `kiroo-backups`.
-- `o prefixo staging/ ja tem objetos` → veja o que é. Se for de ensaio anterior, rode com `-PermitirPrefixoComDados`; se for staging real, **não** rode o ensaio aí.
 - `volume ... ja existe` → rode o passo 6 e depois o 1.
 
 ## Passo 2 — Replicação
@@ -71,25 +73,24 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ensaio_backup.ps1 -P
 Faz: sobe `kiroo:dados` como `kiroo-ensaio` no volume do ensaio (`STUDIO_MODE=simulated`,
 `STUDIO_SIGNUP=open`, só em 127.0.0.1:8799), espera `/readyz` 200; cria a conta de teste
 `ensaio-<data>@ensaio.test` (senha aleatória, nunca impressa nem gravada) e 2 produções simuladas
-(`POST /api/demo`); espera as contagens do banco ficarem estáveis (até 5 min) + 10 s; lista `staging/db` no
+(`POST /api/demo`); espera as contagens do banco ficarem estáveis (até 5 min) + 10 s; lista `ensaio/db` no
 bucket; restaura com `scripts/restore.sh --db-only` (Litestream) em `<pasta>\restore-p2-*`; compara as
 contagens (`users workspaces memberships productions scenes attempts credit_entries`) do banco vivo com as do
 restaurado (`verify_restore.py --json`).
 
-**Esperado:** lista de objetos em `staging/db` (gerações/snapshots/WAL), `banco vivo` e `restauracao` com a
+**Esperado:** lista de objetos em `ensaio/db` (gerações/snapshots/WAL), `banco vivo` e `restauracao` com a
 mesma linha de contagens, `PASS`.
 
 **Se falhar:**
 - `/readyz nao ficou 200` → o script mostra as 40 últimas linhas do log; procure `entrypoint:` (variável faltando) ou erro do Litestream.
 - erro no signup/demo (400/403) → a resposta aparece no erro; confira `STUDIO_ALLOWED_HOSTS` e se a porta 8799 está livre.
-- `objetos em staging/db: 0` → o Litestream não está replicando; `docker logs kiroo-ensaio` mostra o motivo.
+- `objetos em ensaio/db: 0` → o Litestream não está replicando; `docker logs kiroo-ensaio` mostra o motivo.
 - contagens diferentes → rode o passo de novo só depois de investigar (o container continua no ar; o volume já tem dados — se quiser recomeçar do zero: passo 6, 1, 2).
 - `restore.sh` código 4 → `litestream restore` não achou réplica: confira o prefixo e o relógio da máquina.
 
-> Observação encontrada ao escrever o roteiro: a imagem tem `litestream.yml` só em `/etc/litestream.yml`, mas
-> `restore.sh` procura em `<scripts>/../litestream.yml` (= `/app/litestream.yml`). Por isso o script monta o
-> `litestream.yml` do repo nesse caminho (somente leitura). Dentro da imagem, sem essa montagem, o
-> `restore.sh` do banco falharia. Vale corrigir no Dockerfile ou no `restore.sh` (fora do escopo deste ensaio).
+> O `restore.sh` roda com a configuração da própria imagem (`/etc/litestream.yml`, via `LITESTREAM_CONFIG`),
+> sem montagem extra: o ensaio exercita o caminho real. (Antes da correção ele procurava `/app/litestream.yml` e
+> falhava com `config file not found`; agora há teste de regressão em `tests/test_restore_image.py`.)
 
 ## Passo 3 — `docker stop -t 40`
 
@@ -126,7 +127,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ensaio_backup.ps1 -P
 Faz (container descartável com o volume do ensaio em `/data`, servidor parado): grava
 `productions/ensaio-marcador.txt` = `versao-1` (e um `.ensaio-placeholder` em pastas de usuário vazias, porque
 `backup_media.sh` recusa origem vazia com código 3); `backup_media.sh --dry-run`; `backup_media.sh` real; altera
-o marcador para `versao-2`; roda de novo; lista `staging/media/archive/` e lê o marcador arquivado e o atual.
+o marcador para `versao-2`; roda de novo; lista `ensaio/media/archive/` e lê o marcador arquivado e o atual.
 
 **Esperado:** códigos 0, 0, 0; `em archive/: <AAAA-MM-DDTHHMMSSZ>/productions/ensaio-marcador.txt`;
 `archive contem 'versao-1'; current contem 'versao-2'`; `PASS`.
@@ -171,8 +172,8 @@ ela tiver o marcador. **Não apaga nada do bucket.**
 - `kiroo_kiroo-data SUMIU` ou tamanho diferente → pare tudo e investigue (`docker volume inspect kiroo_kiroo-data`). O ensaio nunca monta esse volume; uma diferença de tamanho pode vir do seu próprio Kiroo local rodando ao mesmo tempo — confira se `docker compose` estava no ar.
 - copie o resumo **antes**: a pasta com `estado.json` é removida no fim.
 
-Objetos que ficam no bucket (apague só se e quando quiser): `staging/db/...` (réplica do banco do ensaio) e
-`staging/media/{current,archive,manifests}/...`.
+Objetos que ficam no bucket (apague só se e quando quiser): `ensaio/db/...` (réplica do banco do ensaio) e
+`ensaio/media/{current,archive,manifests}/...`.
 
 ---
 

@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Ensaio de backup/restore do Kiroo (Litestream + rclone) contra o bucket kiroo-backups, prefixo staging/.
+  Ensaio de backup/restore do Kiroo (Litestream + rclone) contra o bucket kiroo-backups, prefixo ensaio/ (BACKUP_R2_PREFIX).
   Roteiro e criterios: docs/ENSAIO-BACKUP.md.
 
 .DESCRIPTION
@@ -22,8 +22,7 @@ param(
     [Parameter(Mandatory = $true)][ValidateSet('1', '2', '3', '4', '5', '6', 'todos')][string]$Passo,
     [string]$Volume = 'kiroo-ensaio-dados',
     [string]$Pasta = (Join-Path $env:TEMP 'kiroo-ensaio'),
-    [int]$Porta = 8799,
-    [switch]$PermitirPrefixoComDados
+    [int]$Porta = 8799
 )
 
 Set-StrictMode -Version 2
@@ -36,7 +35,7 @@ $ROTULO = 'kiroo.ensaio=backup'
 $IMAGEM = 'kiroo:dados'
 $CONTAINER = 'kiroo-ensaio'
 $BUCKET = 'kiroo-backups'
-$PREFIXO = 'staging'
+$PREFIXO = 'ensaio'                       # BACKUP_R2_PREFIX do ensaio: nunca mistura com staging/ real
 $VARS_CRED = @('BACKUP_R2_ENDPOINT', 'BACKUP_R2_ACCESS_KEY_ID', 'BACKUP_R2_SECRET_ACCESS_KEY', 'BACKUP_BUCKET')
 $MARCADOR = '.kiroo-ensaio-backup'          # arquivo que identifica a pasta do ensaio (limpeza so com ele)
 $REPO = Split-Path -Parent $PSScriptRoot
@@ -62,7 +61,7 @@ function EnvArgs {
     # "-e NOME" sem valor: o docker copia o valor do ambiente deste processo. Nada vai para a linha de comando.
     $a = @()
     foreach ($v in @('STUDIO_ENV') + $VARS_CRED) { $a += @('-e', $v) }
-    return $a
+    return $a + @('-e', "BACKUP_R2_PREFIX=$PREFIXO")   # prefixo nao e segredo
 }
 
 function Assert-VolumeEnsaio {
@@ -141,10 +140,8 @@ function Lista-Bucket([string]$Sub) {
 }
 
 function Restore-Container([string]$Dest, [string[]]$Opts) {
-    # scripts/restore.sh dentro da imagem. litestream.yml do repo montado em /app/litestream.yml (a imagem so o
-    # tem em /etc; restore.sh procura em $HERE/../litestream.yml). So LE do bucket.
-    $yml = Join-Path $REPO 'litestream.yml'
-    $extra = @('-e', 'STUDIO_DATA_DIR=/data', '-v', "${yml}:/app/litestream.yml:ro")
+    # scripts/restore.sh da imagem, com a configuracao da propria imagem (/etc/litestream.yml). So LE do bucket.
+    $extra = @('-e', 'STUDIO_DATA_DIR=/data')
     Run-Temp $extra 'bash' (@('/app/scripts/restore.sh', '--dest', "/ensaio/$Dest") + $Opts)
 }
 
@@ -206,6 +203,10 @@ function Passo1($e) {
     $img = Docker @('image', 'inspect', '--format', '{{.Id}}', $IMAGEM)
     if ($img.Code -ne 0) { throw ('NAO_VERIFICADO: ' + "imagem $IMAGEM nao encontrada") }
     Say "  docker $($d.Out.Trim()); imagem $IMAGEM ok"
+    # a imagem precisa ter a correcao (litestream.yml com BACKUP_R2_PREFIX e restore.sh com LITESTREAM_CONFIG);
+    # imagem antiga replicaria em staging/ e o restore.sh nao acharia a configuracao.
+    $g1 = Docker @('run', '--rm', '--network', 'none', '--tmpfs', '/data', '--entrypoint', 'grep', $IMAGEM, '-c', 'BACKUP_R2_PREFIX', '/etc/litestream.yml', '/app/scripts/restore.sh', '/usr/local/bin/kiroo-entrypoint')
+    if ($g1.Out -match ':0(\s|$)' -or $g1.Code -gt 1) { throw ('NAO_VERIFICADO: ' + "imagem $IMAGEM sem suporte a BACKUP_R2_PREFIX (reconstrua a partir de deploy/dados atual): $($g1.Out)") }
 
     # pasta do ensaio (com marcador)
     if ((Test-Path $Pasta) -and -not (Test-Path (Join-Path $Pasta $MARCADOR)) -and (Get-ChildItem $Pasta -Force | Select-Object -First 1)) {
@@ -230,9 +231,9 @@ function Passo1($e) {
     $db = Lista-Bucket "$PREFIXO/db"
     $md = Lista-Bucket "$PREFIXO/media"
     Say "  bucket $BUCKET acessivel; objetos ja existentes: $PREFIXO/db=$($db.Count) $PREFIXO/media=$($md.Count)"
-    if (($db.Count + $md.Count) -gt 0 -and -not $PermitirPrefixoComDados) {
-        throw "o prefixo $PREFIXO/ ja tem objetos: o ensaio misturaria geracoes do Litestream e o espelho de midia. Confirme que sao lixo de ensaio e rode com -PermitirPrefixoComDados, ou esvazie voce mesmo."
-    }
+    # o prefixo e fixo e exclusivo do ensaio: so pode estar vazio ou ter sobras de ensaios anteriores.
+    # As conferencias usam a geracao mais recente (Litestream) e so archive/ posterior ao inicio do passo 4.
+    if (($db.Count + $md.Count) -gt 0) { Say "  $PREFIXO/ tem sobras de ensaio anterior (aceito: prefixo exclusivo do ensaio)" }
     $e['real_antes'] = Snapshot-Real
     if ($e['real_antes']) { Say "  $VOLUME_REAL existe (criado $($e['real_antes'].criado), tamanho $($e['real_antes'].tamanho)); nao sera tocado" }
     else { Say "  $VOLUME_REAL nao existe neste Docker" }
@@ -332,6 +333,7 @@ function Passo3($e) {
 
 function Passo4($e) {
     Say 'Passo 4: midia (backup_media.sh)'
+    $inicio = (Get-Date).ToUniversalTime().AddSeconds(-2).ToString('yyyy-MM-ddTHHmmssZ')
     $st = Docker @('inspect', '--format', '{{.State.Running}}', $CONTAINER)
     if ($st.Code -eq 0 -and $st.Out.Trim() -eq 'true') { throw ('NAO_VERIFICADO: ' + 'pare o container do ensaio antes (passo 3)') }
     $r = Run-NoVolume 'sh' @('/ensaio/sh/prepara_midia.sh', 'versao-1')
@@ -345,7 +347,7 @@ function Passo4($e) {
     $r = Run-NoVolume 'sh' @('/ensaio/sh/prepara_midia.sh', 'versao-2')
     $b = & $bk @(); Say "  real #2 (arquivo alterado): codigo $($b.Code)"
     if ($b.Code -ne 0) { return 'FAIL' }
-    $arch = Lista-Bucket "$PREFIXO/media/archive" | Where-Object { $_ -match 'productions/ensaio-marcador\.txt$' }
+    $arch = Lista-Bucket "$PREFIXO/media/archive" | Where-Object { $_ -match 'productions/ensaio-marcador\.txt$' -and $_.Split('/')[0] -ge $inicio }
     Say "  em archive/: $($arch -join ', ')"
     if (-not $arch) { return 'FAIL' }
     $velho = Run-Temp @() 'sh' @('/ensaio/sh/le.sh', "$PREFIXO/media/archive/$(@($arch)[-1])")
@@ -392,7 +394,7 @@ function Passo6($e) {
     Say '  resultados finais:'
     foreach ($k in ($e['resultados'].Keys | Sort-Object)) { Say "    passo $k = $($e['resultados'][$k])" }
     if (Test-Path (Join-Path $Pasta $MARCADOR)) { Remove-Item -Recurse -Force $Pasta; Say "  pasta $Pasta removida" }
-    Say '  nada foi apagado no bucket (objetos em staging/ continuam; apague so se quiser, a mao)'
+    Say '  nada foi apagado no bucket (objetos em / continuam; apague so se quiser, a mao)'
     if ($resto) { $ok = $false }
     return $(if ($ok) { 'PASS' } else { 'FAIL' })
 }
