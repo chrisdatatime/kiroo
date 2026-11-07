@@ -205,13 +205,43 @@ Os tempos são o primeiro dado medido de RTO (em BACKUP.md §8 ainda são metas)
 
 ## Passo 7 — Desligamento sob carga (rodar antes do passo 6)
 
+Primeiro a **fumaça** (1 rodada de cada tipo: a1, b1, c1), para validar a mecânica com o R2 real; só depois o ciclo
+completo:
+
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ensaio_backup.ps1 -Passo 7
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ensaio_backup.ps1 -Passo 7 -Fumaca
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ensaio_backup.ps1 -Passo 7            # -Rodadas 5 (padrão)
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ensaio_backup.ps1 -Passo 7 -Rodadas 2 # 1..5
 ```
 
 Precisa só do passo 1 (pasta) e das 5 variáveis. Não usa o container nem o volume dos passos 2–5: cada rodada
 cria o seu volume (`kiroo-ensaio-p7-a1..a5`, `kiroo-ensaio-p7-c1..c5`, com o rótulo do ensaio), o container
-`kiroo-ensaio-p7` na porta `-Porta`+1 (8800) e apaga os dois ao fim da rodada. Leva uns 25–35 min.
+`kiroo-ensaio-p7` na porta `-Porta`+1 (8800) e apaga os dois ao fim da rodada.
+
+**Saída em arquivo (sobrevive a um corte de sessão):** cada linha também vai para
+`<pasta>\p7-<modo>-<data>.log` (`modo` = `fumaca` ou `rodadasN`), já mascarada (o script só imprime nomes de
+variáveis, nunca valores), e o resultado acumulado é regravado depois de **cada** rodada em
+`<pasta>\p7-<modo>-<data>.json`. Se a sessão cair, o que já rodou está nesses dois arquivos.
+
+**Tempo estimado** (medido no rascunho sem Litestream, 07/11/2026: par a+b ≈ 2 min 25 s, rodada c ≈ 1 min 40 s; com
+o R2 real soma o restore da geração em cada `a` e a espera da geração nova em cada `c`, até 20 s):
+
+| Execução | Estimativa |
+|---|---|
+| `-Fumaca` (a1, b1, c1) | 5–7 min |
+| padrão (`-Rodadas 5`, 15 rodadas) | 25–35 min |
+
+**Interromper com segurança:** `Ctrl+C` no terminal do ensaio (os jobs do escritor e da sonda morrem com a sessão
+do PowerShell; se o terminal for fechado, também). Depois, limpe **só pelo rótulo** — nunca por nome solto:
+
+```powershell
+docker ps -a -q --filter label=kiroo.ensaio=backup --filter name=kiroo-ensaio-p7 | ForEach-Object { docker rm -f $_ }
+docker volume ls -q --filter label=kiroo.ensaio=backup --filter name=kiroo-ensaio-p7- | ForEach-Object { docker volume rm $_ }
+```
+
+(ou `-Passo 6`, que faz o mesmo e também limpa o resto do ensaio). `kiroo_kiroo-data` nunca é tocado. No bucket
+nada é apagado: a réplica das rodadas fica em `ensaio/db` (apagar faz parte da pendência de limpeza de `ensaio/`).
+Os arquivos `p7-*` da pasta ficam até o passo 6.
 
 **Como a produção fica em andamento (sem custo de IA, sem mudar código):** modo simulado + `STUDIO_X264_PRESET=placebo`
 (a montagem final leva ~80 s em vez de ~2 s) + piloto `automatico` pela API (`POST /api/productions/<pid>/autonomy`),
@@ -223,8 +253,8 @@ Rodadas (cada uma termina em PASS, FAIL ou NAO_VERIFICADO com o motivo; falha de
 - **a1..a5** — produção na montagem; cadastros sequenciais (`w7-<rodada>-<n>@ensaio.test`) contínuos e `/readyz` a cada
   100 ms; `docker stop -t 40`. FAIL se: tempo ≥ 40 s; código de saída ≠ 0; nenhum 503 antes da primeira sonda sem
   conexão; alguma linha não-JSON com `error` no log depois de `SIGTERM: parando` (Litestream); `run_state` ≠
-  `interrupted` (lido do volume parado, conexão só leitura); o restore da **geração da rodada** no R2 não contém o
-  último cadastro com 200 recebido antes do SIGTERM.
+  `interrupted` (lido do volume parado, conexão só leitura); **alguma escrita aceita (200) ausente** no volume parado
+  ou no restore da **geração da rodada** no R2 — a mensagem lista os ids ausentes.
 - **b1..b5** — `docker start` no mesmo volume: a produção retoma (evento `resumed`) e chega a `awaiting_final_review`
   com `run_state=idle`; as tentativas confirmadas antes do stop continuam iguais (id, tipo, cena, número, hash,
   criação, operação remota); nenhuma tentativa nova para cena+tipo que já estava `succeeded` ou `submitted`; montagem
@@ -235,8 +265,49 @@ Rodadas (cada uma termina em PASS, FAIL ou NAO_VERIFICADO com o motivo; falha de
   snapshot mudou (diff impresso), se a escrita de sincronização sumiu, se uma etapa registrada se repetiu, se a
   produção não termina, ou se o Litestream não abriu geração nova.
 
-Arquivos de cada rodada ficam na pasta do ensaio: `p7-<rodada>-escritas.txt`, `-readyz.txt`, `-log.txt`,
-`-snapshot.json`, `-final.json`. Nada é apagado no bucket: a réplica das rodadas fica em `ensaio/db`.
+**Litestream inativo = NAO_VERIFICADO, nunca 0 nem FAIL.** O Litestream só conta como ativo com as duas evidências:
+geração legível (16 hex em `.studio.sqlite3-litestream/generation`) **e** linha do próprio Litestream no log (versão,
+`initialized db` ou `replicating to`); o aviso `entrypoint: backup desligado` marca inativo. Inativo → "erros do
+Litestream", "geração nova depois do SIGKILL" e "restore do R2" saem como NAO_VERIFICADO com o motivo (zero linhas de
+erro sem Litestream não prova nada). FAIL só quando a asserção rodou e falhou. As demais asserções da rodada rodam
+normalmente.
+
+### Escritas depois do SIGTERM
+
+Cada cadastro confirmado (200) é registrado em `p7-<rodada>-aceitas.tsv` (n, e-mail de teste, horário UTC de envio e
+de resposta, e duas classificações):
+
+- **servidor** — a linha `E-mail para <e-mail>` do app vem antes ou depois de `SIGTERM: parando` no **mesmo log**
+  (mesmo processo, sem comparar relógios): `antes` | `depois` | `sem_log`;
+- **cliente** — resposta antes do sinal → `antes`; envio depois do sinal → `depois`; envio antes e resposta depois →
+  `em_voo` (o cliente não sabe de que lado o servidor gravou).
+
+Toda escrita aceita, de qualquer classe, precisa estar no volume parado **e** no restore do R2; qualquer ausente = FAIL
+com o id. A rodada mostra `aceitas`, `aceitas_servidor`, `aceitas_cliente`, `ausentes_volume` e `restore`
+(`N/N aceitas presentes`).
+
+**Comportamento atual na drenagem (lido do código e confirmado no rascunho):** depois do SIGTERM o servidor recusa com
+503 + `Retry-After: 30` só `POST /api/productions*` e `POST /api/demo` (jobs novos); **todo o resto continua
+aceito** — inclusive cadastro, login e configurações — até o `httpd.shutdown()`, que só acontece quando
+`app.shutdown()` termina (até `STUDIO_SHUTDOWN_GRACE_S`, 25 s). `/readyz` passa a 503 logo no sinal. No rascunho
+(rodada a1) foram 8 cadastros aceitos antes e **288 depois** do SIGTERM, ao longo dos ~25 s de drenagem. Como o
+Litestream só faz a última sincronização depois que o servidor sai, essas escritas entram na réplica — é o que a
+rodada `a` confere.
+
+**Proposta (não aplicada):** manter a aceitação de escritas curtas durante a drenagem (com uma instância só, recusar
+não as manda para outro lugar: só vira erro para o usuário) e:
+
+1. garantir o orçamento de tempo: `STUDIO_SHUTDOWN_GRACE_S` + fechamento do HTTP + última sincronização do Litestream
+   < tempo de parada da plataforma (`docker stop -t 40` aqui; `kill_timeout` no deploy) — hoje 25 s + sync, com folga;
+2. encerrar o listener assim que não houver produção em andamento, em vez de esperar o prazo inteiro quando os laços
+   já pararam (reduz a janela de escritas aceitas no fim);
+3. responder `Connection: close` durante a drenagem, para o cliente não reutilizar conexão que vai cair;
+4. se um dia houver mais de uma instância atrás de balanceador, aí sim recusar escritas novas (503 + `Retry-After`)
+   assim que o `/readyz` virar 503.
+
+Arquivos de cada rodada ficam na pasta do ensaio: `p7-<rodada>-escritas.txt`, `-aceitas.tsv`, `-readyz.txt`,
+`-log.txt`, `-snapshot.json`, `-final.json`, além de `p7-<modo>-<data>.log` e `.json` da execução. Nada é apagado no
+bucket: a réplica das rodadas fica em `ensaio/db`.
 
 ## Passo 6 — Limpeza
 
