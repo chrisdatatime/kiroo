@@ -221,8 +221,19 @@ function Snapshot-Real {
 # ------------------------------------------------------------------ passos
 function Check-Revisao {
     # So AVISA: commit gravado na imagem (rotulo org.opencontainers.image.revision) x HEAD da branch.
-    $lab = (Invoke-Docker @('image', 'inspect', '--format', '{{index .Config.Labels "org.opencontainers.image.revision"}}', $IMAGEM)).Stdout.Trim()
-    if (-not $lab -or $lab -eq '<no value>' -or $lab -eq 'desconhecido') {
+    # {{json .Config.Labels}} e lido aqui. NAO usar {{index .Config.Labels "org..."}}: o PowerShell 5.1 nao escapa aspas
+    # internas ao chamar executaveis, o docker recebia {{index .Config.Labels org.opencontainers...}} e respondia
+    # 'function "org" not defined' (codigo 64) -> o passo avisava "sem commit" mesmo com o rotulo gravado.
+    $r = Invoke-Docker @('image', 'inspect', '--format', '{{json .Config.Labels}}', $IMAGEM)
+    if ($r.Code -ne 0) { Say "  AVISO: commit da imagem $IMAGEM NAO_VERIFICADO (docker image inspect codigo $($r.Code): $($r.Stderr))"; return }
+    $lab = $null
+    $txt = $r.Stdout.Trim()
+    if ($txt -and $txt -ne 'null') {
+        try { $o = $txt | ConvertFrom-Json } catch { Say "  AVISO: rotulos da imagem $IMAGEM ilegiveis (NAO_VERIFICADO): $txt"; return }
+        $prop = $o.PSObject.Properties['org.opencontainers.image.revision']
+        if ($prop) { $lab = "$($prop.Value)".Trim() }
+    }
+    if (-not $lab -or $lab -eq 'desconhecido') {
         Say "  AVISO: imagem $IMAGEM sem commit gravado (construa com --build-arg GIT_COMMIT=...; ver docs/DOCKER.md)"; return
     }
     $head = $null
