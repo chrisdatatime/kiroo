@@ -11,6 +11,9 @@
          -Passo 7 -Fumaca: 1 rodada de cada tipo (a1, b1, c1) para validar a mecanica com o R2 real;
          -Passo 7 -Rodadas N (1..5, padrao 5): N rodadas de cada tipo. A saida vai tambem para
          <pasta>\p7-<modo>-<data>.log e o resultado parcial (apos cada rodada) para p7-<modo>-<data>.json.
+         -Passo 7 -Tipos a -Rodadas 5: so as cinco rodadas "a" (-Tipos a,b | a,c | c ...; "b" sem "a" e recusado).
+         -Passo 7 -Carga baixa|normal|alta: ritmo dos cadastros nas rodadas "a" (mede o WAL no fechamento abaixo/acima
+         do limite de 1000 paginas do Litestream; tabela e conclusao no fim do log).
          -Passo 4 -Diagnostico: so UM envio rclone (copyto) de arquivo pequeno para ensaio/diag/, com
          -vv --dump headers (nunca --dump auth); cabecalhos de requisicao e resposta com credenciais mascaradas.
 
@@ -31,7 +34,13 @@ param(
     [int]$Porta = 8799,
     [switch]$Diagnostico,
     [ValidateRange(1, 5)][int]$Rodadas = 5,   # passo 7: quantas rodadas de cada tipo (a/b e c)
-    [switch]$Fumaca                          # passo 7: fumaca = 1 rodada de cada tipo (a1, b1, c1), ignora -Rodadas
+    [switch]$Fumaca,                         # passo 7: fumaca = 1 rodada de cada tipo (a1, b1, c1), ignora -Rodadas
+    # passo 7: quais tipos rodar (a = stop com escritas, b = reinicio do volume de a, c = SIGKILL). "b" sem "a" e recusado.
+    # Aceita -Tipos a,c e -Tipos "a,c" (com powershell -File a lista chega como UMA string; por isso nao e ValidateSet).
+    [ValidatePattern('^\s*[abc](\s*,\s*[abc])*\s*$')][string[]]$Tipos = @('a', 'b', 'c'),
+    # passo 7: ritmo dos cadastros nas rodadas "a" (o servidor nao muda): baixa = 1 escritor com 1 s de pausa;
+    # normal = 1 escritor sem pausa (como em 07/11); alta = 3 escritores sem pausa. Ver docs/ENSAIO-BACKUP.md.
+    [ValidateSet('baixa', 'normal', 'alta')][string]$Carga = 'normal'
 )
 
 Set-StrictMode -Version 2
@@ -544,6 +553,7 @@ $CONTAINER7 = 'kiroo-ensaio-p7'
 $PORTA7 = $Porta + 1
 $BASE7 = "http://127.0.0.1:$PORTA7"
 . (Join-Path $PSScriptRoot 'ensaio_p7_lib.ps1')
+$TIPOS7 = P7-Tipos $Tipos   # valida ANTES de qualquer docker: "b" sem "a" para aqui
 
 function Assert-VolumeP7([string]$Nome) {
     if ($Nome -notmatch '^kiroo-ensaio-p7-[ac][1-5]$') { throw "volume recusado no passo 7: '$Nome'" }
@@ -608,6 +618,17 @@ function Geracao-P7 {
     return $r.Stdout.Trim()
 }
 
+function Sonda-WalP7([string]$Vol) {
+    # Tamanhos do banco, do -wal e do WAL-sombra no volume PARADO. Container descartavel com o rotulo do ensaio, volume
+    # montado SO LEITURA (:ro), sem variaveis de ambiente (nenhuma credencial). Roda ANTES de qualquer outra leitura do
+    # volume. Devolve o objeto do JSON ou uma string com o motivo da falha.
+    Assert-VolumeP7 $Vol
+    $r = Invoke-Docker @('run', '--rm', '--label', $ROTULO, '-v', "${Vol}:/data:ro", '-v', "${Pasta}:/ensaio", '--entrypoint', 'python', $IMAGEM,
+        '/ensaio/sh/p7_wal.py', '/data')
+    if ($r.Code -ne 0) { return "sonda do WAL falhou (codigo $($r.Code)): $($r.Out)" }
+    try { return ($r.Stdout.Substring($r.Stdout.IndexOf('{')) | ConvertFrom-Json) } catch { return "sonda do WAL sem JSON: $($r.Stdout)" }
+}
+
 function Post-P7($S, [string]$Csrf, [string]$Rota, [string]$Corpo) {
     Invoke-WebRequest -UseBasicParsing -Method Post -Uri "$BASE7$Rota" -WebSession $S -ContentType 'application/json' `
         -Headers @{ 'X-Studio-Token' = $Csrf } -Body $Corpo | Select-Object -ExpandProperty Content | ConvertFrom-Json
@@ -660,18 +681,27 @@ function Rodada-P7A([int]$I, $Ret) {
         $gen = Geracao-P7   # pode faltar (rascunho sem Litestream): decidido depois, com o log, em P7-LitestreamAtivo
         $antesStop = Estado-P7 $pid7
         $info.fase = $antesStop.status
-        # escritor (cadastros sequenciais) e sonda /readyz a cada 100 ms, cada um gravando num arquivo
+        $info.carga = $Carga
+        # escritores (cadastros sequenciais, quantidade e pausa pela -Carga) e sonda /readyz a cada 100 ms, cada um
+        # gravando num arquivo. Escritor j numera a partir de j*100000 (e-mails distintos); os arquivos sao juntados no fim.
+        $cg = P7-Carga $Carga
         $wf = Join-Path $Pasta "p7-$tag-escritas.txt"; $pf = Join-Path $Pasta "p7-$tag-readyz.txt"
-        $jw = Start-Job -ArgumentList $BASE7, $tag, $wf -ScriptBlock {
-            param($b, $t, $arq) $i = 0; $falhas = 0; $fim = (Get-Date).AddSeconds(90)
-            while ((Get-Date) -lt $fim -and $falhas -lt 5) {
-                $i++; $pw = -join ((48..57) + (65..90) + (97..122) | Get-Random -Count 24 | ForEach-Object { [char]$_ })
-                $body = @{ email = "w7-$t-$i@ensaio.test"; password = $pw; name = 'Ensaio P7' } | ConvertTo-Json
-                $tEnv = [DateTime]::UtcNow.Ticks
-                try { $r = Invoke-WebRequest -UseBasicParsing -Method Post -Uri "$b/api/auth/signup" -ContentType 'application/json' -Headers @{ 'X-Studio-Client' = 'game' } -Body $body -TimeoutSec 5; $c = "$($r.StatusCode)"; $falhas = 0 }
-                catch { if ($_.Exception.Response) { $c = [string][int]$_.Exception.Response.StatusCode } else { $c = 'sem_conexao'; $falhas++ } }
-                Add-Content -Path $arq -Value ("{0}`t{1}`t{2}`t{3}" -f $i, $c, [DateTime]::UtcNow.Ticks, $tEnv)   # n, codigo, resposta, envio
-            } }
+        $wfs = @(); $jws = @()
+        for ($j = 0; $j -lt $cg.escritores; $j++) {
+            $arqJ = if ($cg.escritores -eq 1) { $wf } else { Join-Path $Pasta "p7-$tag-escritas-$j.txt" }
+            $wfs += $arqJ
+            $jws += Start-Job -ArgumentList $BASE7, $tag, $arqJ, ($j * 100000), $cg.pausa_ms -ScriptBlock {
+                param($b, $t, $arq, $off, $pausa) $i = 0; $falhas = 0; $fim = (Get-Date).AddSeconds(90)
+                while ((Get-Date) -lt $fim -and $falhas -lt 5) {
+                    $i++; $n = $off + $i; $pw = -join ((48..57) + (65..90) + (97..122) | Get-Random -Count 24 | ForEach-Object { [char]$_ })
+                    $body = @{ email = "w7-$t-$n@ensaio.test"; password = $pw; name = 'Ensaio P7' } | ConvertTo-Json
+                    $tEnv = [DateTime]::UtcNow.Ticks
+                    try { $r = Invoke-WebRequest -UseBasicParsing -Method Post -Uri "$b/api/auth/signup" -ContentType 'application/json' -Headers @{ 'X-Studio-Client' = 'game' } -Body $body -TimeoutSec 5; $c = "$($r.StatusCode)"; $falhas = 0 }
+                    catch { if ($_.Exception.Response) { $c = [string][int]$_.Exception.Response.StatusCode } else { $c = 'sem_conexao'; $falhas++ } }
+                    Add-Content -Path $arq -Value ("{0}`t{1}`t{2}`t{3}" -f $n, $c, [DateTime]::UtcNow.Ticks, $tEnv)   # n, codigo, resposta, envio
+                    if ($pausa -gt 0) { Start-Sleep -Milliseconds $pausa }
+                } }
+        }
         $jp = Start-Job -ArgumentList $BASE7, $pf -ScriptBlock {
             param($b, $arq) $falhas = 0; $fim = (Get-Date).AddSeconds(90)
             while ((Get-Date) -lt $fim -and $falhas -lt 5) {
@@ -682,7 +712,7 @@ function Rodada-P7A([int]$I, $Ret) {
             } }
         $fim = (Get-Date).AddSeconds(30)
         while ((Get-Date) -lt $fim) {
-            $okW = @((Get-Content $wf -ErrorAction SilentlyContinue) | Where-Object { ($_ -split "`t")[1] -eq '200' }).Count
+            $okW = @(($wfs | ForEach-Object { Get-Content $_ -ErrorAction SilentlyContinue }) | Where-Object { ($_ -split "`t")[1] -eq '200' }).Count
             $okP = @(Get-Content $pf -ErrorAction SilentlyContinue).Count
             if ($okW -ge 3 -and $okP -ge 3) { break }; Start-Sleep -Milliseconds 200
         }
@@ -691,9 +721,19 @@ function Rodada-P7A([int]$I, $Ret) {
         $t0 = Get-Date
         $r = Invoke-Docker @('stop', '-t', '40', $CONTAINER7)
         $info.parada_s = [math]::Round(((Get-Date) - $t0).TotalSeconds, 1)
-        Wait-Job $jw, $jp -Timeout 30 | Out-Null; Stop-Job $jw, $jp -ErrorAction SilentlyContinue; Remove-Job $jw, $jp -Force
+        $info.stop_utc = ([DateTime]::new($tSig, 'Utc')).ToString('yyyy-MM-ddTHH:mm:ss.fffZ')   # relogio do Windows
+        $jobs = @($jws) + @($jp)
+        Wait-Job $jobs -Timeout 30 | Out-Null; Stop-Job $jobs -ErrorAction SilentlyContinue; Remove-Job $jobs -Force
+        if ($wfs.Count -gt 1) { Set-Content -Path $wf -Value @($wfs | ForEach-Object { Get-Content $_ -ErrorAction SilentlyContinue }) }
         if ($r.Code -ne 0) { throw ('NAO_VERIFICADO: ' + "docker stop falhou: $($r.Out)") }
-        $info.saida = (Invoke-Docker @('inspect', '--format', '{{.State.ExitCode}}', $CONTAINER7)).Stdout.Trim()
+        # so ExitCode e FinishedAt (nunca Env nem a Config inteira); sem espaco no template (PS 5.1)
+        $ins = Invoke-Docker @('inspect', '--format', '{{.State.ExitCode}};{{.State.FinishedAt}}', $CONTAINER7)
+        $pt = @($ins.Stdout.Trim() -split ';')
+        $info.saida = if ($ins.Code -eq 0) { $pt[0].Trim() } else { '' }
+        $info.finished_utc = if ($ins.Code -eq 0 -and $pt.Count -ge 2) { P7-Utc $pt[1] } else { $null }
+        # tamanhos no volume parado ANTES de qualquer outra leitura dele (o -wal pode ja ter sido apagado pelo SQLite)
+        $sonda = Sonda-WalP7 $vol
+        if ($sonda -is [string]) { $info.medicao_wal = $sonda; $sonda = $null }
         $rz = P7-Readyz @(Get-Content $pf)
         $info.readyz = $rz.sequencia; $info.readyz_503_antes_de_cair = $rz.antes_de_cair
         $logs = @((Invoke-Docker @('logs', '--timestamps', $CONTAINER7)).Out -split "`n")
@@ -702,6 +742,29 @@ function Rodada-P7A([int]$I, $Ret) {
         $info.litestream = if ($ls.ativo) { "ativo (geracao $gen)" } else { "NAO_VERIFICADO: $($ls.motivo)" }
         $el = P7-ErrosLitestream $logs $ls.ativo
         $info.erros_litestream = if (-not $ls.ativo) { 'NAO_VERIFICADO (Litestream inativo)' } elseif ($null -eq $el) { 'NAO_VERIFICADO (sem linha de SIGTERM no log)' } else { $el.Count }
+        # WAL no fechamento x erro de checkpoint (so MEDE; o veredito da rodada continua o mesmo, ver abaixo)
+        $mc = P7-Marcos $logs $el
+        $info.linha_do_tempo = P7-LinhaDoTempo $mc $info.stop_utc $info.finished_utc
+        $ps = P7-Campo $sonda 'page_size'; $psc = P7-Campo $sonda 'page_size_cabecalho'
+        if ($null -eq $ps) { $ps = $psc }
+        $info.page_size = $ps
+        if ($null -ne $psc -and $null -ne $ps -and "$psc" -ne "$ps") { $info.page_size_obs = "PRAGMA $ps x cabecalho $psc" }
+        $info.db_bytes = P7-Campo $sonda 'db_bytes'
+        $info.wal_arquivo_bytes = P7-Campo $sonda 'wal_arquivo_bytes'
+        $info.wal_arquivo_paginas = P7-PaginasWal $info.wal_arquivo_bytes $ps
+        $info.sombra = if ($null -ne (P7-Campo $sonda 'sombra_bytes')) { '{0}/{1} = {2} bytes' -f (P7-Campo $sonda 'geracao'), (P7-Campo $sonda 'sombra_indice'), (P7-Campo $sonda 'sombra_bytes') } else { 'ausente' }
+        $wl = P7-WalDoLog $logs
+        $info.wal_log = if ($wl) { '{0}/{1} = {2} bytes' -f $wl.geracao, $wl.indice, $wl.bytes } else { 'ausente' }
+        # conferencia: mesma geracao e indice na sombra e no log deveriam dar o mesmo tamanho (valida a fonte "sombra")
+        if ($wl -and "$(P7-Campo $sonda 'geracao')" -eq $wl.geracao -and "$(P7-Campo $sonda 'sombra_indice')" -eq $wl.indice) {
+            $info.wal_conferencia = if ([long](P7-Campo $sonda 'sombra_bytes') -eq $wl.bytes) { 'sombra = log' } else { "sombra $(P7-Campo $sonda 'sombra_bytes') x log $($wl.bytes)" }
+        } elseif ($wl -and $null -ne (P7-Campo $sonda 'sombra_bytes')) { $info.wal_conferencia = 'sombra e log em indices diferentes' }
+        $w = P7-EscolheWal $sonda $wl
+        $info.wal_bytes = $w.bytes; $info.wal_fonte = $w.fonte
+        $h = P7-Hipotese $w.bytes $ps (P7-ErroCheckpoint $el)
+        $info.wal_paginas = $h.paginas; $info.limite_paginas = $h.limite_paginas; $info.limite_bytes = $h.limite_bytes
+        $info.previsto_erro = $h.previsto; $info.erro_checkpoint = $h.observado
+        $info.hipotese = $h.classe; $info.hipotese_motivo = $h.motivo
         $parado = Estado-VolumeParado $vol $pid7
         $info.run_state = $parado.run_state
         $uc = P7-UltimaConfirmada @(Get-Content $wf) $tSig
@@ -760,8 +823,10 @@ function Rodada-P7B([int]$I, $Ctx) {
         $r = Invoke-Docker @('start', $CONTAINER7)
         if ($r.Code -ne 0 -or -not (Wait-Ready 120 $BASE7)) { throw ('NAO_VERIFICADO: ' + "reinicio falhou: $($r.Out)") }
         $fim = Termina-P7 $Ctx.pid
-        $info.status = $fim.status; $info.retomadas = $fim.resume_attempts
+        # eventos "resumed" (quantas vezes a producao foi retomada). Nao mostra run_state.resume_attempts: ele volta a 0
+        # quando a producao retomada termina (_mark_run idle, reset_attempts), entao seria sempre 0 aqui.
         $res = 0; if ($fim.events.PSObject.Properties['resumed']) { $res = [int]$fim.events.resumed }
+        $info.status = $fim.status; $info.resumed = $res
         if ($res -lt 1) { $f += 'nenhum evento resumed: a producao nao foi retomada pelo reinicio' }
         Checa-Retomada $Ctx.antes $fim ([ref]$f) "b$I"
     } catch {
@@ -851,6 +916,8 @@ function Prepare-P7 {
         'export LITESTREAM_ACCESS_KEY_ID="$BACKUP_R2_ACCESS_KEY_ID" LITESTREAM_SECRET_ACCESS_KEY="$BACKUP_R2_SECRET_ACCESS_KEY"',
         'mkdir -p "/ensaio/$2"',
         'STUDIO_DATA_DIR=/data litestream restore -config /etc/litestream.yml -generation "$1" -o "/ensaio/$2/studio.sqlite3" /data/studio.sqlite3')
+    # sonda do WAL no volume parado (arquivo versionado, testado no host por tests/test_ensaio_p7_wal.py)
+    Copy-Item -Force (Join-Path $PSScriptRoot 'ensaio_p7_wal.py') (Join-Path $Pasta 'sh\p7_wal.py')
 }
 
 function Salva-ParcialP7([string]$Arq, $Todas) {
@@ -861,31 +928,38 @@ function Salva-ParcialP7([string]$Arq, $Todas) {
 function Passo7($e) {
     $n = if ($Fumaca) { 1 } else { $Rodadas }
     $carimbo = Get-Date -Format 'yyyyMMdd-HHmmss'
+    $todosTipos = (($TIPOS7 -join '') -eq 'abc')
     $modo = if ($Fumaca) { 'fumaca' } else { "rodadas$n" }
+    if (-not $todosTipos) { $modo += '-' + ($TIPOS7 -join '') }
+    if ($Carga -ne 'normal') { $modo += "-$Carga" }
     $script:LOG_ARQ = Join-Path $Pasta "p7-$modo-$carimbo.log"
     $parcial = Join-Path $Pasta "p7-$modo-$carimbo.json"
-    Say "Passo 7: desligamento sob carga (producao simulada, sem custo de IA); $(if ($Fumaca) { 'FUMACA: 1 rodada de cada tipo (a1, b1, c1)' } else { "$n rodada(s) de cada tipo" })"
+    $quais = if ($Fumaca) { "FUMACA: 1 rodada de cada tipo ($(($TIPOS7 | ForEach-Object { "${_}1" }) -join ', '))" } else { "$n rodada(s) de cada tipo ($($TIPOS7 -join ', '))" }
+    Say "Passo 7: desligamento sob carga (producao simulada, sem custo de IA); $quais; carga $Carga"
     Say "  saida tambem em $($script:LOG_ARQ) e resultado parcial em $parcial"
     Assert-Vars
     $d = Invoke-Docker @('version', '--format', '{{.Server.Version}}')
     if ($d.Code -ne 0) { throw ('NAO_VERIFICADO: ' + "docker indisponivel: $($d.Out)") }
     Prepare-P7
     $todas = @()
-    for ($i = 1; $i -le $n; $i++) {
-        Say "  rodada a$i (docker stop -t 40 no meio da producao, com escritas)"
+    for ($i = 1; $i -le $n -and $TIPOS7 -contains 'a'; $i++) {
+        Say "  rodada a$i (docker stop -t 40 no meio da producao, com escritas; carga $Carga)"
         $ctx = $null
         $ra = Rodada-P7A $i ([ref]$ctx)
         $ra.GetEnumerator() | Where-Object { $_.Key -notin 'motivos' } | ForEach-Object { Say "    $($_.Key) = $($_.Value)" }
         $ra.motivos | ForEach-Object { Say "    motivo: $_" }
-        Say "  rodada b$i (reinicio no mesmo volume)"
-        $rb = Rodada-P7B $i $ctx
-        $rb.GetEnumerator() | Where-Object { $_.Key -notin 'motivos' } | ForEach-Object { Say "    $($_.Key) = $($_.Value)" }
-        $rb.motivos | ForEach-Object { Say "    motivo: $_" }
+        $todas += $ra
+        if ($TIPOS7 -contains 'b') {
+            Say "  rodada b$i (reinicio no mesmo volume)"
+            $rb = Rodada-P7B $i $ctx
+            $rb.GetEnumerator() | Where-Object { $_.Key -notin 'motivos' } | ForEach-Object { Say "    $($_.Key) = $($_.Value)" }
+            $rb.motivos | ForEach-Object { Say "    motivo: $_" }
+            $todas += $rb
+        }
         try { Remove-RodadaP7 "kiroo-ensaio-p7-a$i" } catch { Say "    limpeza falhou: $($_.Exception.Message)" }
-        $todas += $ra, $rb
         Salva-ParcialP7 $parcial $todas
     }
-    for ($i = 1; $i -le $n; $i++) {
+    for ($i = 1; $i -le $n -and $TIPOS7 -contains 'c'; $i++) {
         Say "  rodada c$i (SIGKILL no meio da producao)"
         $rc = Rodada-P7C $i
         $rc.GetEnumerator() | Where-Object { $_.Key -notin 'motivos' } | ForEach-Object { Say "    $($_.Key) = $($_.Value)" }
@@ -894,8 +968,15 @@ function Passo7($e) {
         Salva-ParcialP7 $parcial $todas
     }
     $e['p7'] = $todas
+    $as = @($todas | Where-Object { $_.rodada -like 'a*' })
+    if ($as.Count) {
+        Say "  WAL no fechamento x erro do Litestream (limite: $P7_LIMITE_PAGINAS paginas = 32 + (page_size + 24) x $P7_LIMITE_PAGINAS bytes):"
+        P7-Tabela $as | ForEach-Object { Say "    $_" }
+        Say "    $(P7-Conclusao $as)"
+        Say '    (so medicao: o veredito de cada rodada nao muda; toda linha ERROR do Litestream continua sendo FAIL)'
+    }
     Say '  resumo do passo 7:'
-    foreach ($g in @('a', 'b', 'c')) {
+    foreach ($g in $TIPOS7) {
         $x = @($todas | Where-Object { $_.rodada -like "$g*" })
         Say ("    {0}: PASS={1} FAIL={2} NAO_VERIFICADO={3}" -f $g, @($x | Where-Object { $_.resultado -eq 'PASS' }).Count,
             @($x | Where-Object { $_.resultado -eq 'FAIL' }).Count, @($x | Where-Object { $_.resultado -eq 'NAO_VERIFICADO' }).Count)

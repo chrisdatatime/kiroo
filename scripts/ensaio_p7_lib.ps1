@@ -160,3 +160,171 @@ function P7-Veredito([string[]]$Falhas, [string[]]$NaoVerificado) {
     if ($NaoVerificado.Count) { return 'NAO_VERIFICADO' }
     return 'PASS'
 }
+
+# ------------------------------------------------------------------ WAL no fechamento x erro do Litestream
+# Hipotese medida: o erro "checkpoint: mode=... err=release read lock: context canceled" no desligamento acontece se e
+# so se o WAL tiver >= 1000 paginas quando o Litestream fecha o banco. Base no codigo do Litestream v0.3.13:
+#   litestream.go  WALHeaderSize = 32; WALFrameHeaderSize = 24
+#                  func calcWALSize(pageSize int, n int) int64 { return int64(WALHeaderSize + ((WALFrameHeaderSize + pageSize) * n)) }
+#   db.go          DefaultMinCheckpointPageN = 1000
+#                  (DB.Sync) } else if newWALSize >= calcWALSize(db.pageSize, db.MinCheckpointPageN) { checkpoint = true
+# DB.Close cancela db.ctx e faz um Sync final; se esse Sync faz checkpoint, execCheckpoint reabre o read lock com
+# tx.ExecContext(db.ctx) ja cancelado e o erro sai embrulhado como "release read lock: context canceled".
+
+$P7_LIMITE_PAGINAS = 1000   # DefaultMinCheckpointPageN do Litestream v0.3.13 (litestream.yml nao muda)
+
+function P7-Campo($O, [string]$K) {
+    # Le um campo de hashtable/ordered ou de objeto (JSON) sem quebrar no StrictMode quando ele falta.
+    if ($null -eq $O) { return $null }
+    if ($O -is [System.Collections.IDictionary]) { if ($O.Contains($K)) { return $O[$K] }; return $null }
+    $p = $O.PSObject.Properties[$K]; if ($p) { return $p.Value }; return $null
+}
+
+function P7-LimiteWal([int]$PageSize, [int]$Paginas = $P7_LIMITE_PAGINAS) {
+    # calcWALSize do Litestream: tamanho, em bytes, de um WAL com $Paginas quadros.
+    return [long](32 + ([long]$PageSize + 24) * $Paginas)
+}
+
+function P7-PaginasWal($Bytes, $PageSize) {
+    # Quadros inteiros num WAL de $Bytes (cabecalho de 32 bytes; cada quadro = 24 + page_size). $null sem dado valido.
+    if ($null -eq $Bytes -or "$Bytes" -eq '' -or $null -eq $PageSize -or [int]$PageSize -lt 512) { return $null }
+    $b = [long]$Bytes
+    if ($b -le 32) { return [long]0 }
+    return [long][math]::Floor(($b - 32) / ([long]$PageSize + 24))
+}
+
+function P7-Utc([string]$T) {
+    # Horario RFC 3339 (docker logs --timestamps, docker inspect) -> 'yyyy-MM-ddTHH:mm:ss.fffZ' (UTC, ms). $null se ilegivel.
+    if ("$T" -notmatch '(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.(\d+))?Z') { return $null }
+    $f = "$($Matches[2])".PadRight(3, '0').Substring(0, 3)
+    return "$($Matches[1]).${f}Z"
+}
+
+function P7-Seg([string]$De, [string]$Ate) {
+    # Segundos de $De ate $Ate (dois horarios de P7-Utc). $null se faltar algum.
+    if (-not $De -or -not $Ate) { return $null }
+    $fmt = 'yyyy-MM-ddTHH:mm:ss.fffZ'; $ci = [Globalization.CultureInfo]::InvariantCulture
+    $st = [Globalization.DateTimeStyles]::AdjustToUniversal -bor [Globalization.DateTimeStyles]::AssumeUniversal
+    return [math]::Round(([DateTime]::ParseExact($Ate, $fmt, $ci, $st) - [DateTime]::ParseExact($De, $fmt, $ci, $st)).TotalSeconds, 3)
+}
+
+function P7-WalDoLog([string[]]$Linhas) {
+    # Ultimo 'wal segment written' do Litestream: position=<geracao>/<indice>:<offset> e sz=<bytes>. O fim do segmento
+    # (offset + sz) e o tamanho do WAL-sombra daquele indice depois do ultimo envio. $null se nao houver.
+    $u = $null
+    foreach ($l in @($Linhas)) {
+        if ("$l" -match 'msg="wal segment written".*\bposition=([0-9a-f]{16})/([0-9a-f]{8}):(\d+).*\bsz=(\d+)') {
+            $u = @{ geracao = $Matches[1]; indice = $Matches[2]; bytes = [long]$Matches[3] + [long]$Matches[4] }
+        }
+    }
+    return $u
+}
+
+function P7-ErroCheckpoint($Erros) {
+    # O erro da hipotese entre as linhas ERROR do Litestream depois do SIGTERM. $null (NAO_VERIFICADO) se elas nao foram
+    # contadas (Litestream inativo ou sem linha de SIGTERM).
+    if ($null -eq $Erros) { return $null }
+    return [bool](@($Erros | Where-Object { "$_" -match 'checkpoint: mode=\w+ err=release read lock: context canceled' }).Count)
+}
+
+function P7-Marcos([string[]]$Linhas, $Erros) {
+    # Horarios (UTC, do relogio do Docker) dos marcos do desligamento no log do container (docker logs --timestamps).
+    $m = [ordered]@{ signal_ls = $null; sigterm_app = $null; interrompidas = $null; ls_shutdown = $null; erros = @() }
+    $pad = [ordered]@{ signal_ls = 'signal received, litestream shutting down'; sigterm_app = 'SIGTERM: parando';
+        interrompidas = 'marcadas como interrompidas'; ls_shutdown = 'litestream shut down' }
+    foreach ($l in @($Linhas)) {
+        foreach ($k in @($pad.Keys)) { if (-not $m[$k] -and "$l".Contains($pad[$k])) { $m[$k] = P7-Utc ("$l" -split '\s', 2)[0] } }
+    }
+    foreach ($e in @($Erros)) {
+        if (-not $e) { continue }
+        $msg = if ("$e" -match 'msg="([^"]+)"') { $Matches[1] } else { 'error' }
+        $m.erros += "$(P7-Utc ("$e" -split '\s', 2)[0]) $msg"
+    }
+    return $m
+}
+
+function P7-LinhaDoTempo($Marcos, [string]$Stop, [string]$Finished) {
+    # Uma linha: horario do docker stop (relogio do Windows) e, relativo ao "signal received" do Litestream (relogio do
+    # Docker), cada marco do log e o fim do container. Os dois relogios podem divergir alguns ms.
+    $ref = $Marcos.signal_ls
+    $p = @("stop=$(if ($Stop) { $Stop } else { '?' })", "signal_ls=$(if ($ref) { $ref } else { '?' })")
+    $ci = [Globalization.CultureInfo]::InvariantCulture   # ponto decimal, independente da cultura do Windows
+    $rel = { param($t) if (-not $t) { '?' } elseif (-not $ref) { $t } else { [string]::Format($ci, '{0:+0.000;-0.000} s', (P7-Seg $ref $t)) } }
+    foreach ($k in @('sigterm_app', 'interrompidas', 'ls_shutdown')) { $p += "$k=$(& $rel $Marcos[$k])" }
+    foreach ($e in @($Marcos.erros)) { $t, $msg = "$e" -split ' ', 2; $p += "ERROR($msg)=$(& $rel $t)" }
+    $p += "finished=$(& $rel $Finished)"
+    return ($p -join ' | ')
+}
+
+function P7-EscolheWal($Sonda, $DoLog) {
+    # Tamanho do WAL no FECHAMENTO, por ordem de confianca:
+    #   sombra  = ultimo indice do WAL-sombra do Litestream no volume parado (copiado no Sync final do DB.Close);
+    #   log     = fim do ultimo 'wal segment written' (o mesmo dado, visto pelo envio);
+    #   arquivo = o studio.sqlite3-wal no volume parado. Pouco confiavel: o SQLite costuma APAGAR o -wal quando a ultima
+    #             conexao fecha, e depois de um reinicio do WAL o arquivo guarda o tamanho maximo, nao o conteudo atual.
+    $sb = P7-Campo $Sonda 'sombra_bytes'; $wa = P7-Campo $Sonda 'wal_arquivo_bytes'
+    if ($null -ne $sb) { return @{ bytes = [long]$sb; fonte = 'sombra' } }
+    if ($DoLog) { return @{ bytes = [long]$DoLog.bytes; fonte = 'log' } }
+    if ($null -ne $wa) { return @{ bytes = [long]$wa; fonte = 'arquivo' } }
+    return @{ bytes = $null; fonte = 'nenhuma' }
+}
+
+function P7-Hipotese($WalBytes, $PageSize, $ErroCheckpoint, [int]$LimitePaginas = $P7_LIMITE_PAGINAS) {
+    # Previsto: erro de checkpoint no fechamento  <=>  wal_bytes >= calcWALSize(page_size, 1000).
+    # classe: consistente | contraexemplo | indeterminada (falta WAL, page_size ou contagem de erros).
+    $pg = P7-PaginasWal $WalBytes $PageSize
+    $lim = if ($null -ne $PageSize -and [int]$PageSize -ge 512) { P7-LimiteWal ([int]$PageSize) $LimitePaginas } else { $null }
+    $o = [ordered]@{ paginas = $pg; limite_paginas = $LimitePaginas; limite_bytes = $lim; previsto = $null; observado = $ErroCheckpoint; classe = 'indeterminada'; motivo = '' }
+    if ($null -eq $pg -or $null -eq $lim) { $o.motivo = 'WAL ou page_size desconhecido'; return $o }
+    if ($null -eq $ErroCheckpoint) { $o.motivo = 'erros do Litestream NAO_VERIFICADO'; return $o }
+    $o.previsto = ([long]$WalBytes -ge $lim)
+    if ($o.previsto -eq [bool]$ErroCheckpoint) { $o.classe = 'consistente'; return $o }
+    $o.classe = 'contraexemplo'
+    $o.motivo = if ($o.previsto) { "WAL com $pg paginas (>= $LimitePaginas) e SEM erro de checkpoint" } else { "erro de checkpoint com WAL de $pg paginas (< $LimitePaginas)" }
+    return $o
+}
+
+function P7-Conclusao($Rodadas) {
+    # "hipotese consistente em N de M rodadas / contraexemplos: ..." (M exclui as indeterminadas, listadas a parte).
+    $x = @($Rodadas | Where-Object { $_ })
+    $con = @($x | Where-Object { (P7-Campo $_ 'hipotese') -eq 'consistente' })
+    $ctr = @($x | Where-Object { (P7-Campo $_ 'hipotese') -eq 'contraexemplo' })
+    $ind = @($x | Where-Object { (P7-Campo $_ 'hipotese') -notin @('consistente', 'contraexemplo') })
+    $t = "hipotese consistente em $($con.Count) de $($con.Count + $ctr.Count) rodadas / contraexemplos: "
+    $mot = { param($r) $m = P7-Campo $r 'hipotese_motivo'; if ($m) { "$m" } else { 'sem medicao' } }
+    $t += if ($ctr.Count) { ($ctr | ForEach-Object { "$(P7-Campo $_ 'rodada') ($(& $mot $_))" }) -join '; ' } else { 'nenhum' }
+    if ($ind.Count) { $t += ' / indeterminadas: ' + (($ind | ForEach-Object { "$(P7-Campo $_ 'rodada') ($(& $mot $_))" }) -join '; ') }
+    return $t
+}
+
+function P7-Tabela($Rodadas) {
+    # Tabela final das rodadas "a" (texto de largura fixa para o log).
+    $f = '{0,-6} {1,-7} {2,10} {3,-8} {4,8} {5,8} {6,5} {7,10} {8,-14} {9}'
+    $l = @(($f -f 'rodada', 'carga', 'wal_bytes', 'fonte', 'wal_pag', 'limite', 'saida', 'erros_ls', 'resultado', 'hipotese'))
+    foreach ($r in @($Rodadas | Where-Object { $_ })) {
+        $v = { param($k) $x = P7-Campo $r $k; if ($null -eq $x -or "$x" -eq '') { '?' } else { "$x" } }
+        $el = & $v 'erros_litestream'; if ($el -like 'NAO_VERIFICADO*') { $el = 'NAO_VERIF' }
+        $l += ($f -f (& $v 'rodada'), (& $v 'carga'), (& $v 'wal_bytes'), (& $v 'wal_fonte'), (& $v 'wal_paginas'), (& $v 'limite_paginas'),
+            (& $v 'saida'), $el, (& $v 'resultado'), (& $v 'hipotese'))
+    }
+    return , $l
+}
+
+function P7-Carga([string]$Nivel) {
+    # So o ritmo dos cadastros do ensaio (o servidor nao muda): escritores em paralelo e pausa entre cadastros.
+    switch ($Nivel) {
+        'baixa' { return @{ escritores = 1; pausa_ms = 1000 } }
+        'normal' { return @{ escritores = 1; pausa_ms = 0 } }
+        'alta' { return @{ escritores = 3; pausa_ms = 0 } }
+        default { throw "carga invalida: '$Nivel' (baixa | normal | alta)" }
+    }
+}
+
+function P7-Tipos([string[]]$Tipos) {
+    # -Tipos: aceita 'a','c' ou 'a,c' (powershell -File entrega "a,c" como UMA string). b depende do volume de a.
+    $t = @(@($Tipos) | ForEach-Object { "$_" -split '[,\s]+' } | Where-Object { $_ } | ForEach-Object { $_.ToLowerInvariant() } | Select-Object -Unique)
+    if (-not $t.Count) { throw '-Tipos vazio (use a, b e/ou c)' }
+    foreach ($x in $t) { if ($x -notin @('a', 'b', 'c')) { throw "-Tipos invalido: '$x' (use a, b e/ou c)" } }
+    if ($t -contains 'b' -and $t -notcontains 'a') { throw "-Tipos recusado: 'b' (reinicio no mesmo volume) depende da rodada 'a'; use -Tipos a,b" }
+    return , @(@('a', 'b', 'c') | Where-Object { $t -contains $_ })
+}
