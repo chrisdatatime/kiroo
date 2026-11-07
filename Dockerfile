@@ -66,8 +66,11 @@ RUN python fetch_litestream.py --lock litestream.lock --out /out/litestream
 FROM python:3.12-slim AS runtime
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core tini rclone \
- && rm -rf /var/lib/apt/lists/*
+ && apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core tini rclone util-linux \
+ && rm -rf /var/lib/apt/lists/* \
+ && command -v setpriv >/dev/null
+# setpriv é como o entrypoint desce de privilégio quando a plataforma monta o volume como root (docs/RAILWAY.md).
+# O `command -v` acima faz o BUILD falhar se um dia ele deixar de vir: sem setpriv o app ficaria como root.
 RUN groupadd --system --gid 10001 kiroo \
  && useradd --system --uid 10001 --gid kiroo --home-dir /nonexistent --shell /usr/sbin/nologin kiroo \
  && mkdir -p /data /reference \

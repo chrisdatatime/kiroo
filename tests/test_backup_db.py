@@ -32,6 +32,39 @@ def test_entrypoint_rejects_invalid_env(tmp_path):
     assert run_entry(tmp_path, {"STUDIO_ENV": "prod"}).returncode == 2
 
 
+# ------------------------------------------------------------------ volume montado como root (Railway)
+def test_entrypoint_conserta_volume_e_desce_de_privilegio_antes_de_subir():
+    """O conserto do dono acontece como root e a troca de usuário vem ANTES do Litestream e do servidor.
+
+    A prova dinâmica (docker, volume de verdade, com controle positivo) está em scripts/verify_volume_uid.py.
+    """
+    t = (ROOT / "docker" / "entrypoint.sh").read_text(encoding="utf-8")
+    i_chown = t.index('chown "$APP_UID:$APP_GID" "$DATA"')
+    i_recursivo = t.index('chown -R "$APP_UID:$APP_GID" "$DATA"')
+    i_drop = t.index("exec setpriv --reuid=")
+    assert i_chown < i_recursivo < i_drop                                  # conserta, depois desce
+    assert i_drop < t.index('exec "$@"') and i_drop < t.index("exec litestream replicate")
+    assert '[ "$(id -u)" = "0" ]' in t                                     # só mexe em privilégio se for root
+    assert '[ "${KIROO_PRIV_DROPPED:-0}" != "1" ]' in t                    # a re-execução não entra em laço
+    for flag in ("--clear-groups", "--no-new-privs", "--inh-caps=-all"):   # nada de capacidade herdada
+        assert flag in t, flag
+    assert "KIROO_SKIP_PRIV_DROP" in t and "ROOT (plano B)" in t           # plano B existe e avisa alto
+    assert "-quit" in t                                                    # não varre o volume inteiro sem precisar
+
+
+def test_dockerfile_garante_setpriv_no_build():
+    df = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+    assert "util-linux" in df and "command -v setpriv" in df                # sem setpriv o app ficaria como root
+
+
+@needs_bash
+def test_entrypoint_sem_root_nao_toca_em_privilegio(tmp_path):
+    """Caminho Docker/compose (já entra como kiroo): nenhum chown, nenhum aviso de root."""
+    p = run_entry(tmp_path, {"STUDIO_ENV": "staging"})
+    assert p.returncode == 0 and "SERVIDOR subiu" in p.stdout
+    assert "ajustando o dono" not in p.stderr and "ROOT" not in p.stderr
+
+
 
 # ------------------------------------------------------------------ configuração e avisos do servidor
 def test_backup_warning_only_in_staging_and_production():
