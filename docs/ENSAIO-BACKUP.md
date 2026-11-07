@@ -55,6 +55,19 @@ Faz: confere `STUDIO_ENV=staging`, as 4 variáveis (`BACKUP_R2_ENDPOINT`, `BACKU
 `BACKUP_R2_PREFIX`; cria a pasta (com marcador) e o volume `kiroo-ensaio-dados` com rótulo; lista `ensaio/db` e `ensaio/media` (prova
 leitura no bucket); anota data de criação e tamanho de `kiroo_kiroo-data`.
 
+Também compara o commit gravado na imagem (rótulo `org.opencontainers.image.revision`) com o `HEAD` da branch.
+Se forem diferentes, avisa e lista os arquivos que entram na imagem e mudaram desde então (`scripts`, `docker`,
+`litestream.yml`, `Dockerfile`, `src`). **Mudanças em scripts só valem no ensaio depois de reconstruir a imagem.**
+É só aviso, não muda o resultado. Construa sempre com o commit (PowerShell, na raiz do repositório):
+
+```powershell
+docker build --build-arg "GIT_COMMIT=$(git rev-parse HEAD)" -t kiroo:dados .
+```
+
+Isso funciona sem as credenciais de leitura do R2 enquanto a camada de assets (`fetch_assets.py`) estiver no
+cache do BuildKit: os secrets são opcionais e não entram na chave de cache. Sem cache, acrescente os três
+`--secret` (docs/DOCKER.md). Não use `--no-cache` nem `--pull`.
+
 **Esperado:** quatro linhas `presente`, `volume kiroo-ensaio-dados criado com rotulo`, `objetos ja existentes:
 ensaio/db=0 ensaio/media=0` (ou o aviso de sobras de ensaio anterior), `RESULTADO passo 1: PASS`.
 
@@ -146,6 +159,13 @@ as linhas `ERRO`/`FALHOU` do `backup_media.sh`.
 - código 4 → outra execução com o mesmo lock (não deveria ocorrer em container novo).
 - nada em `archive/` → o `--backup-dir` não foi usado/aceito; veja a saída do rclone.
 - `pare o container do ensaio antes` → rode o passo 3.
+- `variaveis ausentes: ...` (`NAO_VERIFICADO`) → os passos 4 e 5 exigem `STUDIO_ENV`, `BACKUP_BUCKET` e as três
+  `BACKUP_R2_*` no terminal; a mensagem lista as que faltam (só nomes).
+- código 2 → o ensaio mostra a mensagem do `backup_media.sh` (variável ausente, argumento inválido, etc.).
+
+Leituras de conteúdo (`rclone cat`, `rclone lsf`, `verify_restore.py`) usam **só o stdout**. O rclone escreve
+avisos no stderr (por exemplo `NOTICE: Config file "/nonexistent/.rclone.conf" not found`), que aparecem à parte
+e não entram na comparação. A comparação é exata: `versao-1` no archive e `versao-2` no current.
 
 ### Diagnóstico do 501 (`-Passo 4 -Diagnostico`)
 

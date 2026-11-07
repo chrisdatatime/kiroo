@@ -75,8 +75,13 @@ docker compose build
 Ou direto, com `docker build` (um comando, funciona igual no PowerShell e no bash):
 
 ```bash
-docker build --secret id=r2_account_id,env=R2_ACCOUNT_ID --secret id=r2_access_key_id,env=R2_ACCESS_KEY_ID --secret id=r2_secret_access_key,env=R2_SECRET_ACCESS_KEY -t kiroo:local .
+docker build --secret id=r2_account_id,env=R2_ACCOUNT_ID --secret id=r2_access_key_id,env=R2_ACCESS_KEY_ID --secret id=r2_secret_access_key,env=R2_SECRET_ACCESS_KEY --build-arg "GIT_COMMIT=$(git rev-parse HEAD)" -t kiroo:local .
 ```
+
+`GIT_COMMIT` grava o commit no rótulo `org.opencontainers.image.revision` (não é segredo). Confira com
+`docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' kiroo:local`.
+No `docker compose build`, exporte antes `GIT_COMMIT` (bash: `export GIT_COMMIT=$(git rev-parse HEAD)`;
+PowerShell: `$env:GIT_COMMIT = git rev-parse HEAD`); sem ela o rótulo fica `desconhecido`.
 
 Se faltar algum secret, o build falha cedo e diz qual (`secrets de build ausentes ou vazios: ...`), sem tentar a rede. Se o SHA256 do pacote não bater com `assets.lock`, falha antes de abrir o ZIP.
 
