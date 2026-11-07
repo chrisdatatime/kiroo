@@ -90,10 +90,7 @@ STUDIO_ALLOWED_HOSTS=staging.kiroo.app
 STUDIO_SECURE_COOKIE=1
 STUDIO_TRUST_PROXY=cloudflare
 STUDIO_MAIL_FROM=Kiroo <nao-responda@kiroo.app>
-STUDIO_SMTP_HOST=smtp.resend.com
-STUDIO_SMTP_PORT=465
-STUDIO_SMTP_SECURITY=ssl
-STUDIO_SMTP_USER=resend
+STUDIO_MAIL_TRANSPORT=resend_api
 BACKUP_BUCKET=kiroo-backups
 BACKUP_R2_ENDPOINT=https://SUA_CONTA.r2.cloudflarestorage.com
 STUDIO_RESTORE_ON_EMPTY=1
@@ -103,6 +100,12 @@ RAILWAY_RUN_UID=0
 ```
 
 Três avisos que valem o tempo de ler:
+
+- **E-mail: use `STUDIO_MAIL_TRANSPORT=resend_api`.** O Railway bloqueia a saída SMTP: `smtp.resend.com` nas portas
+  465 e 587 estoura `TimeoutError` (medido no staging; o cadastro chegou a levar 30 s). A API HTTPS do Resend passa.
+  Com ela só são necessárias `STUDIO_SMTP_PASSWORD` (a chave, selada) e `STUDIO_MAIL_FROM`; `STUDIO_SMTP_HOST`,
+  `_PORT`, `_USER` e `_SECURITY` ficam de fora. Se o envio falhar, o cadastro responde em até ~12 s dizendo que o
+  e-mail não saiu e que o administrador pode confirmar o código.
 
 - **Não defina `STUDIO_PORT`.** O Railway injeta `PORT` e o código a usa. `STUDIO_PORT` venceria a
   da plataforma e o healthcheck bateria na porta errada.

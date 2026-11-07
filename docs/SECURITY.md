@@ -10,7 +10,12 @@ Variáveis: [.env.example](../.env.example) e [RUNBOOK.md](RUNBOOK.md).
 - SMTP pronto para o Resend (`smtp.resend.com`, usuário `resend`, senha = chave de API), TLS direto na 465 ou
   STARTTLS nas outras portas; `STUDIO_SMTP_SECURITY=none` só é aceito para 127.0.0.1/localhost. Remetente
   `STUDIO_MAIL_FROM` obrigatório em staging/produção. Mensagens em PT-BR com `Content-Language: pt-BR`, `Message-ID`
-  do domínio do remetente e `Auto-Submitted`. Recusa cabeçalho com quebra de linha. — `src/studio/mailer.py`
+  do domínio do remetente e `Auto-Submitted`.
+  Segundo transporte, `STUDIO_MAIL_TRANSPORT=resend_api` (padrão `smtp`): HTTPS para `api.resend.com` com
+  `Authorization: Bearer` (a mesma chave de `STUDIO_SMTP_PASSWORD`), só biblioteca padrão, timeout de 10 s, sem seguir
+  redirecionamentos (a chave não é reenviada a outro destino) e rejeitando quebra de linha em chave/destinatário/assunto.
+  O envio inteiro tem teto de 12 s em qualquer transporte, então um SMTP/API travado não segura a resposta do cadastro.
+  Em falha o log traz só o tipo do erro ou o status HTTP: nunca a chave, o corpo da resposta, o e-mail, o código ou o link. Recusa cabeçalho com quebra de linha. — `src/studio/mailer.py`
 - Código de confirmação: 6 dígitos, 30 min, uso único, 5 tentativas, reenvio a cada 45 s. Link de nova senha: 30 min,
   uso único, só o último pedido vale, derruba as sessões. — `src/studio/accounts.py`
 - Falha fechada: em staging/produção (`STUDIO_ENV` ou `STUDIO_SECURE_COOKIE=1`) sem SMTP completo, nada é enviado e

@@ -79,13 +79,17 @@ desligamento: grace 25s + settle 3s; a plataforma precisa dar pelo menos 35s (ST
 | Variável | Obrig. | Segredo | Quando | Valor no staging | Para que serve |
 |---|---|---|---|---|---|
 | `STUDIO_MAIL_FROM` | **sim** | não | execução | `Kiroo <nao-responda@kiroo.app>` | Remetente. O domínio precisa estar verificado no Resend (SPF e DKIM), senão a mensagem não sai ou cai em spam. |
-| `STUDIO_SMTP_HOST` | **sim** | não | execução | `smtp.resend.com` | Servidor de envio. |
+| `STUDIO_MAIL_TRANSPORT` | não | não | execução | `resend_api` | `smtp` (padrão) ou `resend_api`. **No Railway use `resend_api`**: a plataforma bloqueia a saída SMTP (465/587 dão `TimeoutError`). `resend_api` envia por HTTPS (`POST https://api.resend.com/emails`, `Authorization: Bearer <chave>`, timeout de 10 s) e **não usa** `STUDIO_SMTP_HOST`, `_PORT`, `_USER` nem `_SECURITY`. Valor desconhecido = envio desligado (falha fechada). |
+| `STUDIO_SMTP_HOST` | **sim** (só `smtp`) | não | execução | `smtp.resend.com` | Servidor de envio. Ignorado com `resend_api`. |
 | `STUDIO_SMTP_PORT` | **sim** | não | execução | `465` | `465` usa TLS direto. `587` existe, mas exige `STUDIO_SMTP_SECURITY=starttls`. |
 | `STUDIO_SMTP_SECURITY` | não | não | execução | `ssl` | `ssl` para 465, `starttls` para as outras. Vazio deixa o código decidir pela porta; preencher evita surpresa. |
 | `STUDIO_SMTP_USER` | **sim** | não | execução | `resend` | No Resend o usuário é literalmente `resend`. |
-| `STUDIO_SMTP_PASSWORD` | **sim** | **sim** | execução | `re_FICTICIA_nao_use` | A chave de API do Resend. **Selada.** |
+| `STUDIO_SMTP_PASSWORD` | **sim** | **sim** | execução | `re_FICTICIA_nao_use` | A chave de API do Resend, nos dois transportes (senha SMTP ou token Bearer). **Selada.** |
 
-> Sem `STUDIO_SMTP_HOST` e `STUDIO_MAIL_FROM` em staging nada é enviado **e o conteúdo não vai para o log**
+> O envio inteiro tem teto de 12 s: se o Resend não responder, o cadastro volta na hora com `sent: false` e a
+> mensagem de que o envio falhou e o administrador pode confirmar o código (`studio admin verify-email`).
+>
+> Sem `STUDIO_SMTP_HOST` (transporte `smtp`) ou sem `STUDIO_MAIL_FROM` em staging nada é enviado **e o conteúdo não vai para o log**
 > (em dev iria). Então convite e confirmação de e-mail simplesmente não chegam: configure antes de testar
 > o cadastro de ponta a ponta.
 
