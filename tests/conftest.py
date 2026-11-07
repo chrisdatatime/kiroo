@@ -14,6 +14,14 @@ from studio.providers.simulated import SimulationScript, placeholder_png
 FAKE_KEY = "AIzaFAKE-TEST-SECRET-0123456789"
 
 
+@pytest.fixture(autouse=True)
+def _rate_limit_off_by_default(monkeypatch):
+    """Os testes fazem dezenas de cadastros e consultas seguidas do mesmo "IP": o limite de requisições fica desligado,
+    salvo nos testes que tratam dele (tests/test_rate_limit.py passa a configuração explicitamente)."""
+    from studio import ratelimit
+    monkeypatch.setattr(ratelimit, "DEFAULT_ON", False)
+
+
 @pytest.fixture
 def settings(tmp_path, monkeypatch):
     for var in [v for v in os.environ if v.startswith("STUDIO_")]:

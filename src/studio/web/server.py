@@ -47,6 +47,7 @@ from ..orchestrator import OrchestratorError
 from ..profiles import KINDS, available_versions, load_profile
 from ..profiles import snapshot as snapshot_profiles
 from ..providers.simulated import SimulationScript
+from ..ratelimit import RateLimitConfig, RateLimiter, classify as rate_bucket
 from ..shutdown import HTTP_CLOSE_S, Inflight, SignalController, minimum_platform_s, settle
 from ..runtime import backup_blocks_ready, backup_start_error, backup_warning, InstanceLockError, ServerConfig, acquire_instance_lock, client_ip, release_instance_lock
 from ..spend import spend_report
@@ -148,7 +149,7 @@ class App:
     def __init__(self, port: int = 8765, *, settings_loader=load_settings, sim_pacing: bool = True,
                  allowed_hosts: set[str] | None = None, secure_cookie: bool | None = None,
                  public_host: str | None = None, signup: str | None = None, trust_proxy: str | None = None,
-                 config: ServerConfig | None = None):
+                 config: ServerConfig | None = None, rate_limits: RateLimitConfig | None = None):
         cfg = config or ServerConfig.from_env()
         self.cfg = cfg
         self.port = port
@@ -170,6 +171,7 @@ class App:
         self.errors: dict[str, str] = {}
         self.lock = threading.Lock()
         self.chat = AgentChat()  # conversa com os agentes (Fase 6); testes trocam o caller por um mock
+        self.limiter = RateLimiter(rate_limits)   # memória do processo: vale porque há uma instância só
         # Login com Google: só aparece com as duas variáveis definidas. Testes trocam google_http por um mock.
         try:  # carrega o .env antes de ler as variáveis do Google e do SMTP
             self.load_settings()
@@ -475,6 +477,13 @@ class App:
             return self.health(path)
         if headers.get("Host", "").lower() not in self.allowed_hosts:
             return _json(403, {"error": "host não permitido"})
+        if path.startswith("/api/"):   # limite por IP antes de abrir o banco
+            ip = self._client_ip(headers)
+            limited = self._limited("api_ip", ip)
+            if not limited and path.startswith("/api/auth/") and (method == "POST" or path == "/api/auth/google/start"):
+                limited = self._limited("auth", ip)
+            if limited:
+                return limited
         try:
             # --- públicas: o jogo (que mostra a tela de entrar) e seus arquivos
             if method == "GET" and path in ("/", "/index.html") and (GAME_DIST / "index.html").is_file():
@@ -516,6 +525,16 @@ class App:
                 if method == "GET" and path in ("/painel", "/painel/", "/"):
                     return Response(302, "text/plain", b"", headers={"Location": "/"}) if path != "/" else _json(401, {"error": "entre na sua conta"})
                 return _json(401, {"error": "entre na sua conta"})
+            payload = None
+            if path.startswith("/api/"):   # limite por usuário: geral e, nas rotas caras, o específico
+                payload = json.loads(body or b"{}") if method == "POST" else None
+                has_file = isinstance(payload, dict) and bool(payload.get("file"))
+                limited = self._limited("api_user", sess["user_id"])
+                bucket = rate_bucket(method, path, has_file)
+                if not limited and bucket:
+                    limited = self._limited(bucket, sess["user_id"])
+                if limited:
+                    return limited
             ctx = {"sess": sess, "ws": ws, "wid": ws["id"], "admin": bool(sess["is_platform_admin"]),
                    "s": self.ws_settings(s, ws), "workspaces": workspaces}
 
@@ -524,12 +543,19 @@ class App:
             if method == "POST":
                 if headers.get("X-Studio-Token") != sess["csrf"]:
                     return _json(403, {"error": "token ausente ou inválido"})
-                return self._post(path, json.loads(body or b"{}"), ctx, token)
+                return self._post(path, payload if payload is not None else json.loads(body or b"{}"), ctx, token)
             return _json(405, {"error": "método não permitido"})
         except AuthError as exc:
             return _json(400, {"error": str(exc)})
         except (OrchestratorError, ValueError, KeyError, StorageError, UploadError) as exc:
             return _json(400, {"error": str(exc)})  # TrainingError e MusicError são ValueError
+
+    def _limited(self, bucket: str, key: str) -> Response | None:
+        wait = self.limiter.hit(bucket, key)
+        if wait is None:
+            return None
+        return _json(429, {"error": f"Muitas requisições em pouco tempo. Tente de novo em {wait} s.", "retry_after": wait},
+                     {"Retry-After": str(wait)})
 
     # --- autenticação
     def _auth(self, path: str, headers: dict, p: dict) -> Response:
@@ -546,7 +572,8 @@ class App:
                     key = f"s:{ip}"
                     code = str(p.get("invite") or "")
                     if acc.throttled(key):
-                        return _json(429, {"error": f"muitas tentativas; espere {LOGIN_WINDOW_MIN} minutos"})
+                        return _json(429, {"error": f"muitas tentativas; espere {LOGIN_WINDOW_MIN} minutos"},
+                                     {"Retry-After": str(LOGIN_WINDOW_MIN * 60)})
                     # tempo constante: compara com todos os códigos, sem parar no primeiro que bate
                     matched = 0
                     for c in self.cfg.invite_codes:
