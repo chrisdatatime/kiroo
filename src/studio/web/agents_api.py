@@ -77,6 +77,11 @@ def _execute_test(app, tr, db, agent, task, ctx, confirm_estimate):
         if not simulated:
             if not confirm_estimate:
                 raise TrainingError("confirme o consumo estimado antes do teste pago")
+            from .. import paid_gate
+            try:   # kill switch, ambiente, teto da plataforma e do agente
+                paid_gate.check_spend(db, estimate, workspace_id=wid, agent=agent)
+            except paid_gate.PaidCallsBlocked as exc:
+                raise TrainingError(str(exc)) from None
             cap = ws["monthly_cap_usd"]
             spent = month_real_spend(db, workspace_id=wid)
             if cap <= 0 or spent + estimate > cap:

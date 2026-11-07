@@ -20,6 +20,7 @@ import time
 import unicodedata
 from collections import deque
 from dataclasses import dataclass
+from types import SimpleNamespace
 from datetime import datetime
 from typing import Callable
 
@@ -190,6 +191,7 @@ FALLBACK = {
     "cooldown": "Calma, deixa eu terminar de pensar! Manda de novo em alguns segundos.",
     "busy": "Ainda estou respondendo a mensagem anterior.",
     "off": "Hoje estou sem cabeça para papo longo. Posso te dizer o que faço, como está a missão ou o que precisa de você.",
+    "paused": "A conversa com IA está pausada pela equipe do Kiroo agora. Ainda posso te dizer o que faço, como está a missão ou o que precisa de você.",
     "error": "Me perdi aqui no meio do trabalho. Tenta perguntar de outro jeito daqui a pouco?",
     "empty": "Manda uma pergunta que eu respondo.",
     "long": "Essa ficou comprida! Me pergunta em poucas palavras?",
@@ -204,6 +206,8 @@ Caller = Callable[[dict, float], dict]  # (pedido, timeout) -> {"text", "input_t
 
 def anthropic_caller(request: dict, timeout: float) -> dict:
     """Chamada real (SDK oficial). Sem retries do SDK: falhou, cai na resposta pronta."""
+    from . import paid_gate
+    paid_gate.check()   # trava final: kill switch / ambiente, antes de abrir conexão
     import anthropic  # opcional: pip install -e ".[chat]"
 
     client = anthropic.Anthropic(timeout=timeout, max_retries=0)  # lê ANTHROPIC_API_KEY do ambiente
@@ -309,7 +313,9 @@ class AgentChat:
     def _quota_view(self, cfg: ChatConfig, u: dict, now: float) -> dict:
         left_day, left_hour = max(0, cfg.per_day - u["day"]), max(0, cfg.per_hour - u["hour"])
         wait = max(0.0, cfg.cooldown_s - (now - u["last"])) if u["last"] else 0.0
-        ai = cfg.enabled and u["global_tokens"] < cfg.global_daily_tokens and self.caller is not None
+        from . import paid_gate
+        ai = (cfg.enabled and u["global_tokens"] < cfg.global_daily_tokens and self.caller is not None
+              and paid_gate.blocked_reason() is None)
         blocked = "quota_day" if left_day <= 0 else "quota_hour" if left_hour <= 0 else None
         return {"remaining": min(left_day, left_hour), "remaining_day": left_day, "remaining_hour": left_hour,
                 "per_day": cfg.per_day, "cooldown_s": round(wait, 1), "ai": ai, "blocked": blocked,
@@ -375,8 +381,18 @@ class AgentChat:
             else:
                 caller = self.caller
                 ai_on = cfg.enabled and caller is not None and u["global_tokens"] < cfg.global_daily_tokens
+                blocked = None
+                if ai_on:   # kill switch, ambiente, teto da plataforma e teto diário do agente (estimativa do pior caso)
+                    from . import paid_gate
+                    worst = self.cost(cfg, 2000, cfg.max_tokens)
+                    try:
+                        paid_gate.check_spend(SimpleNamespace(conn=conn), worst, workspace_id=workspace_id, agent=agent)
+                    except paid_gate.PaidCallsBlocked as exc:
+                        blocked = exc.reason
                 if not ai_on:
                     answer, source = FALLBACK["off"], "sem_ia"
+                elif blocked:
+                    answer, source = FALLBACK["paused"], "sem_ia"
                 else:
                     req = build_request(cfg, agent, ctx, list(self.history.get(key, [])), text)
                     try:

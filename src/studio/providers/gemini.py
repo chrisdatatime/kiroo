@@ -20,7 +20,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from .. import pricing
+from .. import paid_gate, pricing
 from ..models import ReviewResult, SceneSpec, Script
 from .base import (ImageRequest, OpResult, OpState, PermanentError, PlanningContext, ProviderBillingError,
                    TransientError, VideoRequest)
@@ -109,6 +109,7 @@ class _InteractionsGenerator:
         return op_id
 
     def _create(self, **body) -> str:
+        paid_gate.check()   # kill switch / ambiente: recusa antes de qualquer rede (o orquestrador já checou; isto é a trava final)
         if not self.background:
             return self._start_sync(body)
         try:
@@ -223,6 +224,7 @@ class _GeminiText:
         self._c = None
 
     def _ask_json(self, parts: list[dict]) -> tuple[dict, dict]:
+        paid_gate.check()
         if self._c is None:
             self._c = _client(self._api_key)
         try:

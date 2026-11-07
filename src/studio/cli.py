@@ -234,7 +234,11 @@ def main(argv: list[str] | None = None) -> int:
     setup_logging(settings.data_dir / "logs", settings.secret_values(), args.verbose, json_stdout=serving)
 
     if args.cmd == "doctor":
+        from . import paid_gate
+        g = paid_gate.status()
         print(f"modo: {settings.mode} | chamadas pagas permitidas: {settings.allow_paid_calls}")
+        print(f"portão de chamadas pagas ({g['environment']}): {'BLOQUEADO (' + g['reason'] + ')' if g['blocked'] else 'aberto'}"
+              f" | teto da plataforma US${g['platform_cap_usd']:.2f}/mês | teto por agente US${g['agent_daily_cap_usd']:.2f}/dia")
         print(f"GEMINI_API_KEY definida: {'sim' if settings.gemini_api_key else 'não'}")
         print(f"ffmpeg: {settings.ffmpeg_bin or 'NÃO ENCONTRADO'}")
         print(f"ffprobe: {settings.ffprobe_bin or 'NÃO ENCONTRADO'}")

@@ -399,7 +399,7 @@ class Orchestrator:
                 total += a["confirmed_cost_usd"]
         return round(total, 4)
 
-    def _check_budget(self, pid: str, estimate: float, what: str) -> None:
+    def _check_budget(self, pid: str, estimate: float, what: str, stage: str | None = None) -> None:
         prod = self.db.production(pid)
         budget = prod["budget_usd"]
         committed = self.committed_cost(pid)
@@ -408,8 +408,15 @@ class Orchestrator:
             reason = (f"orçamento insuficiente para {what}: comprometido US${committed:.4f} + estimado "
                       f"US${estimate:.4f} > limite US${budget:.2f}")
         elif prod["mode"] == "real" and estimate > 0:
+            from . import paid_gate
             from .spend import month_real_spend
             wid = prod["workspace_id"] if "workspace_id" in prod.keys() else None
+            try:   # kill switch, liberação do ambiente, teto da plataforma e teto diário do agente
+                paid_gate.check_spend(self.db, estimate, workspace_id=wid, agent=paid_gate.KIND_AGENT.get(stage or ""))
+            except paid_gate.PaidCallsBlocked as exc:
+                self.db.set_production_status(pid, PS.PAUSED, str(exc))
+                log.warning("[%s] chamada paga bloqueada (%s) para %s", pid, exc.reason, what)
+                raise BudgetExceeded(str(exc)) from None
             ws = self.db.conn.execute("SELECT * FROM workspaces WHERE id=?", (wid,)).fetchone() if wid else None
             cap = ws["monthly_cap_usd"] if ws else self.s.monthly_cap_usd  # teto e gasto são do workspace
             spent = month_real_spend(self.db, workspace_id=wid)
@@ -435,7 +442,7 @@ class Orchestrator:
 
     def _hold(self, pid: str, estimate: float, what: str, stage: str) -> str | None:
         """Orçamento + teto do mês + reserva de créditos do workspace, nessa ordem. Sem saldo → pausa."""
-        self._check_budget(pid, estimate, what)
+        self._check_budget(pid, estimate, what, stage)
         wid = self._wid(pid)
         if wid is None or estimate <= 0 or self.db.production(pid)["mode"] != "real":
             return None  # DEMO e produções sem workspace (CLI antiga) não usam créditos

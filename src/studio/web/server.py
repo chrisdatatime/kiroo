@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlencode, urlparse
 
-from .. import agent_config, creative_options, mailer
+from .. import agent_config, creative_options, mailer, paid_gate
 from ..agent_chat import AgentChat
 from ..accounts import LOGIN_WINDOW_MIN, RESET_MINUTES, VERIFY_MINUTES, Accounts, AuthError
 from ..config import load_settings
@@ -621,7 +621,8 @@ class App:
                                                        "step": int(ctx["sess"]["onboarding_step"] or 0)}},
                                "workspace": {"id": ws["id"], "name": ws["name"], "mode": s.mode, "allow_real": bool(ws["allow_real"]),
                                              "credits": credits},
-                               "workspaces": [{"id": w["id"], "name": w["name"], "role": w["role"]} for w in ctx["workspaces"]]})
+                               "workspaces": [{"id": w["id"], "name": w["name"], "role": w["role"]} for w in ctx["workspaces"]],
+                               "paid_calls": {k: v for k, v in paid_gate.status().items() if k in ("blocked", "message")}})
         if path == "/api/state":
             q = parse_qs(url.query)
             pid = q.get("pid", [None])[0] or None
@@ -771,6 +772,8 @@ class App:
         mode = payload.get("mode")
         if mode is not None:
             if mode == "real":
+                if paid_gate.blocked_reason():
+                    return _json(409, {"error": paid_gate.MESSAGES[paid_gate.blocked_reason()], "paid_calls_blocked": True})
                 if not ws["allow_real"]:
                     return _json(403, {"error": "Este estúdio está em DEMO até a cobrança por créditos ser liberada."})
                 if not base.gemini_api_key:
@@ -815,6 +818,8 @@ class App:
 
     def _create(self, payload: dict, ctx) -> Response:
         s = ctx["s"]
+        if s.mode == "real" and paid_gate.blocked_reason():   # aviso antes de receber fotos e criar a produção
+            return _json(409, {"error": paid_gate.MESSAGES[paid_gate.blocked_reason()], "paid_calls_blocked": True})
         autonomy = str(payload.get("autonomy") or ("manual" if payload.get("flow") == "game" else "classico"))
         if payload.get("creative"):
             choices = creative_options.resolve(parse_creative(payload["creative"]), str(payload.get("name", "")),

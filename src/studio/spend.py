@@ -109,3 +109,52 @@ def spend_report(db: Database, monthly_cap_usd: float, days: int = 30, workspace
         "note": "A Gemini API não informa o custo final de cada chamada: valores reais são estimativas pela tabela "
                 "de preços (consultada em 26/10/2026) até você conferir na fatura do Google.",
     }
+
+
+def _has_table(db: Database, name: str) -> bool:
+    return bool(db.conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)).fetchone())
+
+
+def platform_month_spend(db: Database, month: str | None = None) -> float:
+    """Gasto real do mês na plataforma inteira: gerações/revisões, testes de treinamento e conversa com IA."""
+    now = datetime.now().astimezone()
+    month = month or now.strftime("%Y-%m")
+    total = sum(_value(r) for r in _attempts(db, None, "simulated=0") if _local(r["created_at"]).strftime("%Y-%m") == month)
+    if _has_table(db, "training_tests"):
+        total += float(db.conn.execute("SELECT COALESCE(SUM(cost_usd), 0) FROM training_tests WHERE simulated=0 AND "
+                                       "substr(created_at, 1, 7)=?", (month,)).fetchone()[0])
+    if _has_table(db, "chat_log"):
+        start = datetime.strptime(month + "-01", "%Y-%m-%d").astimezone()
+        end = (start + timedelta(days=32)).replace(day=1)
+        total += float(db.conn.execute("SELECT COALESCE(SUM(cost_usd), 0) FROM chat_log WHERE at>=? AND at<?",
+                                       (start.timestamp(), end.timestamp())).fetchone()[0])
+    return round(total, 6)
+
+
+def agent_day_spend(db: Database, workspace_id: str | None, agent: str) -> float:
+    """Gasto real de hoje (fuso local) de um agente: chamadas do orquestrador, testes de treinamento e conversa.
+    Sem workspace (produções da CLI), conta as produções sem workspace."""
+    from .paid_gate import KIND_AGENT
+
+    kinds = [k for k, a in KIND_AGENT.items() if a == agent]
+    today = datetime.now().astimezone().date()
+    total = 0.0
+    if kinds:
+        marks = ",".join("?" * len(kinds))
+        if workspace_id is None:
+            rows = db.conn.execute(f"SELECT * FROM attempts WHERE simulated=0 AND kind IN ({marks}) AND production_id IN "
+                                   "(SELECT id FROM productions WHERE workspace_id IS NULL)", kinds).fetchall()
+        else:
+            rows = db.conn.execute(f"SELECT * FROM attempts WHERE simulated=0 AND kind IN ({marks}) AND production_id IN "
+                                   "(SELECT id FROM productions WHERE workspace_id=?)", (*kinds, workspace_id)).fetchall()
+        total += sum(_value(r) for r in rows if _local(r["created_at"]).date() == today)
+    day0 = datetime.combine(today, datetime.min.time()).astimezone()
+    if workspace_id is not None and _has_table(db, "training_tests"):
+        for r in db.conn.execute("SELECT cost_usd, created_at FROM training_tests WHERE simulated=0 AND workspace_id=? "
+                                 "AND agent_id=?", (workspace_id, agent)):
+            if _local(r["created_at"]).date() == today:
+                total += r["cost_usd"] or 0.0
+    if _has_table(db, "chat_log"):
+        total += float(db.conn.execute("SELECT COALESCE(SUM(cost_usd), 0) FROM chat_log WHERE agent=? AND at>=? AND "
+                                       "workspace_id IS ?", (agent, day0.timestamp(), workspace_id)).fetchone()[0])
+    return round(total, 6)
