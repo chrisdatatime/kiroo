@@ -88,7 +88,15 @@ def backup_env(tmp_path, data, **extra):
     d = fake_bin(tmp_path, "rclone", f'echo "$@" >> "{posix(log)}"\n'
                  f'echo "ENV:$RCLONE_CONFIG_KBK_SECRET_ACCESS_KEY" >> "{posix(tmp_path / "rclone.env")}"\n'
                  'if [ "$1" = size ]; then echo \'{"count":1,"bytes":1}\'; fi\n'
-                 'if [ "$1" = rcat ]; then cat > /dev/null; fi\n')
+                 'if [ "$1" = rcat ]; then cat > /dev/null; fi\n'
+                 # sync "envia" 1 objeto por pasta (linha no formato do rclone -v, que o script conta)
+                 'if [ "$1" = sync ]; then echo "INFO  : x: Copied (new)" >&2; fi\n'
+                 # manifesto: copia o arquivo local para manifest.json, ou simula o 501 do R2
+                 'case "$1 $3" in "copyto "*/manifests/*)\n'
+                 '  if [ "${FAKE_RCLONE_MANIFEST:-}" = 501 ]; then\n'
+                 '    echo "ERROR : Failed to copy: NotImplemented: status code: 501" >&2; exit 1; fi\n'
+                 f'  cp "$2" "{posix(tmp_path / "manifest.json")}";;\n'
+                 'esac\n')
     env = {"PATH": posix(d) + os.pathsep + os.environ["PATH"], "STUDIO_ENV": "staging", "STUDIO_DATA_DIR": posix(data),
            "BACKUP_R2_ENDPOINT": "https://conta.r2.example", "BACKUP_R2_ACCESS_KEY_ID": "AK-FAKE",
            "BACKUP_R2_SECRET_ACCESS_KEY": SECRET, **extra}

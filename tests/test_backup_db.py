@@ -69,8 +69,8 @@ def test_dockerfile_wires_entrypoint_and_pins_litestream():
     assert 'ENTRYPOINT ["tini", "--", "kiroo-entrypoint"]' in df and "litestream.yml" in df and "fetch_litestream.py" in df
     sys.path.insert(0, str(ROOT / "docker"))
     import fetch_litestream
-    with pytest.raises(fetch_litestream.LitestreamError, match="sha256"):                # PENDING: build falha fechado
-        fetch_litestream.read_lock(ROOT / "docker" / "litestream.lock")
+    real = fetch_litestream.read_lock(ROOT / "docker" / "litestream.lock")                # sha256 fixado (523cacd)
+    assert re.fullmatch(r"[0-9a-f]{64}", real["sha256"])
     ok = {"version": "1", "url": "https://github.com/benbjohnson/litestream/releases/download/v0/x.tar.gz", "sha256": "a" * 64}
     p = ROOT / "docker" / "_t.lock"
     p.write_text(json.dumps(ok))
