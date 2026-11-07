@@ -42,8 +42,8 @@ Staging é outra instância com **outra** `STUDIO_DATA_DIR` e `STUDIO_PUBLIC_HOS
 
 | Variável | Padrão | O que faz |
 |---|---|---|
-| `STUDIO_SIGNUP` | `closed` | `closed`: `POST /api/auth/signup` responde 403 sempre, em qualquer host (inclusive banco vazio). `invite`: exige o campo `invite` com um código de `STUDIO_INVITE_CODES` (sem códigos configurados, nada passa). `open`: qualquer pessoa cria conta (modo DEMO). O login com Google só cria conta nova em `open`. A tela de entrada lê o valor em `GET /api/config`. |
-| `STUDIO_INVITE_CODES` | — | Códigos aceitos em `invite`, separados por vírgula. Use valores longos e aleatórios. **Provisório:** os códigos são fixos e **reutilizáveis** (qualquer pessoa com o código cria quantas contas quiser até você trocá-lo e reiniciar). Códigos de uso único, com expiração e vínculo ao convidado entram na Fase 12. A comparação é em tempo constante (`hmac.compare_digest` contra todos os códigos, sem parar no primeiro) e as tentativas erradas contam no limite por IP (8 / 15 min, HTTP 429). |
+| `STUDIO_SIGNUP` | `closed` | `closed`: `POST /api/auth/signup` responde 403 sempre, em qualquer host (inclusive banco vazio). `invite`: exige o campo `invite` com um código de uso único gerado por `studio admin create-invite` (ver docs/ADMIN.md). Todo cadastro exige o aceite dos Termos e da Política de Privacidade (`consent: true`). `open`: qualquer pessoa cria conta (modo DEMO). O login com Google só cria conta nova em `open`. A tela de entrada lê o valor em `GET /api/config`. |
+| `STUDIO_INVITE_CODES` | — | **Aposentado (Fase 5):** ignorado, com aviso no boot. Convites agora são de uso único, com validade (1 a 30 dias) e opcionalmente presos a um e-mail; no banco fica só o hash. Tentativas erradas contam no limite por IP (8 / 15 min, HTTP 429). |
 | `STUDIO_BOOTSTRAP_ADMIN_EMAIL` | — | No boot, cria esse administrador **sem senha** se não existir e envia o link de definir senha (30 min). Sem SMTP o link não é enviado nem registrado em produção: gere com `studio admin reset-link --email ...`. |
 
 **Nenhuma conta vira administradora sozinha.** O primeiro admin nasce de uma destas formas:
