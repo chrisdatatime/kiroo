@@ -180,6 +180,20 @@ try {
     Checa 'passo 7 sem variaveis -> NAO_VERIFICADO com lista' $r 'NAO_VERIFICADO' @('variaveis ausentes: BACKUP_R2_ENDPOINT') -PassoN '7'
     $r = Rodar 'p7_sem_pasta' @{} (Join-Path $tmp 'p7-nada') @('-Passo', '7')
     Checa 'passo 7 sem a pasta do passo 1 -> NAO_VERIFICADO' $r 'NAO_VERIFICADO' @('pasta do ensaio ausente') -PassoN '7'
+    # -Rodadas / -Fumaca: a saida tambem vai para arquivo na pasta (sem credencial), com o modo no nome
+    $r = Rodar 'p7_fumaca' @{ BACKUP_R2_ENDPOINT = $null } $p4 @('-Passo', '7', '-Fumaca') -ManterVolume
+    Checa 'passo 7 -Fumaca anuncia 1 rodada de cada tipo' $r 'NAO_VERIFICADO' @('FUMACA: 1 rodada de cada tipo \(a1, b1, c1\)', 'p7-fumaca-\d{8}-\d{6}\.log') -PassoN '7'
+    $r = Rodar 'p7_rodadas2' @{ BACKUP_R2_ENDPOINT = $null } $p4 @('-Passo', '7', '-Rodadas', '2') -ManterVolume
+    Checa 'passo 7 -Rodadas 2' $r 'NAO_VERIFICADO' @('2 rodada\(s\) de cada tipo', 'p7-rodadas2-') -PassoN '7'
+    $arqs = @(Get-ChildItem $p4 -Filter 'p7-*.log')
+    $txt = ($arqs | ForEach-Object { Get-Content $_.FullName -Raw }) -join "`n"
+    if ($arqs.Count -lt 3 -or $txt -notmatch 'RESULTADO passo 7: NAO_VERIFICADO' -or $txt -notmatch 'FUMACA' -or $txt -match [regex]::Escape($segredo)) {
+        $falhas++; Write-Host "FALHOU  arquivo p7-*.log ausente, incompleto ou com credencial ($($arqs.Count) arquivo(s))" }
+    else { Write-Host "ok      passo 7 grava a saida em p7-<modo>-<data>.log ($($arqs.Count) arquivos, sem credencial)" }
+    $r = Rodar 'p7_rodadas6' @{} $p4 @('-Passo', '7', '-Rodadas', '6') -ManterVolume
+    if ($r.Out -match 'RESULTADO passo 7' -or $r.Out -notmatch 'Rodadas') { $falhas++; Write-Host "FALHOU  -Rodadas 6 deveria ser recusado antes de rodar: $($r.Out)" }
+    else { Write-Host 'ok      -Rodadas 6 recusado (1..5) antes de rodar' }
+
     $chamadas = @(Get-Content (Join-Path $stubDir 'chamadas.log') -ErrorAction SilentlyContinue) | Select-Object -Skip $n0
     if ($chamadas -match '^(run|volume create|stop|kill)') { $falhas++; Write-Host "FALHOU  passo 7 NAO_VERIFICADO mexeu no docker: $($chamadas -join ' | ')" }
     else { Write-Host 'ok      passo 7 NAO_VERIFICADO nao cria container nem volume' }
