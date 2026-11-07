@@ -168,7 +168,7 @@ export default function AuthScreen({ onDone, resetToken, initialMode, onBack, si
   const params = React.useMemo(() => new URLSearchParams(window.location.search), []);
   const [cfg, setCfg] = React.useState({ signup, google: false, email: false });
   const [mode, setMode] = React.useState(resetToken ? 'reset' : initialMode === 'signup' && signup !== 'closed' ? 'signup' : 'login');
-  const [f, setF] = React.useState({ name: '', email: '', password: '', code: '', invite: '' });
+  const [f, setF] = React.useState({ name: '', email: '', password: '', code: '', invite: '', consent: false });
   const [msg, setMsg] = React.useState(() => (GOOGLE_ERRORS[params.get('erro')] ? { ok: false, text: GOOGLE_ERRORS[params.get('erro')] } : null));
   const [busy, setBusy] = React.useState(false);
   const [about, setAbout] = React.useState(false);
@@ -207,7 +207,7 @@ export default function AuthScreen({ onDone, resetToken, initialMode, onBack, si
     run(async () => {
       if (mode === 'login') { await auth('login', { email: f.email, password: f.password }); enter(); }
       else if (mode === 'signup') {
-        const r = await auth('signup', { name: f.name, email: f.email, password: f.password, invite: f.invite });
+        const r = await auth('signup', { name: f.name, email: f.email, password: f.password, invite: f.invite, consent: f.consent });
         setSentInfo({ sent: !!r.sent }); setCooldown(RESEND_S); go('verify');
       } else if (mode === 'forgot') {
         const r = await auth('forgot', { email: f.email });
@@ -332,6 +332,14 @@ export default function AuthScreen({ onDone, resetToken, initialMode, onBack, si
                       describedBy={mode !== 'login' ? 'au-pass-hint' : undefined} />
                   </Field>
                 )}
+                {mode === 'signup' && (
+                  <label className="au-consent" htmlFor="au-consent">
+                    <input id="au-consent" type="checkbox" checked={f.consent} required
+                      onChange={(e) => set('consent')(e.target.checked)} />
+                    <span>Li e aceito os <a href="/termos" target="_blank" rel="noopener">Termos de Uso</a> e a{' '}
+                      <a href="/privacidade" target="_blank" rel="noopener">Política de Privacidade</a>.</span>
+                  </label>
+                )}
                 {mode === 'verify' && (
                   <CodeInput value={f.code} onChange={set('code')} invalid={errInvalid} describedBy={msg ? 'au-msg' : undefined}
                     onComplete={(c) => run(() => verify(c))} />
@@ -341,7 +349,7 @@ export default function AuthScreen({ onDone, resetToken, initialMode, onBack, si
 
                 {!(mode === 'verify' && msg?.ok) && (
                   <SubmitButton busy={busy} busyLabel={copy.busy}
-                    disabled={(mode === 'verify' && f.code.length < 6) || ((mode === 'signup' || mode === 'reset') && !pwOk)}>
+                    disabled={(mode === 'verify' && f.code.length < 6) || ((mode === 'signup' || mode === 'reset') && !pwOk) || (mode === 'signup' && !f.consent)}>
                     {copy.cta}
                   </SubmitButton>
                 )}

@@ -56,7 +56,7 @@ def test_signup_verify_and_reset_end_to_end_over_smtp(app, monkeypatch, caplog):
         smtp_env(monkeypatch, smtp.port)
         assert call(app, "GET", "/api/auth/config")[1]["email"] is True
 
-        r, data = call(app, "POST", "/api/auth/signup", {"email": "Ana@Exemplo.com", "password": "senha-forte-123"})
+        r, data = call(app, "POST", "/api/auth/signup", {"email": "Ana@Exemplo.com", "password": "senha-forte-123", "consent": True})
         assert r.status == 200 and data["sent"] is True
         cookie = r.headers["Set-Cookie"].split(";")[0]
         sess = {**CLIENT, "Cookie": cookie}
@@ -104,7 +104,7 @@ def test_signup_verify_and_reset_end_to_end_over_smtp(app, monkeypatch, caplog):
 def test_codes_expire_quickly(app, monkeypatch):
     with FakeSMTP() as smtp:
         smtp_env(monkeypatch, smtp.port)
-        r, _ = call(app, "POST", "/api/auth/signup", {"email": "bia@exemplo.com", "password": "senha-forte-123"})
+        r, _ = call(app, "POST", "/api/auth/signup", {"email": "bia@exemplo.com", "password": "senha-forte-123", "consent": True})
         sess = {**CLIENT, "Cookie": r.headers["Set-Cookie"].split(";")[0]}
         code = re.search(r"\b(\d{6})\b", body_of(smtp.messages[0])).group(1)
         call(app, "POST", "/api/auth/forgot", {"email": "bia@exemplo.com"})
@@ -137,7 +137,7 @@ def test_staging_and_production_without_smtp_fail_closed(app, monkeypatch, caplo
     monkeypatch.setattr(mailer.smtplib, "SMTP", lambda *a, **k: sent.append(a) or (_ for _ in ()).throw(AssertionError("não deveria conectar")))
 
     assert call(app, "GET", "/api/auth/config")[1]["email"] is False
-    r, data = call(app, "POST", "/api/auth/signup", {"email": "caio@exemplo.com", "password": "senha-forte-123"})
+    r, data = call(app, "POST", "/api/auth/signup", {"email": "caio@exemplo.com", "password": "senha-forte-123", "consent": True})
     assert r.status == 200 and data["sent"] is False
     r, data = call(app, "POST", "/api/auth/forgot", {"email": "caio@exemplo.com"})
     assert r.status == 200 and data["sent"] is False and "administrador" in data["message"]
@@ -152,7 +152,7 @@ def test_dev_without_smtp_still_shows_the_code_to_the_local_operator(app, monkey
     codes = []
     real_code = accounts_mod.Accounts.start_verification
     monkeypatch.setattr(accounts_mod.Accounts, "start_verification", lambda self, uid: codes.append(real_code(self, uid)) or codes[-1])
-    r, data = call(app, "POST", "/api/auth/signup", {"email": "dev@exemplo.com", "password": "senha-forte-123"})
+    r, data = call(app, "POST", "/api/auth/signup", {"email": "dev@exemplo.com", "password": "senha-forte-123", "consent": True})
     assert data["sent"] is False and codes[0] in caplog.text
 
 

@@ -36,7 +36,8 @@ from urllib.parse import parse_qs, unquote, urlencode, urlparse
 
 from .. import agent_config, creative_options, mailer, paid_gate
 from ..agent_chat import AgentChat
-from ..accounts import LOGIN_WINDOW_MIN, RESET_MINUTES, VERIFY_MINUTES, Accounts, AuthError
+from ..accounts import (LOGIN_WINDOW_MIN, RESET_MINUTES, TERMS_VERSION, VERIFY_MINUTES, Accounts, AuthError,
+                        verify_password)
 from ..config import load_settings
 from ..credits import Ledger
 from ..db import Database, checkpoint
@@ -60,6 +61,7 @@ log = logging.getLogger("studio")
 STATIC = Path(__file__).parent / "static"
 PID_RE = re.compile(r"^prod_[0-9a-f]{10}$")
 MEDIA_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".mp4", ".txt", ".md", ".json"}
+LEGAL_PAGES = {"/termos": "termos.html", "/privacidade": "privacidade.html"}
 ACTIONS = {"run", "approve", "reject", "final", "pause", "resume", "cancel", "budget", "references", "validate",
            "direction", "go_ahead", "autonomy", "edit", "music", "retry"}
 GAME_DIST = Path(__file__).resolve().parents[3] / "frontend" / "dist"   # build do jogo (npm run build)
@@ -505,7 +507,11 @@ class App:
             if method == "POST" and path.startswith("/api/auth/"):
                 return self._auth(path, headers, json.loads(body or b"{}"))
             if method == "GET" and path in ("/api/config", "/api/auth/config"):  # o que a tela de acesso pode oferecer
-                return _json(200, {"signup": self.signup, "google": self.google_enabled, "email": mailer.configured()})
+                return _json(200, {"signup": self.signup, "google": self.google_enabled, "email": mailer.configured(),
+                                   "terms_version": TERMS_VERSION})
+            if method == "GET" and path in LEGAL_PAGES:   # rascunhos públicos (PARA REVISÃO JURÍDICA)
+                return Response(200, "text/html; charset=utf-8", (STATIC / LEGAL_PAGES[path]).read_bytes(),
+                                headers={"Cache-Control": "no-cache"}, compress=True)
             if method == "GET" and path.startswith("/api/auth/google/"):
                 return self._google(path, url, headers)
 
@@ -568,21 +574,28 @@ class App:
             if path == "/api/auth/signup":
                 if self.signup == "closed":   # independe do host público: fechado é fechado
                     return _json(403, {"error": "Cadastro só por convite: peça sua conta ao administrador."})
+                if p.get("consent") is not True:   # consentimento explícito, registrado com a versão dos textos
+                    return _json(400, {"error": "Para criar a conta, aceite os Termos de Uso e a Política de Privacidade."})
+                invite_id = None
                 if self.signup == "invite":
                     key = f"s:{ip}"
-                    code = str(p.get("invite") or "")
                     if acc.throttled(key):
                         return _json(429, {"error": f"muitas tentativas; espere {LOGIN_WINDOW_MIN} minutos"},
                                      {"Retry-After": str(LOGIN_WINDOW_MIN * 60)})
-                    # tempo constante: compara com todos os códigos, sem parar no primeiro que bate
-                    matched = 0
-                    for c in self.cfg.invite_codes:
-                        matched |= hmac.compare_digest(code.encode(), c.encode())
-                    if not matched:
+                    # código de uso único gerado por `studio admin create-invite` (só o hash fica no banco)
+                    invite_id = acc.claim_invite(str(p.get("invite") or ""), str(p.get("email") or ""))
+                    if not invite_id:
                         acc.record_fail(key)
-                        return _json(403, {"error": "código de convite inválido"})
-                uid, wid = acc.create_user(p.get("email", ""), p.get("password", ""), p.get("name", ""), admin=False,
-                                           workspace_name=p.get("workspace") or None)
+                        return _json(403, {"error": "código de convite inválido, já usado ou expirado"})
+                try:
+                    uid, wid = acc.create_user(p.get("email", ""), p.get("password", ""), p.get("name", ""), admin=False,
+                                               workspace_name=p.get("workspace") or None, terms_version=TERMS_VERSION)
+                except Exception:
+                    if invite_id:
+                        acc.finish_invite(invite_id, None)   # cadastro falhou (e-mail repetido, senha curta): devolve o convite
+                    raise
+                if invite_id:
+                    acc.finish_invite(invite_id, uid)
                 token, info = acc.create_session(uid, wid)
                 # a conta já entra (modo DEMO); o código de confirmação vai para o e-mail
                 sent = self._send_verification(acc, uid, acc.user(uid)["email"])
@@ -650,6 +663,15 @@ class App:
                                              "credits": credits},
                                "workspaces": [{"id": w["id"], "name": w["name"], "role": w["role"]} for w in ctx["workspaces"]],
                                "paid_calls": {k: v for k, v in paid_gate.status().items() if k in ("blocked", "message")}})
+        if path == "/api/account/export":   # LGPD: cópia dos dados da própria conta
+            from ..privacy import export_account
+            db = Database(s.db_path)
+            try:
+                data = export_account(db, self.settings().data_dir, ctx["sess"]["user_id"])
+            finally:
+                db.close()
+            name = f"kiroo-dados-{time.strftime('%Y%m%d')}.json"
+            return _json(200, data, {"Content-Disposition": f'attachment; filename="{name}"'})
         if path == "/api/state":
             q = parse_qs(url.query)
             pid = q.get("pid", [None])[0] or None
@@ -718,6 +740,8 @@ class App:
             return _json(200, {"ok": True})
         if path == "/api/runtime":
             return self._runtime(payload, ctx)
+        if path == "/api/account/delete":
+            return self._delete_account(payload, ctx)
         if path == "/api/onboarding":  # kit de onboarding: {step} salva onde parou; {done: true} conclui/pula
             done = payload.get("done")
             s0, db, acc = self._db()
@@ -787,6 +811,33 @@ class App:
         finally:
             db.close()
         return _json(200, res)
+
+    def _delete_account(self, payload: dict, ctx) -> Response:
+        """LGPD: apaga a própria conta. Exige a senha (ou, conta só do Google, o e-mail) e a palavra APAGAR."""
+        from ..privacy import PrivacyError, delete_account
+        sess = ctx["sess"]
+        if str(payload.get("confirm") or "").strip().upper() != "APAGAR":
+            return _json(400, {"error": "Para confirmar, digite APAGAR."})
+        s0, db, acc = self._db()
+        try:
+            u = acc.user(sess["user_id"])
+            if u["pw_hash"] != "!":
+                if not verify_password(str(payload.get("password") or ""), u["pw_hash"]):
+                    return _json(403, {"error": "senha incorreta"})
+            elif str(payload.get("email") or "").strip().lower() != u["email"]:
+                return _json(403, {"error": "digite o e-mail da conta para confirmar"})
+            pids = [r["id"] for r in db.conn.execute("SELECT p.id FROM productions p JOIN workspaces w ON w.id=p.workspace_id "
+                                                     "WHERE w.owner_id=?", (u["id"],))]
+            if any(self.is_running(pid) for pid in pids):
+                return _json(409, {"error": "há uma produção em andamento: pause ou aguarde antes de apagar a conta"})
+            try:
+                done = delete_account(db, s0.data_dir, u["id"])
+            except PrivacyError as exc:
+                return _json(403, {"error": str(exc)})
+        finally:
+            db.close()
+        log.info("conta apagada a pedido do titular", extra={"event": "account_deleted"})
+        return _json(200, {"ok": True, **done}, self._set_cookie("", 0))
 
     def _runtime(self, payload: dict, ctx) -> Response:
         ws, base = ctx["ws"], self.settings()
@@ -1183,6 +1234,8 @@ def serve(port: int | None = None, open_browser: bool = True, public_host: str |
     if open_browser:
         print(f"Kiroo em {url}  (Ctrl+C para sair)", flush=True)
         webbrowser.open(url)
+    if cfg.invite_codes:
+        log.warning("STUDIO_INVITE_CODES é ignorado: convites agora são de uso único, gerados com `studio admin create-invite`.")
     if mailer.protected_env() and not mailer.configured():
         log.warning("E-mail transacional desligado (%s): em staging/produção códigos de confirmação e links de senha NÃO "
                     "são registrados no log. A confirmação de e-mail e o 'esqueci a senha' ficam indisponíveis; use "

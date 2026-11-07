@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Política de Privacidade — Kiroo</title>
+<style>
+  :root { --bg: #F6F5F1; --ink: #0E0E10; --ink-2: #4A4D57; --line: #E2E0DA; --warn-bg: #FFF1D6; --warn-ink: #6B3F00; --link: #C2410C; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #121214; --ink: #F2F1ED; --ink-2: #B7B9C2; --line: #2A2A2F; --warn-bg: #3A2A0A; --warn-ink: #FFD99A; --link: #FF8A5B; } }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 28px; line-height: 1.2; margin: 0 0 4px; }
+  h2 { font-size: 19px; margin: 32px 0 8px; }
+  p, li, td { color: var(--ink-2); }
+  a { color: var(--link); }
+  table { border-collapse: collapse; width: 100%; font-size: 15px; }
+  td, th { border-top: 1px solid var(--line); padding: 8px 6px; text-align: left; vertical-align: top; }
+  .wrap { overflow-x: auto; }
+  .draft { background: var(--warn-bg); color: var(--warn-ink); border-radius: 10px; padding: 12px 14px; font-weight: 600; margin: 16px 0 24px; }
+  .meta { font-size: 14px; color: var(--ink-2); }
+  nav { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Política de Privacidade do Kiroo</h1>
+  <p class="meta">Versão 2026-11-rascunho · última atualização: novembro de 2026</p>
+  <p class="draft" role="note">RASCUNHO — PARA REVISÃO JURÍDICA. Este texto ainda não foi revisado por advogado e pode mudar
+    antes da abertura pública. Os trechos entre colchetes precisam ser preenchidos.</p>
+
+  <h2>1. Controlador e encarregado</h2>
+  <p>[RAZÃO SOCIAL], CNPJ [CNPJ], é a controladora dos dados tratados no Kiroo. Encarregado(a) pelo tratamento de dados
+    pessoais (DPO): [NOME], [E-MAIL DO ENCARREGADO].</p>
+
+  <h2>2. Dados que tratamos e por quê</h2>
+  <div class="wrap"><table>
+    <tr><th>Dado</th><th>Para quê</th><th>Base legal (LGPD)</th></tr>
+    <tr><td>Nome, e-mail, senha (guardada só como hash), data do aceite dos termos</td><td>Criar e proteger a conta, confirmar e-mail, recuperar senha</td><td>Execução de contrato (art. 7º, V)</td></tr>
+    <tr><td>Fotos, textos e músicas do produto que você envia; produções e aprovações</td><td>Produzir os seus vídeos</td><td>Execução de contrato</td></tr>
+    <tr><td>Endereço IP, horário e rota das requisições (sem o conteúdo)</td><td>Segurança, prevenção de abuso e limite de tentativas</td><td>Legítimo interesse (art. 7º, IX) e Marco Civil (art. 15)</td></tr>
+    <tr><td>Uso de créditos e custos estimados</td><td>Cobrança e controle de gastos</td><td>Execução de contrato e obrigação legal</td></tr>
+    <tr><td>Contagem de mensagens com os agentes (o texto da conversa não é guardado)</td><td>Cotas e controle de custo</td><td>Legítimo interesse</td></tr>
+  </table></div>
+  <p>Usamos apenas um cookie de sessão, necessário para manter você conectado. Não usamos cookies de publicidade nem de rastreamento.</p>
+
+  <h2>3. Com quem compartilhamos</h2>
+  <ul>
+    <li>Provedores de IA, apenas quando a geração real está ligada: Google (Gemini API) para imagens, vídeos e revisões;
+      Anthropic (Claude) para a conversa com os agentes.</li>
+    <li>Envio de e-mails transacionais: Resend.</li>
+    <li>Hospedagem, rede e cópias de segurança: [PROVEDOR DE HOSPEDAGEM], Cloudflare (rede e armazenamento R2).</li>
+    <li>Pagamentos, quando existirem: Mercado Pago.</li>
+    <li>Autoridades, quando houver obrigação legal ou ordem judicial.</li>
+  </ul>
+  <p>Alguns desses fornecedores processam dados fora do Brasil. [CONFIRMAR COM O JURÍDICO: mecanismo de transferência
+    internacional (art. 33) e contratos com cada operador.]</p>
+
+  <h2>4. Por quanto tempo guardamos</h2>
+  <ul>
+    <li>Conta, produções e arquivos: enquanto a conta existir. Ao apagar a conta, removemos esses dados na hora.</li>
+    <li>Registros de acesso: [PRAZO, mínimo de 6 meses pelo Marco Civil].</li>
+    <li>Lançamentos de créditos: mantidos sem vínculo com a pessoa pelo prazo [FISCAL/CONTÁBIL A DEFINIR].</li>
+    <li>Cópias de segurança: expiram em até [PRAZO DE RETENÇÃO DO BACKUP] dias.</li>
+  </ul>
+
+  <h2>5. Seus direitos</h2>
+  <p>Você pode, a qualquer momento: confirmar o tratamento e acessar seus dados, corrigi-los, pedir portabilidade, pedir a
+    eliminação, revogar o consentimento e pedir informações sobre compartilhamento (LGPD, art. 18).</p>
+  <ul>
+    <li><strong>Exportar seus dados</strong>: na área da conta (ou <code>GET /api/account/export</code>), em JSON.</li>
+    <li><strong>Apagar sua conta</strong>: na área da conta, confirmando com a senha.</li>
+    <li>Outros pedidos: [E-MAIL DO ENCARREGADO]. Respondemos em até 15 dias.</li>
+  </ul>
+  <p>Você também pode reclamar à Autoridade Nacional de Proteção de Dados (ANPD).</p>
+
+  <h2>6. Segurança</h2>
+  <p>Senhas com hash scrypt, sessão em cookie HttpOnly, conexão HTTPS, isolamento de dados por estúdio, limite de
+    tentativas e chaves de API guardadas apenas no servidor. Nenhum sistema é infalível: se houver incidente que possa
+    gerar risco relevante, avisaremos você e a ANPD.</p>
+
+  <h2>7. Crianças e adolescentes</h2>
+  <p>O Kiroo não é destinado a menores de 18 anos.</p>
+
+  <h2>8. Mudanças</h2>
+  <p>Avisaremos antes de mudanças relevantes nesta política. A versão aceita fica registrada na sua conta.</p>
+
+  <nav><a href="/">Voltar ao Kiroo</a> · <a href="/termos">Termos de Uso</a></nav>
+</main>
+</body>
+</html>

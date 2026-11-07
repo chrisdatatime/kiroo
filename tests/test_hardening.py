@@ -18,7 +18,7 @@ from studio.web.server import App, make_handler
 
 HOST = {"Host": "127.0.0.1:8765"}
 CLIENT = {**HOST, "X-Studio-Client": "game"}
-SIGNUP = json.dumps({"email": "novo@x.com", "password": "senha-forte-123"}).encode()
+SIGNUP = json.dumps({"email": "novo@x.com", "password": "senha-forte-123", "consent": True}).encode()
 
 
 @pytest.fixture
@@ -63,11 +63,18 @@ def test_open_signup_never_creates_an_admin(loader):
     assert me["admin"] is False and me["workspace"]["allow_real"] is False
 
 
+def _invite(a) -> str:
+    s, db, acc = a._db()
+    try:
+        return acc.create_invite()[0]
+    finally:
+        db.close()
+
+
 def test_invite_mode_needs_a_valid_code(loader):
-    cfg = ServerConfig(signup="invite", invite_codes=("convite-secreto-1",))
-    a = App(8765, settings_loader=loader, sim_pacing=False, config=cfg)
+    a = App(8765, settings_loader=loader, sim_pacing=False, config=ServerConfig(signup="invite"))
     assert a.handle("POST", "/api/auth/signup", CLIENT, SIGNUP).status == 403
-    body = json.dumps({"email": "novo@x.com", "password": "senha-forte-123", "invite": "convite-secreto-1"}).encode()
+    body = json.dumps({"email": "novo@x.com", "password": "senha-forte-123", "invite": _invite(a), "consent": True}).encode()
     assert a.handle("POST", "/api/auth/signup", CLIENT, body).status == 200
 
 
@@ -487,21 +494,16 @@ def test_running_loop_stops_between_steps_on_shutdown(loader, make_orch, product
     assert any(t == "interrupted" for t, _ in _events(a, pid))
 
 
-def test_invite_code_comparison_is_constant_time_and_rate_limited(loader, monkeypatch):
-    cfg = ServerConfig(signup="invite", invite_codes=("convite-um-aaaa", "convite-dois-bbbb", "convite-tres-cccc"))
-    a = App(8765, settings_loader=loader, sim_pacing=False, config=cfg)
-    calls = []
-    real = srv.hmac.compare_digest
-    monkeypatch.setattr(srv.hmac, "compare_digest", lambda x, y: calls.append(1) or real(x, y))
-    ok = json.dumps({"email": "a@x.com", "password": "senha-forte-123", "invite": "convite-um-aaaa"}).encode()
+def test_invite_code_is_single_use_and_guessing_is_rate_limited(loader):
+    """Código procurado pelo hash (sem comparar com uma lista), uso único e tentativas erradas bloqueadas por IP."""
+    a = App(8765, settings_loader=loader, sim_pacing=False, config=ServerConfig(signup="invite"))
+    code = _invite(a)
+    ok = json.dumps({"email": "a@x.com", "password": "senha-forte-123", "invite": code, "consent": True}).encode()
     assert a.handle("POST", "/api/auth/signup", CLIENT, ok).status == 200
-    assert len(calls) == 3   # o primeiro código bateu, mas os três foram comparados (sem curto-circuito)
-    calls.clear()
-    bad = json.dumps({"email": "b@x.com", "password": "senha-forte-123", "invite": "errado"}).encode()
-    assert a.handle("POST", "/api/auth/signup", CLIENT, bad).status == 403 and len(calls) == 3
-    # código reutilizável (provisório): o mesmo código cria outra conta
-    again = json.dumps({"email": "c@x.com", "password": "senha-forte-123", "invite": "convite-um-aaaa"}).encode()
-    assert a.handle("POST", "/api/auth/signup", CLIENT, again).status == 200
-    for _ in range(8):
-        a.handle("POST", "/api/auth/signup", CLIENT, bad)
-    assert a.handle("POST", "/api/auth/signup", CLIENT, bad).status == 429
+    again = json.dumps({"email": "c@x.com", "password": "senha-forte-123", "invite": code, "consent": True}).encode()
+    assert a.handle("POST", "/api/auth/signup", CLIENT, again).status == 403        # já usado
+    bad = json.dumps({"email": "b@x.com", "password": "senha-forte-123", "invite": "errado", "consent": True}).encode()
+    for _ in range(7):
+        assert a.handle("POST", "/api/auth/signup", CLIENT, bad).status == 403
+    r = a.handle("POST", "/api/auth/signup", CLIENT, bad)
+    assert r.status == 429 and r.headers["Retry-After"]

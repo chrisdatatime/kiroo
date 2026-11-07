@@ -35,7 +35,7 @@ class User:
         s, db, _ = app._db()
         first = db.conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
         db.close()
-        r = app.handle("POST", "/api/auth/signup", CLIENT, json.dumps({"email": email, "password": password}).encode())
+        r = app.handle("POST", "/api/auth/signup", CLIENT, json.dumps({"email": email, "password": password, "consent": True}).encode())
         assert r.status == 200, r.body
         assert json.loads(r.body)["admin"] is False
         if admin or (admin is None and first):
@@ -67,13 +67,13 @@ def test_password_hashing():
 
 
 def test_signup_rules(app):
-    bad = [({"email": "nao-e-email", "password": "senha-forte-123"}, "e-mail"),
-           ({"email": "a@b.com", "password": "curta"}, "10 caracteres")]
+    bad = [({"email": "nao-e-email", "password": "senha-forte-123", "consent": True}, "e-mail"),
+           ({"email": "a@b.com", "password": "curta", "consent": True}, "10 caracteres")]
     for body, msg in bad:
         r = app.handle("POST", "/api/auth/signup", CLIENT, json.dumps(body).encode())
         assert r.status == 400 and msg in json.loads(r.body)["error"]
     User(app, "a@b.com")
-    r = app.handle("POST", "/api/auth/signup", CLIENT, json.dumps({"email": "A@B.com", "password": "senha-forte-123"}).encode())
+    r = app.handle("POST", "/api/auth/signup", CLIENT, json.dumps({"email": "A@B.com", "password": "senha-forte-123", "consent": True}).encode())
     assert r.status == 400 and "já existe" in json.loads(r.body)["error"]  # e-mail sem diferenciar maiúsculas
     # sem o cabeçalho do cliente (ex.: formulário de outro site) o cadastro é recusado
     assert app.handle("POST", "/api/auth/signup", BASE, b'{"email":"c@d.com","password":"senha-forte-123"}').status == 403

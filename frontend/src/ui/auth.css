@@ -52,6 +52,9 @@ span.au-brand { cursor: default; }
 .au-form { display: flex; flex-direction: column; gap: 16px; }
 .au-field { display: flex; flex-direction: column; gap: 8px; }
 .au-hint { font-size: 12.5px; color: var(--au-mute); }
+.au-consent { display: flex; gap: 10px; align-items: flex-start; font-size: 13.5px; line-height: 1.45; color: var(--au-ink-2); cursor: pointer; }
+.au-consent input { width: 18px; height: 18px; margin-top: 1px; flex: none; accent-color: var(--au-ink); }
+.au-consent a { color: var(--au-ink); text-decoration: underline; text-underline-offset: 2px; }
 .au-dot { width: 6px; height: 6px; margin: 0 4px; border-radius: 50%; background: var(--au-line-2); display: inline-block; }
 
 /* botão principal: tinta marinho; a seta anda um pouco no hover */

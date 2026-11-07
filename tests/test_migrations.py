@@ -19,11 +19,11 @@ def schema_snapshot(conn):
 
 def test_empty_database_boots_at_latest(tmp_path):
     db = Database(tmp_path / "d" / "studio.sqlite3")
-    assert current_version(db.conn) == migrations.LATEST == 1
+    assert current_version(db.conn) == migrations.LATEST == 2
     tables = {r[0] for r in db.conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     assert {"productions", "scenes", "attempts", "reviews", "events", "run_state", "users", "workspaces", "memberships",
             "sessions", "login_attempts", "email_codes", "password_resets", "credit_entries", "training_state",
-            "training_versions", "training_tests", "music_tracks", "music_favorites", "chat_log"} <= tables
+            "training_versions", "training_tests", "music_tracks", "music_favorites", "chat_log", "invites"} <= tables
     db.close()
 
 
@@ -35,20 +35,20 @@ def test_running_twice_changes_nothing(tmp_path):
     assert migrate(db.conn) == []
     db.close()
     db2 = Database(path)
-    assert schema_snapshot(db2.conn) == before and current_version(db2.conn) == 1
+    assert schema_snapshot(db2.conn) == before and current_version(db2.conn) == migrations.LATEST
     assert db2.conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 1
     db2.close()
 
 
 def test_current_schema_unversioned_is_recognized_without_data_loss(tmp_path):
-    """Banco real de hoje (tabelas completas, user_version=0): vira versão 1 e mantém tudo."""
+    """Banco real de hoje (tabelas completas, user_version=0): vira a versão atual e mantém tudo."""
     path = tmp_path / "s.sqlite3"
     db = Database(path)
     _, wid = Accounts(db).create_user("a@example.com", "senha-forte-123")
     db.conn.execute("PRAGMA user_version=0")
     db.close()
     db2 = Database(path)
-    assert current_version(db2.conn) == 1
+    assert current_version(db2.conn) == migrations.LATEST
     assert db2.conn.execute("SELECT COUNT(*) FROM workspaces WHERE id=?", (wid,)).fetchone()[0] == 1
     db2.close()
 
@@ -70,7 +70,7 @@ def test_partial_old_schema_is_completed_then_marked(tmp_path):
     con.commit()
     con.close()
     db = Database(path)
-    assert current_version(db.conn) == 1
+    assert current_version(db.conn) == migrations.LATEST
     assert db.conn.execute("SELECT email_verified_at FROM users WHERE id='u2'").fetchone()[0] == "2026-01-02T00:00:00+00:00"
     assert [r[0] for r in db.conn.execute("SELECT credits_exempt FROM workspaces ORDER BY id")] == [1, 0]
     assert db.conn.execute("SELECT COUNT(*) FROM credit_entries").fetchone()[0] == 0
@@ -108,7 +108,7 @@ def test_failure_mid_chain_rolls_back_everything(tmp_path):
         conn.execute("CREATE TABLE half_done (x)")
         raise RuntimeError("falha")
 
-    chain = [*migrations.MIGRATIONS, migrations.Migration(2, "quebra", boom)]
+    chain = [*migrations.MIGRATIONS, migrations.Migration(migrations.LATEST + 1, "quebra", boom)]
     conn = connect(tmp_path / "s.sqlite3")
     with pytest.raises(RuntimeError):
         migrate(conn, chain)
@@ -124,10 +124,11 @@ def test_later_migration_applies_once_in_order(tmp_path):
         seen.append(2)
         c.execute("ALTER TABLE users ADD COLUMN extra TEXT")
 
-    chain = [*migrations.MIGRATIONS, migrations.Migration(2, "a", m2), migrations.Migration(3, "b", lambda c: seen.append(3))]
+    n = migrations.LATEST
+    chain = [*migrations.MIGRATIONS, migrations.Migration(n + 1, "a", m2), migrations.Migration(n + 2, "b", lambda c: seen.append(3))]
     conn = connect(tmp_path / "s.sqlite3")
-    assert migrate(conn, chain) == [1, 2, 3] and migrate(conn, chain) == [] and seen == [2, 3]
-    assert current_version(conn) == 3
+    assert migrate(conn, chain) == list(range(1, n + 3)) and migrate(conn, chain) == [] and seen == [2, 3]
+    assert current_version(conn) == n + 2
     conn.close()
 
 
@@ -138,7 +139,7 @@ def test_four_processes_booting_together(tmp_path):
     procs = [subprocess.Popen([sys.executable, "-c", code, str(path)], env=env) for _ in range(4)]
     assert [p.wait(60) for p in procs] == [0, 0, 0, 0]
     con = sqlite3.connect(path)
-    assert con.execute("PRAGMA user_version").fetchone()[0] == 1
+    assert con.execute("PRAGMA user_version").fetchone()[0] == migrations.LATEST
     assert con.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
     con.close()
 

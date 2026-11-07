@@ -22,6 +22,10 @@ VERIFY_MINUTES = 30
 VERIFY_MAX_TRIES = 5
 VERIFY_RESEND_S = 45
 NO_PASSWORD = "!"  # conta criada pelo Google: login por senha só depois de definir uma (esqueci a senha)
+INVITE_DAYS = 7
+INVITE_MAX_DAYS = 30
+INVITE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"   # sem 0/O/1/I: dá para ditar por telefone
+TERMS_VERSION = "2026-11-rascunho"   # muda quando /termos ou /privacidade mudarem (rascunho PARA REVISÃO JURÍDICA)
 LOGIN_WINDOW_MIN = 15
 LOGIN_MAX_FAILS = 8
 EMAIL_RE = re.compile(r"^[^@\s]{1,64}@[^@\s]{1,190}\.[a-z]{2,24}$", re.I)
@@ -66,7 +70,8 @@ class Accounts:
     # ----------------------------------------------------------- usuários
     def create_user(self, email: str, password: str | None, name: str = "", *, admin: bool = False,
                     workspace_name: str | None = None, verified: bool = False,
-                    google_sub: str | None = None, no_password: bool = False) -> tuple[str, str]:
+                    google_sub: str | None = None, no_password: bool = False,
+                    terms_version: str | None = None) -> tuple[str, str]:
         email = (email or "").strip().lower()
         if not EMAIL_RE.match(email):
             raise AuthError("e-mail inválido")
@@ -80,6 +85,8 @@ class Accounts:
                              " VALUES (?,?,?,?,?,?,?,?)",
                              (uid, email, name, hash_password(password) if password else NO_PASSWORD, int(admin), now(),
                               now() if verified else None, google_sub))
+        if terms_version:   # consentimento dado no cadastro (Termos de Uso + Política de Privacidade)
+            self.db.conn.execute("UPDATE users SET terms_accepted_at=?, terms_version=? WHERE id=?", (now(), terms_version, uid))
         self.db.conn.execute("INSERT INTO workspaces(id, name, owner_id, created_at) VALUES (?,?,?,?)",
                              (wid, (workspace_name or f"Estúdio de {name}")[:80], uid, now()))
         self.db.conn.execute("INSERT INTO memberships(user_id, workspace_id, role) VALUES (?,?,'owner')", (uid, wid))
@@ -253,6 +260,52 @@ class Accounts:
         self.db.conn.execute("UPDATE password_resets SET used_at=? WHERE token_hash=?", (now(), row["token_hash"]))
         self.db.conn.execute("DELETE FROM password_resets WHERE user_id=? AND used_at IS NULL", (row["user_id"],))
         self.db.conn.execute("DELETE FROM sessions WHERE user_id=?", (row["user_id"],))  # derruba sessões antigas
+
+    # ----------------------------------------------------------- convites (uso único)
+    @staticmethod
+    def _invite_key(code: str) -> str:
+        return _sha("invite:" + re.sub(r"[^A-Z0-9]", "", (code or "").upper()))
+
+    def create_invite(self, *, days: int = INVITE_DAYS, email: str | None = None, note: str = "",
+                      by: str = "cli") -> tuple[str, str]:
+        """Gera um código de uso único (só o hash fica no banco). Devolve (código, expira_em)."""
+        if not 1 <= int(days) <= INVITE_MAX_DAYS:
+            raise AuthError(f"validade do convite: de 1 a {INVITE_MAX_DAYS} dias")
+        email = (email or "").strip().lower() or None
+        if email and not EMAIL_RE.match(email):
+            raise AuthError("e-mail inválido")
+        raw = "".join(secrets.choice(INVITE_ALPHABET) for _ in range(12))   # ~60 bits
+        code = f"KIROO-{raw[:4]}-{raw[4:8]}-{raw[8:]}"
+        exp = (datetime.now(timezone.utc) + timedelta(days=int(days))).isoformat(timespec="seconds")
+        self.db.conn.execute("INSERT INTO invites(id, code_hash, email, note, created_by, created_at, expires_at) VALUES (?,?,?,?,?,?,?)",
+                             (new_id("inv"), self._invite_key(code), email, (note or "")[:200], by, now(), exp))
+        return code, exp
+
+    def claim_invite(self, code: str, email: str) -> str | None:
+        """Reserva o convite de forma atômica (um UPDATE condicional): dois cadastros com o mesmo código não passam.
+        Devolve o id do convite, ou None se inválido, usado, expirado ou de outro e-mail."""
+        email = (email or "").strip().lower()
+        cur = self.db.conn.execute(
+            "UPDATE invites SET used_at=?, used_by='(reservado)' WHERE code_hash=? AND used_at IS NULL AND expires_at>? "
+            "AND (email IS NULL OR email=?)", (now(), self._invite_key(code), now(), email))
+        if cur.rowcount != 1:
+            return None
+        return self.db.conn.execute("SELECT id FROM invites WHERE code_hash=?", (self._invite_key(code),)).fetchone()["id"]
+
+    def finish_invite(self, invite_id: str, uid: str | None) -> None:
+        """Conta criada: grava quem usou. uid=None devolve o convite (o cadastro falhou por outro motivo)."""
+        if uid is None:
+            self.db.conn.execute("UPDATE invites SET used_at=NULL, used_by=NULL WHERE id=?", (invite_id,))
+        else:
+            self.db.conn.execute("UPDATE invites SET used_by=? WHERE id=?", (uid, invite_id))
+
+    def invites(self):
+        return self.db.conn.execute("SELECT id, email, note, created_at, expires_at, used_at, used_by FROM invites "
+                                    "ORDER BY created_at DESC").fetchall()
+
+    def revoke_invite(self, invite_id: str) -> bool:
+        return self.db.conn.execute("UPDATE invites SET expires_at=? WHERE id=? AND used_at IS NULL",
+                                    ("1970-01-01T00:00:00+00:00", invite_id)).rowcount == 1
 
     # ----------------------------------------------------------- produções
     def owns(self, wid: str, pid: str) -> bool:

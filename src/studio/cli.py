@@ -92,6 +92,23 @@ def _admin(settings, args) -> int:
                                      "FROM users u JOIN workspaces w ON w.owner_id=u.id ORDER BY u.created_at"):
                 print(f"{u[0]:32} {'ADMIN ' if u[1] else '      '} {u[2]:28} modo={u[3]:9} real={'sim' if u[4] else 'não'} teto=US${u[5]:.2f}")
             return 0
+        if args.acao == "create-invite":   # código de uso único: aparece só agora; no banco fica só o hash
+            code, exp = acc.create_invite(days=args.days, email=args.email, note=args.note, by="cli")
+            print(f"convite: {code}")
+            print(f"vale até {exp} (UTC), uma única vez" + (f", só para {args.email.strip().lower()}" if args.email else ""))
+            return 0
+        if args.acao == "list-invites":
+            from .db import now
+            for r in acc.invites():
+                state = "usado" if r["used_at"] else ("expirado" if r["expires_at"] < now() else "válido")
+                print(f"{r['id']}  {state:8}  expira={r['expires_at']}  e-mail={r['email'] or '-'}  nota={r['note'] or '-'}")
+            return 0
+        if args.acao == "revoke-invite":
+            if not args.id:
+                print("erro: informe --id (veja list-invites)", file=sys.stderr)
+                return 2
+            print("convite revogado" if acc.revoke_invite(args.id) else "erro: convite não encontrado ou já usado")
+            return 0
         if not args.email:
             print("erro: informe --email", file=sys.stderr)
             return 2
@@ -114,6 +131,16 @@ def _admin(settings, args) -> int:
             acc.set_workspace(wid, allow_real=int(args.acao == "allow-real"),
                               **({} if args.acao == "allow-real" else {"mode": "simulated"}))
             print("modo real " + ("liberado" if args.acao == "allow-real" else "bloqueado (voltou para DEMO)"))
+        elif args.acao == "delete-user":   # LGPD pelo operador (a pessoa também apaga pela interface)
+            if not args.yes:
+                print("erro: apagar é definitivo; repita com --yes", file=sys.stderr)
+                return 2
+            from .privacy import delete_account
+            done = delete_account(db, settings.data_dir, u["id"], allow_admin=True)
+            print(f"conta apagada ({done['productions']} produção(ões), {done['workspaces']} estúdio(s))")
+        elif args.acao == "export-user":
+            from .privacy import export_account
+            print(json.dumps(export_account(db, settings.data_dir, u["id"]), ensure_ascii=False, indent=2, default=str))
         elif args.acao == "verify-email":   # sem SMTP: o operador confirma o e-mail depois de conferir com a pessoa
             from .db import now
             db.conn.execute("UPDATE users SET email_verified_at=COALESCE(email_verified_at, ?) WHERE id=?", (now(), u["id"]))
@@ -207,12 +234,16 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser("admin", help="contas: criar usuário, liberar modo real, link de nova senha, créditos")
     p.add_argument("acao", choices=["create-user", "allow-real", "deny-real", "reset-link", "verify-email", "list",
-                                    "grant-credits", "adjust-credits", "credits"])
+                                    "grant-credits", "adjust-credits", "credits", "create-invite", "list-invites",
+                                    "revoke-invite", "export-user", "delete-user"])
     p.add_argument("--email")
     p.add_argument("--name", default="")
     p.add_argument("--admin", action="store_true", help="administrador da plataforma (só com create-user)")
     p.add_argument("--credits", type=float, help="quantidade de créditos (grant-credits/adjust-credits; ajuste aceita negativo)")
-    p.add_argument("--note", default="", help="motivo do lançamento (aparece no extrato)")
+    p.add_argument("--note", default="", help="motivo do lançamento (extrato) ou nota do convite")
+    p.add_argument("--days", type=int, default=7, help="validade do convite em dias (1 a 30; create-invite)")
+    p.add_argument("--id", help="id do convite (revoke-invite)")
+    p.add_argument("--yes", action="store_true", help="confirma ações definitivas (delete-user)")
 
     p = sub.add_parser("ui", help="serve o escritório dos agentes (padrão: só local; ver STUDIO_HOST e docs/RUNBOOK.md)")
     p.add_argument("--port", type=int, default=None, help="padrão: STUDIO_PORT, PORT ou 8765")

@@ -6,7 +6,7 @@ from studio.web.server import App, SECURITY_HEADERS, StudioHTTPServer, serve
 
 PUBLIC = "abc-def.trycloudflare.com"
 CLIENT = {"Host": PUBLIC, "X-Studio-Client": "game"}
-BODY = json.dumps({"email": "a@b.com", "password": "senha-forte-123"}).encode()
+BODY = json.dumps({"email": "a@b.com", "password": "senha-forte-123", "consent": True}).encode()
 
 
 @pytest.fixture

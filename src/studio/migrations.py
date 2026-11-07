@@ -315,8 +315,27 @@ class Migration:
     apply: Callable[[sqlite3.Connection], None]
 
 
+def _m002_invites_consent(conn: sqlite3.Connection) -> None:
+    """Fase 5: convites de uso único (só o hash do código) e registro do consentimento no cadastro."""
+    conn.execute("""CREATE TABLE IF NOT EXISTS invites (
+        id TEXT PRIMARY KEY,
+        code_hash TEXT NOT NULL UNIQUE,
+        email TEXT,                 -- opcional: o convite só vale para este e-mail
+        note TEXT,
+        created_by TEXT,
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        used_at TEXT,
+        used_by TEXT
+    )""")
+    for col in ("terms_accepted_at", "terms_version"):
+        if col not in _columns(conn, "users"):
+            conn.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT")
+
+
 MIGRATIONS: list[Migration] = [
     Migration(1, "schema completo", _m001_baseline),
+    Migration(2, "convites de uso único e consentimento", _m002_invites_consent),
 ]
 LATEST = MIGRATIONS[-1].version
 assert [m.version for m in MIGRATIONS] == list(range(1, LATEST + 1)), "migrações devem ser 1..N em ordem"
