@@ -151,7 +151,7 @@ def test_eight_processes_booting_together(tmp_path):
     procs = [subprocess.Popen([sys.executable, "-c", code, str(path)], env=env) for _ in range(8)]
     assert [p.wait(60) for p in procs] == [0] * 8
     con = sqlite3.connect(path)
-    assert con.execute("PRAGMA user_version").fetchone()[0] == 1
+    assert con.execute("PRAGMA user_version").fetchone()[0] == migrations.LATEST
     assert con.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
     assert con.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
     con.close()
