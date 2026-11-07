@@ -326,7 +326,11 @@ Base no código do Litestream **v0.3.13**:
   `previsto_erro` (wal_bytes ≥ limite_bytes), `erro_checkpoint` (a linha da hipótese entre os ERROR depois do SIGTERM),
   e `hipotese` = `consistente`, `contraexemplo` ou `indeterminada`.
 - `linha_do_tempo`: o stop e, relativos ao `signal received` do Litestream, o aviso de SIGTERM do servidor,
-  `marcadas como interrompidas`, cada linha ERROR, `litestream shut down` e o `FinishedAt`. O stop vem do relógio do
+  `marcadas como interrompidas`, o início e o fim da janela de assentamento (`settle_ini`, `settle_fim`: eventos
+  `settle_start`/`settle_end` do log JSON do app), cada linha ERROR, `litestream shut down` e o `FinishedAt`.
+- `settle_s` e `settle`: o valor de `STUDIO_SHUTDOWN_SETTLE_S` lido do log do app e quanto a janela durou
+  (`desativado` com 0; `ausente` quando não há evento `settle_*`, por exemplo imagem antiga; `SEM settle_end` se o
+  processo morreu no meio; `INTERROMPIDO` por segundo sinal). O stop vem do relógio do
   Windows e o resto do relógio do Docker; podem divergir alguns ms.
 
 **Por que o `-wal` do volume não é a medida principal:** ao fechar a última conexão, o SQLite faz checkpoint e
@@ -335,9 +339,10 @@ Base no código do Litestream **v0.3.13**:
 WAL o arquivo guarda o tamanho máximo, não o conteúdo atual. Ele é registrado, mas só entra na hipótese se não houver
 sombra nem log.
 
-**Fim do log:** uma tabela com rodada, carga, wal_bytes, fonte, wal_pag, limite, saída, erros_ls, resultado e
-hipótese, seguida de
-`hipotese consistente em N de M rodadas / contraexemplos: <rodada (motivo)> … / indeterminadas: …`. M exclui as
+**Fim do log:** uma tabela com rodada, carga, wal_bytes, fonte, wal_pag, limite, saída, settle_s, erros_ls,
+resultado e hipótese, seguida de
+`hipotese consistente em N de M rodadas / contraexemplos: <rodada (motivo)> … / indeterminadas: …` e de
+`settle_s: <valor> em <rodadas> / …` (repetido no resumo do passo 7). M exclui as
 indeterminadas, que são listadas à parte. Uma rodada é indeterminada quando falta o WAL ou o page_size, ou quando o
 Litestream está inativo. **Isto é só medição: a regra de erros não muda.** Qualquer linha ERROR do Litestream depois
 do SIGTERM e qualquer código de saída ≠ 0 continuam sendo FAIL, mesmo numa rodada "consistente".
@@ -374,6 +379,41 @@ WAL esperado. São estimativas, por isso a medição:
 Qualquer um deles derruba o "se e só se". Dados de 07/11 aplicados à regra (WAL pelo log): 5 de 5 consistentes
 (a1 619, a4 814 páginas, sem erro; a2 1036, a3 1035, a5 1187 páginas, com erro).
 
+### Janela de assentamento (variante a')
+
+Implementada no servidor (`src/studio/shutdown.py`; detalhes, trechos do Litestream v0.3.13 e o orçamento em
+`docs/RUNBOOK.md`, *Prazo de parada e janela de assentamento*). Depois da drenagem (HTTP fechado, produções marcadas,
+requisições em andamento e thread do checkpoint periódico encerradas) o servidor espera `STUDIO_SHUTDOWN_SETTLE_S`
+(padrão 3 s) antes de sair. Nesse tempo o Litestream, que espera o filho, faz o último sync e o checkpoint pendente
+com o contexto ainda válido; quando o servidor sai, o `DB.Close` não tem checkpoint a fazer nem envio em voo.
+`litestream.yml`, a versão do Litestream e a regra de erros do ensaio **não mudaram**.
+
+**A imagem precisa ser reconstruída** (`src/` mudou) antes de medir:
+
+```powershell
+docker build --build-arg "GIT_COMMIT=$(git rev-parse HEAD)" -t kiroo:dados .
+```
+
+**Critério de verificação:** `-Passo 7 -Tipos a -Rodadas 5` nas cargas `baixa`, `normal` e `alta`:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ensaio_backup.ps1 -Passo 7 -Tipos a -Rodadas 5 -Carga baixa
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ensaio_backup.ps1 -Passo 7 -Tipos a -Rodadas 5 -Carga normal
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ensaio_backup.ps1 -Passo 7 -Tipos a -Rodadas 5 -Carga alta
+```
+
+Alvo: **15 de 15** rodadas com `saida = 0`, `erros_litestream = 0`, `settle_s = 3` e, na linha do tempo,
+`settle_ini` < `settle_fim` < `ls_shutdown`. Qualquer linha ERROR do Litestream continua FAIL. Se sobrar erro, olhe
+na linha do tempo **onde** ele cai em relação a `settle_fim`:
+
+- `error closing db … checkpoint` depois do `settle_fim`: o checkpoint não aconteceu dentro da janela. Confira o
+  evento `drained` no `-log.txt` (`producoes ainda em chamada` > 0 = alguém escreveu durante a janela) e se houve
+  `wal segment written` com índice novo durante a janela.
+- `monitor error … RequestCanceled` logo depois do `settle_fim`: o último envio ao R2 ainda estava em voo; o envio
+  levou mais que a folga da janela (veja `elapsed=` nos `wal segment written`). Repita com
+  `$env:STUDIO_SHUTDOWN_SETTLE_S = '5'` no terminal (o passo 7 repassa a variável ao container pelo nome; o orçamento
+  continua cabendo: 25 + 2 + 5 + 5 = 37 ≤ 40) antes de qualquer conclusão. A rodada mostra o `settle_s` efetivo.
+
 ### Escritas depois do SIGTERM
 
 Cada cadastro confirmado (200) é registrado em `p7-<rodada>-aceitas.tsv` (n, e-mail de teste, horário UTC de envio e
@@ -400,7 +440,8 @@ rodada `a` confere.
 não as manda para outro lugar: só vira erro para o usuário) e:
 
 1. garantir o orçamento de tempo: `STUDIO_SHUTDOWN_GRACE_S` + fechamento do HTTP + última sincronização do Litestream
-   < tempo de parada da plataforma (`docker stop -t 40` aqui; `kill_timeout` no deploy) — hoje 25 s + sync, com folga;
+   < tempo de parada da plataforma (`docker stop -t 40` aqui; `kill_timeout` no deploy) — **aplicado** junto com a
+   janela de assentamento: 25 + 2 + 3 + 5 = 35 s ≤ 40, validado na subida (`STUDIO_STOP_GRACE_S`);
 2. encerrar o listener assim que não houver produção em andamento, em vez de esperar o prazo inteiro quando os laços
    já pararam (reduz a janela de escritas aceitas no fim);
 3. responder `Connection: close` durante a drenagem, para o cliente não reutilizar conexão que vai cair;

@@ -198,7 +198,7 @@ curl -s http://127.0.0.1:8765/healthz                                           
 curl -s -o /dev/null -w "%{http_code}\n" -H "Host: errado.test" http://127.0.0.1:8765/api/config   # 403
 curl -s -H "Host: app.exemplo.test" http://127.0.0.1:8765/api/config            # "signup":"closed"
 curl -s -X POST -H "Host: app.exemplo.test" -H "Content-Type: application/json" -d "{}" http://127.0.0.1:8765/api/auth/signup -o /dev/null -w "%{http_code}\n"   # 403
-time docker stop kiroo-prod                                                      # SIGTERM: sai em segundos (limite STUDIO_SHUTDOWN_GRACE_S)
+time docker stop kiroo-prod                                                      # SIGTERM: sai em segundos (limite STUDIO_SHUTDOWN_GRACE_S + 2 + STUDIO_SHUTDOWN_SETTLE_S)
 docker rm kiroo-prod
 ```
 

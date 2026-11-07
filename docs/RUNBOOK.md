@@ -60,7 +60,9 @@ studio admin reset-link --email voce@kiroo.app                              # se
 
 | Variável | Padrão | O que faz |
 |---|---|---|
-| `STUDIO_SHUTDOWN_GRACE_S` | `25` | Tolerância após `SIGTERM`. Ajuste o `stop_grace_period`/`terminationGracePeriodSeconds` do orquestrador para um valor maior que este. |
+| `STUDIO_SHUTDOWN_GRACE_S` | `25` | Tolerância após `SIGTERM` para os laços de produção terminarem a etapa em curso (≥ 0). |
+| `STUDIO_SHUTDOWN_SETTLE_S` | `3` | Janela de assentamento: depois da drenagem, o servidor espera isto antes de sair, sem escrever nada, para o Litestream fazer o último sync e o checkpoint pendente com contexto válido. Aceita de `0` a `15`; `0` desativa. Valor inválido impede a subida. |
+| `STUDIO_STOP_GRACE_S` | `40` | Prazo que a plataforma dá entre o `SIGTERM` e o `SIGKILL` (igual ao `stop_grace_period` do compose). O servidor **recusa subir** se o desligamento não couber nele (ver *Prazo de parada* abaixo). |
 | `STUDIO_ENV` | `dev` | `dev`/`staging`/`production`. Backup ausente: staging sobe com CRITICAL e `warnings` em `/readyz` (200); **production recusa subir**. Ver `docs/BACKUP.md`. |
 | `STUDIO_ALLOW_NO_BACKUP` | — | `1` libera subir em production sem backup; `/readyz` devolve 503 com warning enquanto faltar. |
 | `BACKUP_R2_ENDPOINT`, `BACKUP_R2_ACCESS_KEY_ID`, `BACKUP_R2_SECRET_ACCESS_KEY`, `BACKUP_BUCKET` | — | Backup no R2 (Litestream e `scripts/backup_media.sh`). As chaves são segredos. |
@@ -68,6 +70,60 @@ studio admin reset-link --email voce@kiroo.app                              # se
 | `STUDIO_RESUME_MAX_ATTEMPTS` | `3` | Retomadas automáticas por produção antes de desistir (a produção vai a *pausada* e um evento `resume_abandoned` é gravado). O contador zera quando uma execução termina normalmente. |
 
 **Desligamento (SIGTERM; no Windows, CTRL_BREAK_EVENT/SIGBREAK, porque o SIGTERM de lá mata o processo sem chamar o handler):** o servidor passa a responder `503` em `/readyz`, recusa criar/avançar produções (`503` + `Retry-After`), mantém as consultas, e espera até `STUDIO_SHUTDOWN_GRACE_S` os laços terminarem a etapa em curso (eles só param **entre** etapas, nunca no meio de uma chamada paga). O que sobrar fica marcado `interrupted` com um evento no log de eventos da produção. `Ctrl+C` espera só 3 s.
+Depois disso o HTTP fecha, o servidor espera até 2 s as requisições em andamento e a thread do checkpoint periódico
+(evento `drained`; vira WARNING se algo sobrou) e abre a **janela de assentamento** de `STUDIO_SHUTDOWN_SETTLE_S`
+(eventos `settle_start` e `settle_end`, com `settle_s`, `duration_ms` e `interrupted`; `settle_skipped` com 0). Um
+**segundo** sinal encerra a janela na hora (`settle_abort`) e o processo sai.
+
+### Prazo de parada e janela de assentamento (Litestream)
+
+**Por que a janela existe.** No contêiner o servidor roda como filho de `litestream replicate -exec`. Medido no ensaio
+(16 rodadas `a` do passo 7, `docker stop -t 40` com produção e escritas): `error closing db … checkpoint:
+mode=PASSIVE err=release read lock: context canceled` (saída 1) em 5 de 5 rodadas com WAL-sombra ≥ 1000 páginas e em
+0 de 11 abaixo; `monitor error … RequestCanceled` (saída 0) em 5 de 16, 0,1–0,25 s depois de o servidor sair; nenhuma
+escrita aceita perdida. Código do Litestream **v0.3.13** (tag `v0.3.13` de `benbjohnson/litestream`, a versão de
+`docker/litestream.lock`):
+
+- `cmd/litestream/main.go` (`case "replicate"`, l. 94–115): no sinal, `c.cmd.Process.Signal(sig)` e depois
+  `<-c.execCh` ("waiting for exec process to close"); **só então** `c.Close()`. Se o filho sai sozinho, o mesmo
+  `select` vai direto para o `Close`.
+- `db.go` `NewDB` (l. 144): `db.ctx, db.cancel = context.WithCancel(context.Background())`; o único `db.cancel()` está
+  em `DB.Close` (l. 321–322). Enquanto o Litestream espera o filho, `db.ctx` **não** está cancelado.
+- `db.go` `Open` (l. 309–313) sobe `db.monitor()`, que a cada `MonitorInterval` (1 s) chama `db.Sync(db.ctx)`
+  (l. 1425–1440); o `Sync` faz o checkpoint quando o WAL-sombra passa de `MinCheckpointPageN` (1000) ou pela regra de
+  1 min (l. 774–790).
+- `db.go` `init` (l. 487–489): `r.Start(db.ctx)`; `replica.go` `Start` (l. 113–130) deriva o contexto da réplica de
+  `db.ctx` e sobe `monitor`, que a cada `sync-interval` (1 s) envia o que mudou (l. 668–700, `monitor error` na l. 699).
+- Por que o fechamento falha: `DB.Close` cancela `db.ctx` **antes** do `Sync` final (l. 321–330). Um envio em voo da
+  réplica é cancelado (`monitor error`), e se esse `Sync` final precisa de checkpoint, `execCheckpoint` (l. 1378–1422)
+  reabre o read lock por `acquireReadLock`, que usa `tx.ExecContext(db.ctx, …)` (l. 611–624) já cancelado.
+
+Conclusão: enquanto o servidor não sai, os monitores do banco e da réplica seguem ativos com contexto válido. A janela
+de assentamento usa isso: o servidor já não escreve, o monitor faz o checkpoint pendente (e começa um WAL-sombra novo,
+`checkpoint` + `initShadowWALFile`, l. 1301–1376 e 960–998) e a réplica envia o último segmento; quando o servidor sai,
+o `Sync` final do `Close` não tem checkpoint a fazer e não há envio em voo. Caminho típico dentro da janela: tique do
+monitor do banco (≤ 1 s) + tique da réplica (≤ 1 s) + envio (0,3–0,6 s medidos) ≈ 2,6 s no pior caso, por isso o
+padrão 3 s. Se o envio ao R2 demorar mais, aumente (até 15) e refaça o orçamento.
+
+**Limites conhecidos (não resolvidos pela janela):** uma produção que ainda estava no meio de uma chamada paga depois de
+`STUDIO_SHUTDOWN_GRACE_S` fica marcada `interrupted`, mas a thread dela continua até o processo sair e pode gravar
+durante a janela (o evento `drained` mostra `producoes ainda em chamada=N`). Se essa gravação cair no último segundo,
+o `Close` volta a ter o que sincronizar. O mesmo vale para um `SIGKILL` antes do fim da janela.
+
+**Orçamento (validado na subida).** O servidor recusa subir (mensagem com a conta) quando
+
+```
+STUDIO_SHUTDOWN_GRACE_S + 2 (fechamento do HTTP) + STUDIO_SHUTDOWN_SETTLE_S + 5 (fechamento do Litestream) > STUDIO_STOP_GRACE_S
+```
+
+Os 5 s do Litestream cobrem o `Sync` final do banco e da réplica no `Close`. No boot, o evento `shutdown_budget`
+registra o mínimo calculado.
+
+**Mínimo que a plataforma precisa dar ao processo (Fase 7):** `grace + 2 + settle + 5` segundos entre o SIGTERM e o
+SIGKILL. Com os padrões: **25 + 2 + 3 + 5 = 35 s**; o compose usa `stop_grace_period: 40s` e `STUDIO_STOP_GRACE_S=40`.
+Em outra plataforma, configure o prazo de parada (`kill_timeout`, `terminationGracePeriodSeconds`, `stop_grace_period`)
+para **≥ 35 s** (recomendado 40 s) e exporte `STUDIO_STOP_GRACE_S` com esse mesmo valor; se a plataforma der menos,
+reduza `STUDIO_SHUTDOWN_GRACE_S` (ex.: prazo de 30 s → grace 20). Exemplos: settle 0 → mínimo 32 s; settle 15 → 47 s.
 
 **Retomada ao subir:** produções com `run_state` `running` (processo morreu) ou `interrupted` são retomadas sozinhas, a partir do estado salvo: tentativas e operações remotas já gravadas (`attempts`, `remote_op_id`) são reaproveitadas, então etapa paga não é refeita. Produções pausadas, encerradas ou esperando decisão humana não são religadas. Reservas de crédito órfãs continuam sendo liberadas pelo livro-razão após 15 min. Eventos: `interrupted`, `resumed`, `resume_abandoned`.
 
