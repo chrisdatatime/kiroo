@@ -144,3 +144,51 @@ def release_instance_lock(fh) -> None:
         pass
     if fh in _held_locks:
         _held_locks.remove(fh)
+
+
+# ---------------------------------------------------------------- ambiente e backup do banco
+ENVIRONMENTS = ("dev", "staging", "production")
+# Credenciais do R2 só para BACKUP (bucket kiroo-backups). Nomes apenas; os valores vêm do ambiente do processo
+# e nunca são lidos para log, /readyz ou arquivos de configuração.
+BACKUP_VARS = ("BACKUP_R2_ENDPOINT", "BACKUP_R2_ACCESS_KEY_ID", "BACKUP_R2_SECRET_ACCESS_KEY")
+
+
+def environment_name(env=None) -> str:
+    """STUDIO_ENV: dev (padrão) | staging | production. Define o prefixo no bucket de backup."""
+    e = os.environ if env is None else env
+    return _choice("STUDIO_ENV", e.get("STUDIO_ENV"), ENVIRONMENTS, "dev")
+
+
+def backup_required(env=None) -> bool:
+    return environment_name(env) in ("staging", "production")
+
+
+def backup_missing(env=None) -> list[str]:
+    """Nomes das variáveis de backup que faltam (lista vazia = configurado)."""
+    e = os.environ if env is None else env
+    return [v for v in BACKUP_VARS if not (e.get(v) or "").strip()]
+
+
+def backup_warning(env=None) -> str | None:
+    """Aviso quando o backup é obrigatório (staging/produção) e não está configurado; senão None."""
+    if backup_required(env) and (missing := backup_missing(env)):
+        return f"BACKUP DO BANCO NÃO CONFIGURADO ({environment_name(env)}): faltam {', '.join(missing)}. Sem Litestream os dados não têm cópia."
+    return None
+
+
+def allow_no_backup(env=None) -> bool:
+    e = os.environ if env is None else env
+    return (e.get("STUDIO_ALLOW_NO_BACKUP") or "").strip() == "1"
+
+
+def backup_start_error(env=None) -> str | None:
+    """Em production, backup ausente IMPEDE o boot (salvo STUDIO_ALLOW_NO_BACKUP=1). Staging/dev nunca bloqueiam."""
+    if environment_name(env) == "production" and backup_missing(env) and not allow_no_backup(env):
+        return (f"recusando subir em production sem backup do banco: faltam {', '.join(backup_missing(env))}. "
+                "Configure o backup (docs/BACKUP.md) ou, sabendo do risco, defina STUDIO_ALLOW_NO_BACKUP=1.")
+    return None
+
+
+def backup_blocks_ready(env=None) -> bool:
+    """production sem backup (liberado por STUDIO_ALLOW_NO_BACKUP=1): /readyz responde 503."""
+    return environment_name(env) == "production" and bool(backup_missing(env))

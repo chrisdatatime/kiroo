@@ -47,7 +47,7 @@ from ..orchestrator import OrchestratorError
 from ..profiles import KINDS, available_versions, load_profile
 from ..profiles import snapshot as snapshot_profiles
 from ..providers.simulated import SimulationScript
-from ..runtime import InstanceLockError, ServerConfig, acquire_instance_lock, client_ip, release_instance_lock
+from ..runtime import backup_blocks_ready, backup_start_error, backup_warning, InstanceLockError, ServerConfig, acquire_instance_lock, client_ip, release_instance_lock
 from ..spend import spend_report
 from ..states import TERMINAL, ProductionStatus as PS
 from ..storage import ProductionStorage, StorageError
@@ -452,7 +452,19 @@ class App:
         except Exception:  # noqa: BLE001 — o detalhe vai para o log, não para quem consulta
             log.error("readyz falhou", exc_info=True)
         ok = all(checks.values())
-        return _json(200 if ok else 503, {"status": "ready" if ok else "unavailable", "checks": checks})
+        try:
+            if backup_blocks_ready():      # production sem backup e com STUDIO_ALLOW_NO_BACKUP=1
+                ok = False
+        except ValueError:
+            ok = False
+        body = {"status": "ready" if ok else "unavailable", "checks": checks}
+        try:
+            warn = backup_warning()
+        except ValueError:
+            warn = "STUDIO_ENV inválido"
+        if warn:   # aviso alto, sem derrubar o serviço: o servidor serve, mas os dados estão sem cópia
+            body["warnings"] = ["backup_not_configured"]
+        return _json(200 if ok else 503, body)
 
     def handle(self, method: str, raw_path: str, headers: dict, body: bytes, peer: str = "") -> Response:
         headers = {k.title(): v for k, v in headers.items() if k.title() != "_Peer"}   # chaves canônicas; _Peer não vem do cliente
@@ -1077,6 +1089,12 @@ def _checkpoint_loop(app) -> None:
 def serve(port: int | None = None, open_browser: bool = True, public_host: str | None = None, *,
           host: str | None = None, trust_proxy: str | None = None) -> None:
     cfg = ServerConfig.from_env()
+    try:
+        err = backup_start_error()
+    except ValueError as exc:
+        err = str(exc)
+    if err:
+        raise SystemExit(f"Kiroo: {err}")
     port = cfg.port if port is None else port
     host = host or cfg.host
     app = App(port, public_host=public_host, trust_proxy=trust_proxy, config=cfg)
@@ -1097,7 +1115,12 @@ def serve(port: int | None = None, open_browser: bool = True, public_host: str |
         httpd.server_close()
         release_instance_lock(lock)
         raise SystemExit(f"Falha ao preparar o banco ({type(exc).__name__}): {exc}") from exc
-
+    try:
+        warn = backup_warning()
+    except ValueError as exc:
+        warn = str(exc)
+    if warn:
+        log.critical(warn, extra={"event": "backup_missing"})
     threading.Thread(target=_checkpoint_loop, args=(app,), name="wal-checkpoint", daemon=True).start()
 
     shown = "127.0.0.1" if host in ("0.0.0.0", "::", "") else host

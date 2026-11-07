@@ -21,6 +21,13 @@ services:
     env_file:
       - path: .env.docker
         required: false
+    # Backup (docs/BACKUP.md): repassadas do terminal SE existirem; nunca gravadas em arquivo.
+    environment:
+      - STUDIO_ENV
+      - BACKUP_R2_ENDPOINT
+      - BACKUP_R2_ACCESS_KEY_ID
+      - BACKUP_R2_SECRET_ACCESS_KEY
+      - BACKUP_BUCKET
     volumes:
       - kiroo-data:/data                       # banco, produções, uploads (persistente)
       - ./reference:/reference:ro              # referência pessoal: ./reference/bia/PERFIL BIA.jpg (opcional)

@@ -3,3 +3,7 @@ docker/* text eol=lf
 docker-compose.yml text eol=lf
 assets.lock text eol=lf
 .dockerignore text eol=lf
+
+scripts/backup_media.sh text eol=lf
+scripts/restore.sh text eol=lf
+litestream.yml text eol=lf

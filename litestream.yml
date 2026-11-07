@@ -1,0 +1,23 @@
+# Replicação contínua do SQLite do Kiroo para o R2 (Litestream 0.3.x).
+#
+# NENHUMA credencial neste arquivo: o Litestream expande ${VAR} do ambiente do processo.
+#   STUDIO_DATA_DIR            pasta de dados (o banco é <STUDIO_DATA_DIR>/studio.sqlite3)
+#   STUDIO_ENV                 staging | production | dev  -> prefixo no bucket: <STUDIO_ENV>/db
+#   BACKUP_BUCKET              bucket privado (docker/entrypoint.sh usa kiroo-backups se vazio)
+#   BACKUP_R2_ENDPOINT         https://<ID_DA_CONTA>.r2.cloudflarestorage.com
+#   LITESTREAM_ACCESS_KEY_ID / LITESTREAM_SECRET_ACCESS_KEY  (o entrypoint copia de BACKUP_R2_*)
+#
+# Restauração: scripts/restore.sh. Detalhes, RPO/RTO (metas) e rotina de teste: docs/BACKUP.md.
+dbs:
+  - path: ${STUDIO_DATA_DIR}/studio.sqlite3
+    # O app já faz checkpoints PASSIVE (nunca bloqueiam o Litestream); o Litestream controla os demais.
+    replicas:
+      - type: s3
+        bucket: ${BACKUP_BUCKET}
+        path: ${STUDIO_ENV}/db
+        endpoint: ${BACKUP_R2_ENDPOINT}
+        region: auto
+        force-path-style: true
+        sync-interval: 1s          # meta de RPO do banco: segundos (medir; ver docs/BACKUP.md)
+        snapshot-interval: 6h      # novo snapshot completo a cada 6 h (limita o tempo de restauração)
+        retention: 168h            # mantém 7 dias de WAL/snapshots para restauração em ponto no tempo

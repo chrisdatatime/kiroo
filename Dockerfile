@@ -37,11 +37,18 @@ COPY --from=assets /out/assets/ /app/assets/
 COPY --from=assets /out/frontend/src/assets/home/ ./src/assets/home/
 RUN npm run build
 
+# ---------------------------------------------------------------- 2b) Litestream (backup contínuo do SQLite)
+# Versão e SHA-256 fixados em docker/litestream.lock. O build FALHA se o hash estiver "PENDING" ou não bater.
+FROM python:3.12-slim AS litestream
+WORKDIR /w
+COPY docker/litestream.lock docker/fetch_litestream.py ./
+RUN python fetch_litestream.py --lock litestream.lock --out /out/litestream
+
 # ---------------------------------------------------------------- 3) runtime
 FROM python:3.12-slim AS runtime
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core tini \
+ && apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core tini rclone \
  && rm -rf /var/lib/apt/lists/*
 RUN groupadd --system --gid 10001 kiroo \
  && useradd --system --uid 10001 --gid kiroo --home-dir /nonexistent --shell /usr/sbin/nologin kiroo \
@@ -55,6 +62,12 @@ RUN pip install --require-hashes -r docker/requirements.lock
 # O código roda direto de /app/src: config.PROJECT_ROOT = /app e GAME_DIST = /app/frontend/dist (derivados do caminho do código).
 COPY src/ ./src/
 COPY profiles/ ./profiles/
+# backup/restauração: Litestream (banco) + rclone (mídia) + roteiros
+COPY --from=litestream /out/litestream /usr/local/bin/litestream
+COPY litestream.yml /etc/litestream.yml
+COPY docker/entrypoint.sh /usr/local/bin/kiroo-entrypoint
+COPY scripts/backup_media.sh scripts/restore.sh scripts/verify_restore.py ./scripts/
+RUN chmod 0755 /usr/local/bin/kiroo-entrypoint /usr/local/bin/litestream ./scripts/*.sh
 COPY assets/maps/ ./assets/maps/
 COPY --from=frontend /app/frontend/dist ./frontend/dist
 # licenças do pacote acompanham a imagem
@@ -78,5 +91,5 @@ EXPOSE 8765
 STOPSIGNAL SIGTERM
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD ["python", "-c", "import os,urllib.request as u; u.urlopen('http://127.0.0.1:%s/healthz' % (os.environ.get('STUDIO_PORT') or os.environ.get('PORT') or '8765'), timeout=4)"]
-ENTRYPOINT ["tini", "--"]
+ENTRYPOINT ["tini", "--", "kiroo-entrypoint"]
 CMD ["python", "-m", "studio", "ui", "--no-browser"]
