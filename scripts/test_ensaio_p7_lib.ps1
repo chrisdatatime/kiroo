@@ -202,10 +202,48 @@ Ok 'conclusao: contraexemplos listados com o motivo; indeterminadas fora do M' (
     $c -match '; a3 \(erro de checkpoint com WAL de 242 paginas' -and $c -match 'indeterminadas: a5 \(WAL ou page_size desconhecido\); a6 \(sem medicao\)$') $c
 Ok 'conclusao: nada medido = 0 de 0' ((P7-Conclusao @()) -eq 'hipotese consistente em 0 de 0 rodadas / contraexemplos: nenhum')
 $tb = P7-Tabela $r0711
-Ok 'tabela: cabecalho + 1 linha por rodada' ($tb.Count -eq 6 -and $tb[0] -match '^rodada\s+carga\s+wal_bytes\s+fonte\s+wal_pag\s+limite\s+saida\s+erros_ls\s+resultado\s+hipotese$') ($tb -join "`n")
-Ok 'tabela: linha da a2 com os valores' ($tb[2] -match '^a2\s+normal\s+4268352\s+log\s+1036\s+1000\s+1\s+2\s+FAIL\s+consistente$') $tb[2]
+Ok 'tabela: cabecalho + 1 linha por rodada' ($tb.Count -eq 6 -and $tb[0] -match '^rodada\s+carga\s+wal_bytes\s+fonte\s+wal_pag\s+limite\s+saida\s+settle_s\s+erros_ls\s+resultado\s+hipotese$') ($tb -join "`n")
+Ok 'tabela: linha da a2 com os valores' ($tb[2] -match '^a2\s+normal\s+4268352\s+log\s+1036\s+1000\s+1\s+\?\s+2\s+FAIL\s+consistente$') $tb[2]
 $tb = P7-Tabela @([ordered]@{ rodada = 'a9'; erros_litestream = 'NAO_VERIFICADO (Litestream inativo)'; resultado = 'NAO_VERIFICADO' })
-Ok 'tabela: campo ausente = ?; erros NAO_VERIFICADO abreviados' ($tb[1] -match '^a9\s+\?\s+\?\s+\?\s+\?\s+\?\s+\?\s+NAO_VERIF\s+NAO_VERIFICADO\s+\?$') $tb[1]
+Ok 'tabela: campo ausente = ?; erros NAO_VERIFICADO abreviados' ($tb[1] -match '^a9\s+\?\s+\?\s+\?\s+\?\s+\?\s+\?\s+\?\s+NAO_VERIF\s+NAO_VERIFICADO\s+\?$') $tb[1]
+
+# janela de assentamento (settle): eventos JSON do app no log do container
+$logS = @(
+    '2026-11-08T10:00:00.100000000Z time=2026-11-08T10:00:00.100Z level=INFO msg="signal received, litestream shutting down"',
+    '2026-11-08T10:00:00.101000000Z {"ts": "2026-11-08T10:00:00.101+00:00", "level": "INFO", "logger": "studio.web.server", "msg": "SIGTERM: parando de aceitar jobs; aguardando ate 25.0s", "event": "stop"}',
+    '2026-11-08T10:00:25.110000000Z {"ts": "2026-11-08T10:00:25.110+00:00", "level": "WARNING", "logger": "studio.web.server", "msg": "desligamento: 1 producao(oes) ainda em andamento marcadas como interrompidas"}',
+    '2026-11-08T10:00:25.300000000Z {"ts": "2026-11-08T10:00:25.300+00:00", "level": "INFO", "logger": "studio.web.server", "msg": "drenagem concluida: requisicoes em andamento=0, checkpoint periodico parado, producoes ainda em chamada=0", "event": "drained"}',
+    '2026-11-08T10:00:25.301000000Z {"ts": "2026-11-08T10:00:25.301+00:00", "level": "INFO", "logger": "studio.shutdown", "msg": "settle: inicio (3s para o Litestream sincronizar antes de o servidor sair)", "event": "settle_start", "settle_s": 3.0}',
+    '2026-11-08T10:00:26.200000000Z time=2026-11-08T10:00:26.199Z level=INFO msg="wal segment written" db=/data/studio.sqlite3 replica=s3 position=ec535fa216d82639/00000004:0 elapsed=300ms sz=4152',
+    '2026-11-08T10:00:28.302000000Z {"ts": "2026-11-08T10:00:28.302+00:00", "level": "INFO", "logger": "studio.shutdown", "msg": "settle: fim (3.001s)", "event": "settle_end", "settle_s": 3.0, "duration_ms": 3001.2, "interrupted": false}',
+    '2026-11-08T10:00:28.400000000Z time=2026-11-08T10:00:28.400Z level=INFO msg="subprocess exited, litestream shutting down"',
+    '2026-11-08T10:00:28.900000000Z time=2026-11-08T10:00:28.900Z level=INFO msg="litestream shut down"')
+$st = P7-Settle $logS
+Ok 'settle: inicio, fim, settle_s e duracao lidos do log' ($st.settle_s -eq 3 -and $st.inicio -eq '2026-11-08T10:00:25.301Z' -and $st.fim -eq '2026-11-08T10:00:28.302Z' -and
+    $st.duracao_s -eq 3.001 -and $st.interrompido -eq $false -and $st.estado -eq 'completo') ($st | Out-String)
+Ok 'settle: texto da rodada' ((P7-SettleTexto $st) -eq '3 s, durou 3.001 s') (P7-SettleTexto $st)
+$mcS = P7-Marcos $logS @()
+Ok 'marcos: settle_ini e settle_fim pelos eventos do app' ($mcS.settle_ini -eq '2026-11-08T10:00:25.301Z' -and $mcS.settle_fim -eq '2026-11-08T10:00:28.302Z') ($mcS | Out-String)
+$ltS = P7-LinhaDoTempo $mcS '2026-11-08T10:00:00.095Z' '2026-11-08T10:00:28.950Z'
+Ok 'linha do tempo: settle entre interrompidas e o shut down' ($ltS -match 'interrompidas=\+25\.010 s \| settle_ini=\+25\.201 s \| settle_fim=\+28\.202 s \| ls_shutdown=\+28\.800 s' -and $ltS -match 'finished=\+28\.850 s') $ltS
+$ltV = P7-LinhaDoTempo $mc '2026-11-07T14:10:36.340Z' '2026-11-07T14:11:02.100Z'
+Ok 'linha do tempo: log sem settle (imagem antiga) = settle_ini=? sem quebrar' ($ltV -match 'settle_ini=\? \| settle_fim=\? \| ls_shutdown=\+25\.682 s') $ltV
+Ok 'settle: log sem eventos = ausente (settle_s $null)' ((P7-Settle $logA).estado -eq 'ausente' -and $null -eq (P7-Settle $logA).settle_s -and (P7-SettleTexto (P7-Settle $logA)) -match '^ausente')
+$sk = P7-Settle @('2026-11-08T10:00:25.3Z {"level": "INFO", "msg": "settle desativado (STUDIO_SHUTDOWN_SETTLE_S=0)", "event": "settle_skipped", "settle_s": 0}')
+Ok 'settle: settle_skipped = desativado, settle_s 0' ($sk.estado -eq 'desativado' -and $sk.settle_s -eq 0 -and (P7-SettleTexto $sk) -match 'desativado') ($sk | Out-String)
+$it = P7-Settle @($logS[4], '2026-11-08T10:00:26.0Z {"msg": "settle: fim", "event": "settle_end", "settle_s": 3.0, "duration_ms": 699.0, "interrupted": true}')
+Ok 'settle: interrompido por segundo sinal' ($it.estado -eq 'interrompido' -and $it.interrompido -and $it.duracao_s -eq 0.699 -and (P7-SettleTexto $it) -match 'INTERROMPIDO') ($it | Out-String)
+$sf = P7-Settle @($logS[4])
+Ok 'settle: inicio sem fim = sem_fim (processo morto no meio)' ($sf.estado -eq 'sem_fim' -and $sf.settle_s -eq 3 -and (P7-SettleTexto $sf) -match 'SEM settle_end') ($sf | Out-String)
+Ok 'settle: "settle_start" so na mensagem (sem campo event) NAO conta' ((P7-Settle @('2026-11-08T10:00:25.3Z {"msg": "settle_start"}')).estado -eq 'ausente')
+$sr = P7-SettleResumo @([ordered]@{ rodada = 'a1'; settle_s = 3.0 }, [ordered]@{ rodada = 'a2'; settle_s = 3.0 }, [ordered]@{ rodada = 'a3'; settle_s = $null }, [ordered]@{ rodada = 'a4' })
+Ok 'settle: resumo agrupa por valor (ausente separado)' ($sr -eq 'settle_s: 3 em a1, a2 / ausente em a3, a4') $sr
+# a regra de erros NAO afrouxa com o settle: linhas do app (JSON) nunca contam, ERROR do Litestream depois do settle conta
+$logE = @($logS[0..6]) + @('2026-11-08T10:00:28.500000000Z time=2026-11-08T10:00:28.500Z level=ERROR msg="monitor error" db=/data/studio.sqlite3 replica=s3 error="RequestCanceled"') + @($logS[8])
+$eS = P7-ErrosLitestream $logS $true
+Ok 'settle: desligamento limpo com settle = 0 erros' ($null -ne $eS -and $eS.Count -eq 0) ($eS -join ' | ')
+$eE = P7-ErrosLitestream $logE $true
+Ok 'settle: ERROR do Litestream depois do settle continua contando' ($eE.Count -eq 1 -and $eE[0] -match 'monitor error') ($eE -join ' | ')
 
 # -Carga e -Tipos
 Ok 'carga: baixa = 1 escritor com 1 s de pausa' ((P7-Carga 'baixa').escritores -eq 1 -and (P7-Carga 'baixa').pausa_ms -eq 1000)

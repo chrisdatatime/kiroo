@@ -21,7 +21,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
+from studio.shutdown import HTTP_CLOSE_S  # noqa: E402
 GRACE = 20
+SETTLE = 3   # STUDIO_SHUTDOWN_SETTLE_S: janela de assentamento depois da drenagem (studio.shutdown)
 PORT = int(os.environ.get("E2E_PORT", "8793"))
 EMAIL, PASSWORD = "e2e@kiroo.test", "senha-forte-123"
 results: list[tuple[str, bool, str]] = []
@@ -63,7 +65,8 @@ class Client:
 
 def start(data: Path, port: int = PORT) -> subprocess.Popen:
     env = {**os.environ, "STUDIO_DATA_DIR": str(data), "STUDIO_MODE": "simulated", "STUDIO_PORT": str(port),
-           "STUDIO_SHUTDOWN_GRACE_S": str(GRACE), "STUDIO_POLL_INTERVAL_S": "1"}
+           "STUDIO_SHUTDOWN_GRACE_S": str(GRACE), "STUDIO_SHUTDOWN_SETTLE_S": str(SETTLE),
+           "STUDIO_POLL_INTERVAL_S": "1"}
     for k in [k for k in env if k in ("STUDIO_ALLOW_PAID_CALLS", "STUDIO_SECURE_COOKIE", "STUDIO_PUBLIC_HOST")]:
         env.pop(k)
     flags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
@@ -185,9 +188,15 @@ def run_scenario(label: str, data: Path, abrupt: bool) -> None:
                 pass
             time.sleep(0.1)
         took = time.time() - t0
+        limit = GRACE + HTTP_CLOSE_S + SETTLE + 2
         before = snapshot(data, pid)
         check(f"{label}: /readyz virou 503 durante o desligamento", seen503)
-        check(f"{label}: processo saiu dentro da tolerância", proc.poll() is not None and took <= GRACE + 2, f"({took:.1f}s de {GRACE}s)")
+        check(f"{label}: processo saiu dentro da tolerância", proc.poll() is not None and took <= limit,
+              f"({took:.1f}s; grace {GRACE}s + HTTP {HTTP_CLOSE_S:g}s + settle {SETTLE}s + 2s)")
+        slog = (data / "logs" / "studio.log").read_text(encoding="utf-8", errors="replace") if (data / "logs" / "studio.log").exists() else ""
+        check(f"{label}: settle registrado (inicio e fim) depois da drenagem",
+              "drenagem concluida" in slog and "settle: inicio" in slog and "settle: fim" in slog
+              and slog.rfind("settle: inicio") > slog.rfind("drenagem concluida"))
         state = q(data, "SELECT state, resume_attempts FROM run_state WHERE production_id=?", pid)
         status = prod_status(data, pid)
         # se a produção já tinha chegado a um portão humano/final, não há o que interromper
