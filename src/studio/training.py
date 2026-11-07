@@ -307,6 +307,11 @@ class Training:
                 raise TrainingError("arquivo inválido") from exc
             if len(raw) > MAX_FILE:
                 raise TrainingError("arquivo acima de 8 MB")
+            from .storage import sniff
+            if ext in IMAGE_EXT and not sniff(raw[:12], ext):
+                raise TrainingError("o conteúdo não é uma imagem do tipo informado")
+            if ext in TEXT_EXT and chr(0).encode() in raw:
+                raise TrainingError("o arquivo de texto parece binário")
             folder = self.data_dir / "training" / wid / agent
             folder.mkdir(parents=True, exist_ok=True)
             (folder / f"{ref['id']}{ext}").write_bytes(raw)

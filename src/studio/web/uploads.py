@@ -14,9 +14,26 @@ from pathlib import Path
 
 from ..models import (Claim, ClaimKind, CreativeChoices, ProductInput, ProductReference, ReferenceRole,
                       ReferenceSource)
-from ..storage import IMAGE_EXTS, VIDEO_EXTS, StorageError, validate_media_file
+from ..storage import IMAGE_EXTS, VIDEO_EXTS, StorageError, sniff, validate_media_file
 
 MAX_FILES = 12
+MB = 1024 * 1024
+UPLOAD_MAX_IMAGE_BYTES = 20 * MB    # por arquivo enviado pela interface (abaixo do teto interno de storage.py)
+UPLOAD_MAX_VIDEO_BYTES = 100 * MB
+MAX_NAME = 200
+_BAD_NAME_CHARS = set("/:*?<>|" + chr(92))   # chr(92) = barra invertida
+
+
+def clean_name(raw) -> str:
+    """Nome original só serve para a extensão e para a nota; mesmo assim, nada de caminho nem caractere de controle."""
+    if not isinstance(raw, str) or not raw.strip():
+        raise UploadError("arquivo sem nome")
+    name = raw.strip()
+    if len(name) > MAX_NAME:
+        raise UploadError("nome de arquivo longo demais")
+    if any(ord(c) < 32 or ord(c) == 127 for c in name) or _BAD_NAME_CHARS & set(name) or name.startswith("."):
+        raise UploadError(f"nome de arquivo inválido: {name[:60]!r}")
+    return name
 
 
 class UploadError(ValueError):
@@ -24,19 +41,21 @@ class UploadError(ValueError):
 
 
 def save_uploads(data_dir: Path, files: list[dict]) -> list[ProductReference]:
+    if not isinstance(files, list) or not all(isinstance(f, dict) for f in files):
+        raise UploadError("lista de arquivos inválida")
     if len(files) > MAX_FILES:
         raise UploadError(f"envie no máximo {MAX_FILES} arquivos por vez")
     if not files:
         return []
-    folder = data_dir / "uploads" / f"{datetime.now():%Y%m%d-%H%M%S}_{uuid.uuid4().hex[:6]}"
-    folder.mkdir(parents=True, exist_ok=True)
-    refs = []
+    # 1) valida tudo em memória (nome, tamanho, tipo real); 2) só então grava. Nada fica pela metade no disco.
+    ready = []
     for i, f in enumerate(files, 1):
-        ext = Path(str(f.get("name", ""))).suffix.lower()
+        name = clean_name(f.get("name"))
+        ext = Path(name).suffix.lower()
         if ext == ".jpeg":
             ext = ".jpg"
         if ext not in IMAGE_EXTS | VIDEO_EXTS:
-            raise UploadError(f"tipo de arquivo não aceito: {f.get('name')!r} (use JPG, PNG, WEBP ou MP4)")
+            raise UploadError(f"tipo de arquivo não aceito: {name[:80]!r} (use JPG, PNG, WEBP ou MP4)")
         try:
             role = ReferenceRole(f.get("role") or "other")
             source = ReferenceSource(f.get("source") or "official_listing")
@@ -44,19 +63,36 @@ def save_uploads(data_dir: Path, files: list[dict]) -> list[ProductReference]:
             raise UploadError(f"papel/origem inválido: {exc}") from None
         if ext in VIDEO_EXTS:  # vídeos de terceiros/gravações só como contexto
             role, source = ReferenceRole.CONTEXT, ReferenceSource.SCREEN_RECORDING
+        encoded = str(f.get("data", "")).split(",")[-1]
+        limit = UPLOAD_MAX_VIDEO_BYTES if ext in VIDEO_EXTS else UPLOAD_MAX_IMAGE_BYTES
+        if len(encoded) * 3 // 4 > limit + 3:   # antes de decodificar: não aloca o arquivo inteiro à toa
+            raise UploadError(f"{name[:80]!r}: arquivo acima de {limit // MB} MB")
         try:
-            data = base64.b64decode(str(f.get("data", "")).split(",")[-1], validate=True)
+            data = base64.b64decode(encoded, validate=True)
         except (binascii.Error, ValueError):
-            raise UploadError(f"arquivo corrompido no envio: {f.get('name')!r}") from None
-        dest = folder / f"{i:02d}_{role.value}{ext}"
+            raise UploadError(f"arquivo corrompido no envio: {name[:80]!r}") from None
+        if not data:
+            raise UploadError(f"{name[:80]!r}: arquivo vazio")
+        if len(data) > limit:
+            raise UploadError(f"{name[:80]!r}: arquivo acima de {limit // MB} MB")
+        if not sniff(data[:12], ext):   # tipo real pelos bytes, não pelo nome
+            raise UploadError(f"{name[:80]!r}: o conteúdo não é um arquivo {ext[1:].upper()} de verdade")
+        ready.append((i, name, ext, role, source, data))
+    folder = data_dir / "uploads" / f"{datetime.now():%Y%m%d-%H%M%S}_{uuid.uuid4().hex[:6]}"
+    folder.mkdir(parents=True, exist_ok=True)
+    refs = []
+    for i, name, ext, role, source, data in ready:
+        dest = folder / f"{i:02d}_{role.value}{ext}"   # nome gerado aqui; o original nunca vira caminho
         dest.write_bytes(data)
         try:
             validate_media_file(dest)
         except StorageError as exc:
-            dest.unlink(missing_ok=True)  # cópia recém-recebida e inválida, não um original
-            raise UploadError(f"{f.get('name')!r}: {exc}") from None
+            for p in folder.iterdir():  # cópias recém-recebidas, nunca originais
+                p.unlink(missing_ok=True)
+            folder.rmdir()
+            raise UploadError(f"{name[:80]!r}: {exc}") from None
         refs.append(ProductReference(path=str(dest), role=role, source=source,
-                                     note=f"enviado pela interface: {str(f.get('name'))[:80]}"))
+                                     note=f"enviado pela interface: {name[:80]}"))
     return refs
 
 

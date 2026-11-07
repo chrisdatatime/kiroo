@@ -882,7 +882,10 @@ class App:
             db.close()
         if not owned or not (s.data_dir / "productions" / parts[2]).is_dir():
             return _json(404, {"error": "não encontrado"})
-        f = ProductionStorage(s.data_dir, parts[2]).path(unquote(parts[3]))
+        try:   # ../, %2e%2e, barra invertida ou caminho absoluto: resolve() + checagem de pasta => fora = 404
+            f = ProductionStorage(s.data_dir, parts[2]).path(unquote(parts[3]))
+        except StorageError:
+            return _json(404, {"error": "não encontrado"})
         if f.suffix.lower() not in MEDIA_EXTS or not f.is_file():
             return _json(404, {"error": "não encontrado"})
         ctype = mimetypes.guess_type(f.name)[0] or "application/octet-stream"

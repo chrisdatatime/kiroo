@@ -21,6 +21,22 @@ _MAGIC = {
     ".jpeg": [b"\xff\xd8\xff"],
     ".webp": [b"RIFF"],
 }
+# Contêiner ISO (MP4/MOV/M4V): a 1ª caixa fica nos bytes 4..8. WebM: cabeçalho EBML.
+_ISO_BOXES = {b"ftyp", b"moov", b"mdat", b"wide", b"free", b"skip", b"pnot"}
+
+
+def sniff(head: bytes, ext: str) -> bool:
+    """O conteúdo bate com a extensão? (tipo real pelos primeiros 12 bytes, não pelo nome)"""
+    ext = ext.lower()
+    if ext in _MAGIC:
+        if not any(head.startswith(m) for m in _MAGIC[ext]):
+            return False
+        return ext != ".webp" or head[8:12] == b"WEBP"
+    if ext in {".mp4", ".mov", ".m4v"}:
+        return head[4:8] in _ISO_BOXES
+    if ext == ".webm":
+        return head.startswith(b"\x1a\x45\xdf\xa3")
+    return False
 
 
 class StorageError(Exception):
@@ -50,12 +66,16 @@ def validate_media_file(path: Path) -> str:
             raise StorageError(f"imagem grande demais ({size} bytes): {path.name}")
         with open(path, "rb") as f:
             head = f.read(12)
-        if not any(head.startswith(m) for m in _MAGIC[ext]):
+        if not sniff(head, ext):
             raise StorageError(f"conteúdo não corresponde à extensão {ext}: {path.name}")
         return "image"
     if ext in VIDEO_EXTS:
         if size > MAX_VIDEO_BYTES:
             raise StorageError(f"vídeo grande demais ({size} bytes): {path.name}")
+        with open(path, "rb") as f:
+            head = f.read(12)
+        if not sniff(head, ext):
+            raise StorageError(f"conteúdo não corresponde à extensão {ext}: {path.name}")
         return "video"
     raise StorageError(f"extensão não suportada: {path.name}")
 

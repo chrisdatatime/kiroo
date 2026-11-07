@@ -155,7 +155,7 @@ def test_create_production_with_uploaded_photos_and_context(app, settings):
 
 
 @pytest.mark.parametrize("files, msg", [
-    ([{"name": "x.png", "data": base64.b64encode(b"not a png").decode(), "role": "front"}], "assinatura|corresponde"),
+    ([{"name": "x.png", "data": base64.b64encode(b"not a png").decode(), "role": "front"}], "assinatura|corresponde|não é"),
     ([{"name": "x.exe", "data": "AAAA", "role": "front"}], "não aceito"),
     ([{"name": "x.png", "data": "%%%", "role": "front"}], "corrompido"),
     ([{"name": "x.png", "data": png_data_url(), "role": "hacker"}], "inválido"),
