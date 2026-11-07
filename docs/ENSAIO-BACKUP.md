@@ -212,14 +212,23 @@ completo:
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ensaio_backup.ps1 -Passo 7 -Fumaca
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ensaio_backup.ps1 -Passo 7            # -Rodadas 5 (padrão)
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ensaio_backup.ps1 -Passo 7 -Rodadas 2 # 1..5
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ensaio_backup.ps1 -Passo 7 -Tipos a -Rodadas 5 -Carga alta
 ```
+
+- `-Tipos` (padrão `a,b,c`): quais rodadas rodar. `a` = stop com escritas; `b` = reinício no volume da `a`; `c` =
+  SIGKILL (independente). `b` sem `a` é **recusado** antes de qualquer docker. Aceita `-Tipos a,c` ou `-Tipos "a,c"`
+  (com `powershell -File` a lista chega como uma string só; por isso o parâmetro valida por padrão, não por
+  `ValidateSet`).
+- `-Carga baixa|normal|alta` (padrão `normal`): só o ritmo dos cadastros nas rodadas `a`; o servidor não muda. Ver
+  [WAL no fechamento](#wal-no-fechamento-x-erro-do-litestream).
 
 Precisa só do passo 1 (pasta) e das 5 variáveis. Não usa o container nem o volume dos passos 2–5: cada rodada
 cria o seu volume (`kiroo-ensaio-p7-a1..a5`, `kiroo-ensaio-p7-c1..c5`, com o rótulo do ensaio), o container
 `kiroo-ensaio-p7` na porta `-Porta`+1 (8800) e apaga os dois ao fim da rodada.
 
 **Saída em arquivo (sobrevive a um corte de sessão):** cada linha também vai para
-`<pasta>\p7-<modo>-<data>.log` (`modo` = `fumaca` ou `rodadasN`), já mascarada (o script só imprime nomes de
+`<pasta>\p7-<modo>-<data>.log` (`modo` = `fumaca` ou `rodadasN`, mais `-<tipos>` se não forem os três e `-<carga>`
+se não for `normal`; ex.: `p7-rodadas5-a-alta-…`), já mascarada (o script só imprime nomes de
 variáveis, nunca valores), e o resultado acumulado é regravado depois de **cada** rodada em
 `<pasta>\p7-<modo>-<data>.json`. Se a sessão cair, o que já rodou está nesses dois arquivos.
 
@@ -230,6 +239,7 @@ o R2 real soma o restore da geração em cada `a` e a espera da geração nova e
 |---|---|
 | `-Fumaca` (a1, b1, c1) | 5–7 min |
 | padrão (`-Rodadas 5`, 15 rodadas) | 25–35 min |
+| `-Tipos a -Rodadas 5` (5 rodadas `a`) | 5–7 min (em 07/11 cada `a` com R2 levou ~50 s, mais ~10 s da sonda e limpeza) |
 
 **Interromper com segurança:** `Ctrl+C` no terminal do ensaio (os jobs do escritor e da sonda morrem com a sessão
 do PowerShell; se o terminal for fechado, também). Depois, limpe **só pelo rótulo** — nunca por nome solto:
@@ -258,7 +268,9 @@ Rodadas (cada uma termina em PASS, FAIL ou NAO_VERIFICADO com o motivo; falha de
 - **b1..b5** — `docker start` no mesmo volume: a produção retoma (evento `resumed`) e chega a `awaiting_final_review`
   com `run_state=idle`; as tentativas confirmadas antes do stop continuam iguais (id, tipo, cena, número, hash,
   criação, operação remota); nenhuma tentativa nova para cena+tipo que já estava `succeeded` ou `submitted`; montagem
-  registrada uma vez.
+  registrada uma vez. O resumo mostra `resumed = N` (quantos eventos `resumed`; FAIL se 0). Não mostra mais
+  `run_state.resume_attempts` ("retomadas"): ele vai a 1 na retomada e **volta a 0** quando a produção retomada
+  termina (`_mark_run(pid, "idle", reset_attempts=True)`), então era sempre 0 no fim da `b` — esperado, mas enganoso.
 - **c1..c5** — `docker kill -s SIGKILL` (ímpares: com operação remota `submitted`; pares: na montagem). Ponto de
   sincronização: um cadastro confirmado (200) e, depois dele, leitura do banco confirmado por conexão sqlite somente
   leitura (inclui o `-wal`), numa transação, que precisa enxergar esse cadastro. FAIL se, depois do reinício, algo do
@@ -271,6 +283,96 @@ geração legível (16 hex em `.studio.sqlite3-litestream/generation`) **e** lin
 Litestream", "geração nova depois do SIGKILL" e "restore do R2" saem como NAO_VERIFICADO com o motivo (zero linhas de
 erro sem Litestream não prova nada). FAIL só quando a asserção rodou e falhou. As demais asserções da rodada rodam
 normalmente.
+
+### WAL no fechamento x erro do Litestream
+
+Em 07/11 (5 rodadas `a`), a2, a3 e a5 saíram com código 1 e
+`ERROR msg="error closing db" error="checkpoint: mode=PASSIVE err=release read lock: context canceled"`, sem perda de
+dado (restore 100%). **Hipótese em teste:** o erro acontece se e só se o WAL tiver **≥ 1000 páginas** quando o
+Litestream fecha o banco.
+
+Base no código do Litestream **v0.3.13**:
+
+- `litestream.go`: `WALHeaderSize = 32`, `WALFrameHeaderSize = 24` e
+  `calcWALSize(pageSize, n) = WALHeaderSize + (WALFrameHeaderSize + pageSize) * n`. Logo o limite é
+  **32 + (page_size + 24) × 1000 bytes** = 4.120.032 bytes com páginas de 4096. A fórmula da hipótese está certa.
+- `db.go`: `DefaultMinCheckpointPageN = 1000`. No `DB.Sync`,
+  `} else if newWALSize >= calcWALSize(db.pageSize, db.MinCheckpointPageN) { checkpoint = true`. Aqui `newWALSize` é o
+  fim do último commit do `-wal` real copiado para o WAL-sombra. Há outras duas regras que também disparam checkpoint:
+  `MaxCheckpointPageN` (10000 páginas, modo RESTART) e `CheckpointInterval` (1 min sem checkpoint e WAL > 1 página).
+- `DB.Close` cancela `db.ctx` antes do `Sync` final. Se esse `Sync` faz checkpoint, `execCheckpoint` reabre o read lock
+  com `tx.ExecContext(db.ctx, …)`, que já está cancelado. O erro sai com o rótulo "release read lock" e o processo
+  termina com `os.Exit(1)`.
+
+**O que a rodada `a` mede, depois da parada:**
+
+- `stop_utc`: o instante do `docker stop`, pelo relógio do Windows.
+- `saida` e `finished_utc`, de `docker inspect --format {{.State.ExitCode}};{{.State.FinishedAt}}`. Só esses dois
+  campos: nunca `Env` nem a `Config` inteira.
+- **Sonda no volume parado**, antes de qualquer outra leitura dele (`scripts/ensaio_p7_wal.py`):
+  - roda num container descartável com o rótulo do ensaio, volume montado `:ro`, sem variáveis de ambiente;
+  - mede `db_bytes`, `wal_arquivo_bytes` e `page_size` (por `PRAGMA page_size`, conexão `mode=ro&immutable=1`,
+    conferido com o cabeçalho do banco);
+  - e o **WAL-sombra** do Litestream (`.studio.sqlite3-litestream/generations/<geração>/wal/<índice>.wal`, o último
+    índice).
+- `wal_log`: o fim do último `wal segment written` do log (offset + `sz`).
+- `wal_conferencia`: quando a sombra e o log estão na mesma geração e no mesmo índice, devem dar o mesmo tamanho
+  (`sombra = log`). Se divergirem, a fonte "sombra" precisa ser revista.
+- `wal_bytes` / `wal_fonte`: a medida usada na hipótese, nesta ordem de preferência:
+  1. **sombra** (é o que o `Sync` final copiou);
+  2. **log**;
+  3. **arquivo** `-wal`.
+- `wal_paginas = (wal_bytes − 32) / (page_size + 24)` (parte inteira), `limite_paginas` (1000), `limite_bytes`,
+  `previsto_erro` (wal_bytes ≥ limite_bytes), `erro_checkpoint` (a linha da hipótese entre os ERROR depois do SIGTERM),
+  e `hipotese` = `consistente`, `contraexemplo` ou `indeterminada`.
+- `linha_do_tempo`: o stop e, relativos ao `signal received` do Litestream, o aviso de SIGTERM do servidor,
+  `marcadas como interrompidas`, cada linha ERROR, `litestream shut down` e o `FinishedAt`. O stop vem do relógio do
+  Windows e o resto do relógio do Docker; podem divergir alguns ms.
+
+**Por que o `-wal` do volume não é a medida principal:** ao fechar a última conexão, o SQLite faz checkpoint e
+**apaga** o `-wal`. O Litestream fecha a dele no fim do `DB.Close`, mesmo depois do erro. O teste
+`tests/test_ensaio_p7_wal.py::test_sonda_wal_apagado_no_fechamento` mostra isso. Além disso, depois de um reinício do
+WAL o arquivo guarda o tamanho máximo, não o conteúdo atual. Ele é registrado, mas só entra na hipótese se não houver
+sombra nem log.
+
+**Fim do log:** uma tabela com rodada, carga, wal_bytes, fonte, wal_pag, limite, saída, erros_ls, resultado e
+hipótese, seguida de
+`hipotese consistente em N de M rodadas / contraexemplos: <rodada (motivo)> … / indeterminadas: …`. M exclui as
+indeterminadas, que são listadas à parte. Uma rodada é indeterminada quando falta o WAL ou o page_size, ou quando o
+Litestream está inativo. **Isto é só medição: a regra de erros não muda.** Qualquer linha ERROR do Litestream depois
+do SIGTERM e qualquer código de saída ≠ 0 continuam sendo FAIL, mesmo numa rodada "consistente".
+
+**`-Carga`:** só muda o ritmo dos cadastros do ensaio.
+
+| Valor | Escritores | Pausa entre cadastros | Ritmo |
+|---|---|---|---|
+| `baixa` | 1 | 1 s | ~1 cadastro/s |
+| `normal` | 1 | nenhuma | ~12 cadastros/s, como em 07/11 |
+| `alta` | 3 em paralelo | nenhuma | 2–3× o normal, limitado pelo servidor |
+
+Na `alta`, cada escritor numera os e-mails a partir de j×100000 (sem colisão) e os arquivos são juntados em
+`p7-<rodada>-escritas.txt`.
+
+WAL esperado. São estimativas, por isso a medição:
+
+- **Base (07/11, carga normal):** ~15 MB de WAL enviados em ~25 s de drenagem com ~300 cadastros, ou seja ~0,6 MB/s e
+  ~50 KB por cadastro (inclui as escritas da produção). O limite (4,12 MB) enche em ~7 s.
+  - O Litestream tenta checkpoint a cada sync (1 s). Com o servidor ativo, o PASSIVE nem sempre reinicia o WAL.
+  - No fechamento, o WAL ficou entre 2,55 MB e 4,89 MB: 619 a 1187 páginas, 3 de 5 acima do limite.
+- **baixa:** ~50 KB/s. O checkpoint por tempo (1 min) reinicia o WAL, então espera-se **abaixo** do limite no
+  fechamento (≲ 3 MB, ≲ 730 páginas). Previsão: **sem** o erro. Um erro aqui é contraexemplo.
+- **normal:** como em 07/11, perto do limite. Resultado misto esperado.
+- **alta:** ~1,2–1,8 MB/s. O WAL passa do limite em 2–3 s e o incremento final é maior. Espera-se **acima** do limite
+  na maioria das rodadas. Previsão: com erro.
+- O que decide é o tamanho medido no fechamento, não a carga. A carga só desloca a distribuição.
+
+**Contraexemplos possíveis**, que a conclusão lista com o motivo:
+
+- WAL ≥ limite e sem erro: o checkpoint final pode ter sido feito antes pelo monitor, com o contexto vivo.
+- Erro com WAL < limite: a regra de 1 min (`CheckpointInterval`) ou uma medida errada.
+
+Qualquer um deles derruba o "se e só se". Dados de 07/11 aplicados à regra (WAL pelo log): 5 de 5 consistentes
+(a1 619, a4 814 páginas, sem erro; a2 1036, a3 1035, a5 1187 páginas, com erro).
 
 ### Escritas depois do SIGTERM
 
@@ -305,7 +407,8 @@ não as manda para outro lugar: só vira erro para o usuário) e:
 4. se um dia houver mais de uma instância atrás de balanceador, aí sim recusar escritas novas (503 + `Retry-After`)
    assim que o `/readyz` virar 503.
 
-Arquivos de cada rodada ficam na pasta do ensaio: `p7-<rodada>-escritas.txt`, `-aceitas.tsv`, `-readyz.txt`,
+Arquivos de cada rodada ficam na pasta do ensaio: `p7-<rodada>-escritas.txt` (na carga `alta` também
+`-escritas-0..2.txt`), `-aceitas.tsv`, `-readyz.txt`,
 `-log.txt`, `-snapshot.json`, `-final.json`, além de `p7-<modo>-<data>.log` e `.json` da execução. Nada é apagado no
 bucket: a réplica das rodadas fica em `ensaio/db`.
 
