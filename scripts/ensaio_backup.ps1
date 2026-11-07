@@ -8,6 +8,9 @@
   Uso:   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ensaio_backup.ps1 -Passo 1
          (Passo = 1..7 ou "todos" = 1..6; os passos 2..5 dependem do estado gravado pelos anteriores;
           o 7 (desligamento sob carga) so precisa do passo 1 e roda separado, antes do 6)
+         -Passo 7 -Fumaca: 1 rodada de cada tipo (a1, b1, c1) para validar a mecanica com o R2 real;
+         -Passo 7 -Rodadas N (1..5, padrao 5): N rodadas de cada tipo. A saida vai tambem para
+         <pasta>\p7-<modo>-<data>.log e o resultado parcial (apos cada rodada) para p7-<modo>-<data>.json.
          -Passo 4 -Diagnostico: so UM envio rclone (copyto) de arquivo pequeno para ensaio/diag/, com
          -vv --dump headers (nunca --dump auth); cabecalhos de requisicao e resposta com credenciais mascaradas.
 
@@ -26,7 +29,9 @@ param(
     [string]$Volume = 'kiroo-ensaio-dados',
     [string]$Pasta = (Join-Path $env:TEMP 'kiroo-ensaio'),
     [int]$Porta = 8799,
-    [switch]$Diagnostico
+    [switch]$Diagnostico,
+    [ValidateRange(1, 5)][int]$Rodadas = 5,   # passo 7: quantas rodadas de cada tipo (a/b e c)
+    [switch]$Fumaca                          # passo 7: fumaca = 1 rodada de cada tipo (a1, b1, c1), ignora -Rodadas
 )
 
 Set-StrictMode -Version 2
@@ -49,7 +54,14 @@ if ($Volume -ne $VOLUME_ENSAIO) { throw "Volume recusado: '$Volume'. Este ensaio
 
 # ------------------------------------------------------------------ utilitarios
 
-function Say([string]$m) { Write-Host "[ensaio] $m" }
+$script:LOG_ARQ = $null   # passo 7: cada linha tambem vai para este arquivo (mascarada), para sobreviver a um corte de sessao
+
+function Log-Arq([string]$m) {
+    if (-not $script:LOG_ARQ) { return }
+    try { Add-Content -Path $script:LOG_ARQ -Value ('{0} {1}' -f (Get-Date -Format 'yyyy-MM-ddTHH:mm:ss'), (Mask-Cred $m)) -Encoding UTF8 } catch { }
+}
+
+function Say([string]$m) { Write-Host "[ensaio] $m"; Log-Arq "[ensaio] $m" }
 
 function Mask-Cred([string]$t) {
     # Mascara credenciais em texto vindo do rclone (--dump headers). Valores das variaveis, cabecalhos de
@@ -577,6 +589,19 @@ function Estado-VolumeParado([string]$Vol, [string]$Pid7) {
     return ($r.Stdout | ConvertFrom-Json)
 }
 
+function Emails-P7([string]$Vol, [string]$Db, [string]$Prefixo) {
+    # e-mails com o prefixo da rodada num banco: volume parado do passo 7 ($Vol) ou restore na pasta do ensaio ($Vol vazio).
+    # Conexao sqlite somente leitura. Devolve a lista ou $null se a leitura falhou.
+    if ($Vol) {
+        Assert-VolumeP7 $Vol
+        $r = Invoke-Docker @('run', '--rm', '--label', $ROTULO, '-v', "${Vol}:/data", '-v', "${Pasta}:/ensaio", '--entrypoint', 'python', $IMAGEM,
+            '/ensaio/sh/p7_q.py', 'emails', $Db, $Prefixo)
+    } else { $r = Run-Temp @() 'python' @('/ensaio/sh/p7_q.py', 'emails', $Db, $Prefixo) }
+    if ($r.Code -ne 0) { Say "    leitura de e-mails falhou (codigo $($r.Code)): $($r.Out)"; return $null }
+    # PS 5.1: o array JSON chega como UM objeto; atribuir e reenumerar
+    try { $j = $r.Stdout | ConvertFrom-Json; return , @($j | ForEach-Object { "$_" }) } catch { Say "    leitura de e-mails sem JSON: $($r.Stdout)"; return $null }
+}
+
 function Geracao-P7 {
     $r = Invoke-Docker @('exec', $CONTAINER7, 'cat', '/data/.studio.sqlite3-litestream/generation')
     if ($r.Code -ne 0) { return $null }
@@ -632,8 +657,7 @@ function Rodada-P7A([int]$I, $Ret) {
         $pid7 = Inicia-ProducaoP7 $tag
         $null = Wait-StatusP7 $pid7 { param($x) $x.status -eq 'editing' } 120 'producao chegar na montagem (editing)'
         Start-Sleep -Seconds 3
-        $gen = Geracao-P7
-        if (-not $gen) { throw ('NAO_VERIFICADO: ' + 'geracao do Litestream ilegivel (replicacao ligada?)') }
+        $gen = Geracao-P7   # pode faltar (rascunho sem Litestream): decidido depois, com o log, em P7-LitestreamAtivo
         $antesStop = Estado-P7 $pid7
         $info.fase = $antesStop.status
         # escritor (cadastros sequenciais) e sonda /readyz a cada 100 ms, cada um gravando num arquivo
@@ -643,9 +667,10 @@ function Rodada-P7A([int]$I, $Ret) {
             while ((Get-Date) -lt $fim -and $falhas -lt 5) {
                 $i++; $pw = -join ((48..57) + (65..90) + (97..122) | Get-Random -Count 24 | ForEach-Object { [char]$_ })
                 $body = @{ email = "w7-$t-$i@ensaio.test"; password = $pw; name = 'Ensaio P7' } | ConvertTo-Json
+                $tEnv = [DateTime]::UtcNow.Ticks
                 try { $r = Invoke-WebRequest -UseBasicParsing -Method Post -Uri "$b/api/auth/signup" -ContentType 'application/json' -Headers @{ 'X-Studio-Client' = 'game' } -Body $body -TimeoutSec 5; $c = "$($r.StatusCode)"; $falhas = 0 }
                 catch { if ($_.Exception.Response) { $c = [string][int]$_.Exception.Response.StatusCode } else { $c = 'sem_conexao'; $falhas++ } }
-                Add-Content -Path $arq -Value ("{0}`t{1}`t{2}" -f $i, $c, [DateTime]::UtcNow.Ticks)
+                Add-Content -Path $arq -Value ("{0}`t{1}`t{2}`t{3}" -f $i, $c, [DateTime]::UtcNow.Ticks, $tEnv)   # n, codigo, resposta, envio
             } }
         $jp = Start-Job -ArgumentList $BASE7, $pf -ScriptBlock {
             param($b, $arq) $falhas = 0; $fim = (Get-Date).AddSeconds(90)
@@ -673,25 +698,49 @@ function Rodada-P7A([int]$I, $Ret) {
         $info.readyz = $rz.sequencia; $info.readyz_503_antes_de_cair = $rz.antes_de_cair
         $logs = @((Invoke-Docker @('logs', '--timestamps', $CONTAINER7)).Out -split "`n")
         Set-Content -Path (Join-Path $Pasta "p7-$tag-log.txt") -Value $logs
-        $el = P7-ErrosLitestream $logs
-        $info.erros_litestream = if ($null -eq $el) { 'NAO_VERIFICADO (sem linha de SIGTERM no log)' } else { $el.Count }
+        $ls = P7-LitestreamAtivo $logs $gen
+        $info.litestream = if ($ls.ativo) { "ativo (geracao $gen)" } else { "NAO_VERIFICADO: $($ls.motivo)" }
+        $el = P7-ErrosLitestream $logs $ls.ativo
+        $info.erros_litestream = if (-not $ls.ativo) { 'NAO_VERIFICADO (Litestream inativo)' } elseif ($null -eq $el) { 'NAO_VERIFICADO (sem linha de SIGTERM no log)' } else { $el.Count }
         $parado = Estado-VolumeParado $vol $pid7
         $info.run_state = $parado.run_state
         $uc = P7-UltimaConfirmada @(Get-Content $wf) $tSig
         $info.ultima_confirmada_antes = $uc.antes; $info.confirmadas_depois_do_sigterm = $uc.confirmadas_depois_do_sinal
-        $dest = "p7-restore-$tag"
-        $rr = Run-Temp @() 'sh' @('/ensaio/sh/p7_restore.sh', $gen, $dest)
-        if ($rr.Code -ne 0) { $nv += "restore do R2 falhou (codigo $($rr.Code)): $(Mask-Cred $rr.Out)" }
-        else {
-            $q = Run-Temp @() 'python' @('/ensaio/sh/p7_q.py', 'email', "/ensaio/$dest/studio.sqlite3", "w7-$tag-$($uc.antes)@ensaio.test")
-            $info.restore_tem_ultima = ($q.Code -eq 0 -and $q.Stdout.Trim() -ceq '1')
-            if ($q.Code -ne 0) { $nv += "consulta ao restore falhou: $($q.Out)" }
-            elseif (-not $info.restore_tem_ultima) { $f += "restore do R2 NAO contem a ultima escrita confirmada antes do SIGTERM (w7-$tag-$($uc.antes))" }
+        # cada escrita confirmada (200): horario e se o servidor a aceitou antes ou depois do SIGTERM
+        $esc = P7-Escritas @(Get-Content $wf) $tSig $logs "w7-$tag-"
+        Set-Content -Path (Join-Path $Pasta "p7-$tag-aceitas.tsv") -Value (P7-Tsv $esc) -Encoding UTF8
+        $info.aceitas = @($esc).Count
+        $info.aceitas_servidor = 'antes={0} depois={1} sem_log={2}' -f @($esc | Where-Object { $_.servidor -eq 'antes' }).Count,
+            @($esc | Where-Object { $_.servidor -eq 'depois' }).Count, @($esc | Where-Object { $_.servidor -eq 'sem_log' }).Count
+        $info.aceitas_cliente = 'antes={0} em_voo={1} depois={2}' -f @($esc | Where-Object { $_.cliente -eq 'antes' }).Count,
+            @($esc | Where-Object { $_.cliente -eq 'em_voo' }).Count, @($esc | Where-Object { $_.cliente -eq 'depois' }).Count
+        # o volume parado precisa ter TODAS as aceitas (perda local, independe do Litestream)
+        $loc = Emails-P7 $vol '/data/studio.sqlite3' "w7-$tag-"
+        if ($null -eq $loc) { $nv += 'leitura das escritas no volume parado falhou' }
+        else { $aus = P7-Ausentes $esc $loc; $info.ausentes_volume = $aus.Count; if ($aus.Count) { $f += "volume parado SEM $($aus.Count) escrita(s) aceita(s): $($aus -join ', ')" } }
+        if (-not $ls.ativo) {
+            $info.restore = 'NAO_VERIFICADO (Litestream inativo)'
+            $nv += "restore do R2: NAO_VERIFICADO ($($ls.motivo))"
+        } else {
+            $dest = "p7-restore-$tag"
+            $rr = Run-Temp @() 'sh' @('/ensaio/sh/p7_restore.sh', $gen, $dest)
+            if ($rr.Code -ne 0) { $nv += "restore do R2 falhou (codigo $($rr.Code)): $(Mask-Cred $rr.Out)" }
+            else {
+                $rest = Emails-P7 '' "/ensaio/$dest/studio.sqlite3" "w7-$tag-"
+                if ($null -eq $rest) { $nv += 'consulta ao restore falhou' }
+                else {
+                    $aus = P7-Ausentes $esc $rest; $info.ausentes_restore = $aus.Count
+                    $info.restore = "$(@($esc).Count - $aus.Count)/$(@($esc).Count) aceitas presentes"
+                    if ($aus.Count) { $f += "restore do R2 SEM $($aus.Count) escrita(s) aceita(s): $($aus -join ', ')" }
+                    if (-not @($esc).Count) { $nv += 'nenhuma escrita aceita para conferir no restore' }
+                }
+            }
         }
         if ($info.saida -ne '0') { $f += "codigo de saida $($info.saida) (esperado 0)" }
         if ($info.parada_s -ge 40) { $f += "parada levou $($info.parada_s) s (>= 40: o docker matou)" }
         if (-not $rz.antes_de_cair) { $f += "/readyz nao respondeu 503 antes de cair ($($rz.sequencia))" }
-        if ($null -eq $el) { $nv += 'linha de SIGTERM ausente no log: erros do Litestream nao contados' }
+        if (-not $ls.ativo) { $nv += 'erros do Litestream no desligamento: NAO_VERIFICADO (Litestream inativo)' }
+        elseif ($null -eq $el) { $nv += 'linha de SIGTERM ausente no log: erros do Litestream nao contados' }
         elseif ($el.Count) { $f += "$($el.Count) linha(s) ERROR do Litestream no desligamento"; Show-Diff 'erros do Litestream' $el }
         if ($parado.run_state -ne 'interrupted') { $f += "run_state='$($parado.run_state)' (esperado interrupted)" }
         $Ret.Value = @{ vol = $vol; pid = $pid7; antes = $parado }
@@ -732,8 +781,7 @@ function Rodada-P7C([int]$I) {
         # rodadas impares: kill com operacao remota em andamento (cenas); pares: no meio da montagem final
         if ($I % 2) { $null = Wait-StatusP7 $pid7 { param($x) $x.status -eq 'producing' -and @($x.attempts | Where-Object { $_.status -eq 'submitted' }).Count -ge 1 } 60 'operacao remota em andamento' }
         else { $null = Wait-StatusP7 $pid7 { param($x) $x.status -eq 'editing' } 120 'producao chegar na montagem'; Start-Sleep -Seconds 3 }
-        $gen0 = Geracao-P7
-        if (-not $gen0) { throw ('NAO_VERIFICADO: ' + 'geracao do Litestream ilegivel antes do kill') }
+        $gen0 = Geracao-P7   # pode faltar (rascunho sem Litestream): a assercao da geracao nova vira NAO_VERIFICADO
         # ponto de sincronizacao deterministico: uma escrita confirmada (HTTP 200 = COMMIT feito) e, depois dela, a leitura
         # do banco confirmado por conexao sqlite (inclui o -wal) numa unica transacao; o snapshot so vale se enxergar a escrita.
         $marcador = "k7-$tag@ensaio.test"
@@ -754,8 +802,12 @@ function Rodada-P7C([int]$I) {
         $gen1 = $null; $lim = (Get-Date).AddSeconds(20)
         while ((Get-Date) -lt $lim) { $gen1 = Geracao-P7; if ($gen1 -and $gen1 -ne $gen0) { break }; Start-Sleep -Milliseconds 500 }
         $info.geracao_antes = $gen0; $info.geracao_depois = $gen1
-        if (-not $gen1) { $nv += 'geracao do Litestream ilegivel apos o reinicio' }
-        elseif ($gen1 -eq $gen0) { $f += "Litestream NAO abriu geracao nova (continua $gen0)" }
+        $logsC = @((Invoke-Docker @('logs', '--timestamps', $CONTAINER7)).Out -split "`n")
+        $ls = P7-LitestreamAtivo $logsC $gen0
+        $info.litestream = if ($ls.ativo) { 'ativo' } else { "NAO_VERIFICADO: $($ls.motivo)" }
+        $gn = P7-GeracaoNova $gen0 $gen1 $ls.ativo
+        $info.geracao_nova = $gn.resultado
+        if ($gn.resultado -eq 'FAIL') { $f += $gn.motivo } elseif ($gn.resultado -eq 'NAO_VERIFICADO') { $nv += $gn.motivo }
         $fim = Termina-P7 $pid7
         $info.status = $fim.status
         Set-Content -Path (Join-Path $Pasta "p7-$tag-final.json") -Value ($fim | ConvertTo-Json -Depth 6)
@@ -779,6 +831,8 @@ function Prepare-P7 {
         'con.execute("BEGIN")',
         'if modo == "email":',
         '    print(con.execute("SELECT COUNT(*) FROM users WHERE email=?", (sys.argv[3],)).fetchone()[0]); sys.exit(0)',
+        'if modo == "emails":   # todos os e-mails com o prefixo da rodada (lista JSON)',
+        '    print(json.dumps([x[0] for x in con.execute("SELECT email FROM users WHERE email LIKE ?", (sys.argv[3] + "%",))])); sys.exit(0)',
         'pid = sys.argv[3]',
         'p = con.execute("SELECT status FROM productions WHERE id=?", (pid,)).fetchone()',
         'r = con.execute("SELECT state, resume_attempts FROM run_state WHERE production_id=?", (pid,)).fetchone()',
@@ -799,14 +853,25 @@ function Prepare-P7 {
         'STUDIO_DATA_DIR=/data litestream restore -config /etc/litestream.yml -generation "$1" -o "/ensaio/$2/studio.sqlite3" /data/studio.sqlite3')
 }
 
+function Salva-ParcialP7([string]$Arq, $Todas) {
+    # resultado acumulado depois de CADA rodada (sobrevive a um corte de sessao). So ids, codigos e motivos; sem credenciais.
+    try { [IO.File]::WriteAllText($Arq, (Mask-Cred ((@($Todas) | ConvertTo-Json -Depth 6))), (New-Object Text.UTF8Encoding $false)) } catch { }
+}
+
 function Passo7($e) {
-    Say 'Passo 7: desligamento sob carga (producao simulada, sem custo de IA)'
+    $n = if ($Fumaca) { 1 } else { $Rodadas }
+    $carimbo = Get-Date -Format 'yyyyMMdd-HHmmss'
+    $modo = if ($Fumaca) { 'fumaca' } else { "rodadas$n" }
+    $script:LOG_ARQ = Join-Path $Pasta "p7-$modo-$carimbo.log"
+    $parcial = Join-Path $Pasta "p7-$modo-$carimbo.json"
+    Say "Passo 7: desligamento sob carga (producao simulada, sem custo de IA); $(if ($Fumaca) { 'FUMACA: 1 rodada de cada tipo (a1, b1, c1)' } else { "$n rodada(s) de cada tipo" })"
+    Say "  saida tambem em $($script:LOG_ARQ) e resultado parcial em $parcial"
     Assert-Vars
     $d = Invoke-Docker @('version', '--format', '{{.Server.Version}}')
     if ($d.Code -ne 0) { throw ('NAO_VERIFICADO: ' + "docker indisponivel: $($d.Out)") }
     Prepare-P7
     $todas = @()
-    for ($i = 1; $i -le 5; $i++) {
+    for ($i = 1; $i -le $n; $i++) {
         Say "  rodada a$i (docker stop -t 40 no meio da producao, com escritas)"
         $ctx = $null
         $ra = Rodada-P7A $i ([ref]$ctx)
@@ -818,13 +883,15 @@ function Passo7($e) {
         $rb.motivos | ForEach-Object { Say "    motivo: $_" }
         try { Remove-RodadaP7 "kiroo-ensaio-p7-a$i" } catch { Say "    limpeza falhou: $($_.Exception.Message)" }
         $todas += $ra, $rb
+        Salva-ParcialP7 $parcial $todas
     }
-    for ($i = 1; $i -le 5; $i++) {
+    for ($i = 1; $i -le $n; $i++) {
         Say "  rodada c$i (SIGKILL no meio da producao)"
         $rc = Rodada-P7C $i
         $rc.GetEnumerator() | Where-Object { $_.Key -notin 'motivos' } | ForEach-Object { Say "    $($_.Key) = $($_.Value)" }
         $rc.motivos | ForEach-Object { Say "    motivo: $_" }
         $todas += $rc
+        Salva-ParcialP7 $parcial $todas
     }
     $e['p7'] = $todas
     Say '  resumo do passo 7:'
@@ -853,6 +920,6 @@ foreach ($p in $passos) {
     }
     $estado['resultados'][$p] = $res
     Save-Estado $estado
-    Write-Host ("RESULTADO passo {0}: {1}" -f $p, $res)
+    Write-Host ("RESULTADO passo {0}: {1}" -f $p, $res); Log-Arq ("RESULTADO passo {0}: {1}" -f $p, $res)
     if ($Passo -eq 'todos' -and $res -ne 'PASS' -and $p -ne '6') { Say 'parando a sequencia: corrija e rode o passo de novo (ou -Passo 6 para limpar)'; break }
 }
