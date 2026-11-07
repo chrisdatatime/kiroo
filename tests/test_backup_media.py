@@ -22,7 +22,8 @@ def test_backup_media_never_deletes_without_versioning(tmp_path):
         assert c.split()[2].startswith("KBK:kiroo-backups/staging/media/current/")
     joined = " ".join(calls)
     assert not re.search(r"\b(delete|deletefile|purge|cleanup|move|moveto)\b", joined) and "--delete-excluded" not in joined
-    assert any(c.startswith("rcat ") and "/manifests/" in c for c in calls)
+    assert any(c.startswith("copyto ") and "/manifests/" in c for c in calls)
+    assert not any(c.startswith("rcat ") for c in calls)
     assert SECRET not in p.stdout + p.stderr and SECRET not in joined                    # segredo só no ambiente do rclone
 
 
@@ -50,6 +51,6 @@ def test_backup_media_dry_run_writes_no_manifest(tmp_path):
     env, log = backup_env(tmp_path, data)
     assert run_sh("backup_media.sh", "--dry-run", env=env).returncode == 0
     calls = log.read_text()
-    assert "--dry-run" in calls and "rcat" not in calls
+    assert "--dry-run" in calls and "rcat" not in calls and "/manifests/" not in calls
 
 
