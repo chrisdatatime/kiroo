@@ -173,7 +173,7 @@ def test_onboarding_persists_per_user(app):
 # ---------------------------------------------------------------- verificação de e-mail, recuperação e Google
 def _mailbox(app):
     box = []
-    app.send_mail = lambda to, subject, text: box.append((to, subject, text)) or True
+    app.send_mail = lambda to, subject, text, html=None: box.append((to, subject, text)) or True
     return box
 
 

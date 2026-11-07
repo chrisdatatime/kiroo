@@ -33,6 +33,8 @@ import urllib.request
 from email.message import EmailMessage
 from email.utils import formatdate, make_msgid, parseaddr
 
+from . import mail_templates
+
 log = logging.getLogger("studio")
 
 SECURITY_MODES = ("starttls", "ssl", "none")
@@ -113,7 +115,7 @@ def _sender() -> str | None:
     return raw if "@" in addr else None
 
 
-def build_message(to: str, subject: str, text: str) -> EmailMessage:
+def build_message(to: str, subject: str, text: str, html: str | None = None) -> EmailMessage:
     if any(c in to + subject for c in "\r\n"):
         raise MailConfigError("destinatário ou assunto inválido")
     sender = _sender() or "Kiroo <kiroo@localhost>"
@@ -126,6 +128,8 @@ def build_message(to: str, subject: str, text: str) -> EmailMessage:
     msg["Message-ID"] = make_msgid(domain=domain)
     msg["Auto-Submitted"] = "auto-generated"   # e-mail automático: sem resposta automática de férias
     msg.set_content(text, charset="utf-8")
+    if html:   # multipart/alternative: text/plain primeiro, text/html por último (o cliente prefere o último)
+        msg.add_alternative(html, subtype="html", charset="utf-8")
     msg["Content-Language"] = "pt-BR"          # depois do set_content, que limpa os cabeçalhos Content-*
     return msg
 
@@ -135,11 +139,14 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
-def _send_resend_api(to: str, subject: str, text: str) -> None:
+def _send_resend_api(to: str, subject: str, text: str, html: str | None = None) -> None:
     key = (os.environ.get("STUDIO_SMTP_PASSWORD") or "").strip()
     if any(c in to + subject + key for c in "\r\n"):
         raise MailConfigError("destinatário, assunto ou chave inválido")
-    payload = json.dumps({"from": _sender(), "to": [to], "subject": subject, "text": text}).encode("utf-8")
+    body = {"from": _sender(), "to": [to], "subject": subject, "text": text}
+    if html:
+        body["html"] = html
+    payload = json.dumps(body).encode("utf-8")
     req = urllib.request.Request(RESEND_API_URL, data=payload, method="POST", headers={
         "Authorization": f"Bearer {key}", "Content-Type": "application/json", "User-Agent": "kiroo-studio/1.0"})
     with urllib.request.build_opener(_NoRedirect).open(req, timeout=API_TIMEOUT_S) as resp:
@@ -148,12 +155,12 @@ def _send_resend_api(to: str, subject: str, text: str) -> None:
         resp.read(65536)
 
 
-def _send_smtp(to: str, subject: str, text: str) -> None:
+def _send_smtp(to: str, subject: str, text: str, html: str | None = None) -> None:
     host = os.environ["STUDIO_SMTP_HOST"].strip()
     port = int(os.environ.get("STUDIO_SMTP_PORT") or 587)
     user = os.environ.get("STUDIO_SMTP_USER") or ""
     password = os.environ.get("STUDIO_SMTP_PASSWORD") or ""
-    msg = build_message(to, subject, text)
+    msg = build_message(to, subject, text, html)
     mode = _security(host, port)
     ctx = ssl.create_default_context()
     if mode == "ssl":
@@ -177,7 +184,7 @@ def _describe(exc: BaseException) -> str:
     return type(exc).__name__
 
 
-def send(to: str, subject: str, text: str) -> bool:
+def send(to: str, subject: str, text: str, html: str | None = None) -> bool:
     """Envia o e-mail. True = aceito pelo servidor (SMTP ou API). False = não enviado (sem configuração, falha ou prazo)."""
     problem = config_error()
     if problem:
@@ -194,7 +201,7 @@ def send(to: str, subject: str, text: str) -> bool:
 
     def run() -> None:
         try:
-            fn(to, subject, text)
+            fn(to, subject, text, html)
             outcome.append(None)
         except Exception as exc:  # noqa: BLE001 — nada vaza para a resposta do cadastro
             outcome.append(exc)
@@ -213,19 +220,15 @@ def send(to: str, subject: str, text: str) -> bool:
 
 
 # ------------------------------------------------------------------ mensagens (PT-BR)
-def verification_email(code: str, minutes: int) -> tuple[str, str]:
-    return (f"Kiroo: seu código de confirmação é {code}",
-            f"Olá!\n\nSeu código de confirmação do Kiroo é:\n\n    {code}\n\n"
-            f"Ele vale por {minutes} minutos e só pode ser usado uma vez.\n\n"
-            "Se você não criou uma conta no Kiroo, ignore este e-mail.\n\n— Equipe Kiroo\n")
+def verification_email(code: str, minutes: int) -> tuple[str, str, str]:
+    """(assunto, texto, html); veja mail_templates."""
+    return mail_templates.verification_email(code, minutes)
 
 
-def reset_email(link: str, minutes: int) -> tuple[str, str]:
-    return ("Kiroo: redefinir sua senha",
-            "Olá!\n\nRecebemos um pedido para criar uma nova senha no Kiroo. Abra o link abaixo:\n\n"
-            f"{link}\n\nO link vale por {minutes} minutos e só pode ser usado uma vez. Ao trocar a senha, as outras "
-            "sessões abertas são encerradas.\n\nSe você não pediu isso, ignore este e-mail: sua senha continua a "
-            "mesma.\n\n— Equipe Kiroo\n")
+def reset_email(link: str, minutes: int) -> tuple[str, str, str | None]:
+    """(assunto, texto, html). O html só existe se o link for https do STUDIO_PUBLIC_HOST; senão sai só texto."""
+    host = (os.environ.get("STUDIO_PUBLIC_HOST") or "").strip().lower()
+    return mail_templates.reset_email(link, minutes, public_host=host)
 
 
 def admin_setup_email(link: str, minutes: int) -> tuple[str, str]:

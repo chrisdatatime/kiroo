@@ -82,7 +82,7 @@ def test_bootstrap_admin_has_no_password_and_gets_a_reset_link(loader):
     cfg = ServerConfig(bootstrap_admin_email="dono@kiroo.app", public_host="app.kiroo.app", secure_cookie=True)
     a = App(8765, settings_loader=loader, sim_pacing=False, config=cfg)
     box = []
-    a.send_mail = lambda to, subject, text: box.append((to, text)) or True
+    a.send_mail = lambda to, subject, text, html=None: box.append((to, text)) or True
     assert a.bootstrap_admin() == "created" and a.bootstrap_admin() == "exists"
     to, text = box[0]
     assert to == "dono@kiroo.app" and "https://app.kiroo.app/?reset=" in text
