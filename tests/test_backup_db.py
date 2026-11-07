@@ -44,6 +44,7 @@ def test_entrypoint_conserta_volume_e_desce_de_privilegio_antes_de_subir():
     i_drop = t.index("exec setpriv --reuid=")
     assert i_chown < i_recursivo < i_drop                                  # conserta, depois desce
     assert i_drop < t.index('exec "$@"') and i_drop < t.index("exec litestream replicate")
+    assert i_drop < t.index('sh "$LOOP" "$$" &')                           # o laço de backup também já sem privilégio
     assert '[ "$(id -u)" = "0" ]' in t                                     # só mexe em privilégio se for root
     assert '[ "${KIROO_PRIV_DROPPED:-0}" != "1" ]' in t                    # a re-execução não entra em laço
     for flag in ("--clear-groups", "--no-new-privs", "--inh-caps=-all"):   # nada de capacidade herdada

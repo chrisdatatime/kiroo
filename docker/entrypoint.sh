@@ -81,5 +81,28 @@ if [ "${STUDIO_RESTORE_ON_EMPTY:-0}" = "1" ]; then
     || { echo "entrypoint: restauração automática falhou; abortando para não subir com banco vazio" >&2; exit 4; }
 fi
 
+# ------------------------------------------------------------------ backup diário da mídia (rclone)
+# O Litestream cobre o BANCO; a mídia (produções, uploads, workspaces, music, training) é copiada por
+# scripts/backup_media.sh. Dentro do contêiner isso roda num laço de sleep, sem cron nem supercronic
+# (docker/media_backup_loop.sh). Chega aqui só quando as credenciais do R2 existem.
+# Padrão: ligado em staging/production, desligado em dev. STUDIO_MEDIA_BACKUP=0|1 decide explicitamente.
+case "${STUDIO_MEDIA_BACKUP:-}" in
+  1) media_backup=1;;
+  0) media_backup=0;;
+  *) case "$ENVN" in staging|production) media_backup=1;; *) media_backup=0;; esac;;
+esac
+LOOP="${STUDIO_MEDIA_BACKUP_LOOP:-/usr/local/bin/kiroo-media-backup}"
+if [ "$media_backup" = "1" ]; then
+  if [ -f "$LOOP" ]; then
+    # "$$" é o PID deste shell, que o exec abaixo transforma no Litestream: o laço o vigia e sai com ele.
+    sh "$LOOP" "$$" &
+    echo "entrypoint: backup diário da mídia ligado" >&2
+  else
+    echo "entrypoint: *** ATENÇÃO: laço de backup da mídia ausente ($LOOP): a mídia fica SEM cópia diária. ***" >&2
+  fi
+else
+  echo "entrypoint: backup diário da mídia desligado (STUDIO_MEDIA_BACKUP=0 ou ambiente dev)" >&2
+fi
+
 # "$*": o Litestream recebe o comando como UMA string e o executa como filho.
 exec litestream replicate -config "$CFG" -exec "$*"

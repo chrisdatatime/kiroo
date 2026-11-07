@@ -104,3 +104,112 @@ def test_backup_media_sync_failure_exits_1(tmp_path):
     env["PATH"] = posix(d) + os.pathsep + os.environ["PATH"]
     p = run_sh("backup_media.sh", env=env)
     assert p.returncode == 1 and "sync:productions(rc=7)" in p.stderr, p.stdout + p.stderr
+
+
+# ------------------------------------------------------------------ laço diário dentro do contêiner
+def run_loop(tmp_path, env, *, watch_pid="0", timeout=60):
+    """docker/media_backup_loop.sh com rclone falso. Intervalos curtos para o teste terminar rápido."""
+    return subprocess.run([BASH, posix(ROOT / "docker" / "media_backup_loop.sh"), watch_pid],
+                          capture_output=True, text=True, encoding="utf-8", errors="replace",
+                          env={**os.environ, **env}, timeout=timeout)
+
+
+def loop_env(tmp_path, data, **extra):
+    env, log = backup_env(tmp_path, data)
+    env.update(STUDIO_MEDIA_BACKUP_SCRIPT=posix(ROOT / "scripts" / "backup_media.sh"),
+               STUDIO_MEDIA_BACKUP_DELAY_S="0", STUDIO_MEDIA_BACKUP_INTERVAL_S="5",
+               STUDIO_MEDIA_BACKUP_MAX_RUNS="1", **extra)
+    return env, log
+
+
+@needs_bash
+def test_loop_executa_o_backup_e_registra_o_resultado(tmp_path):
+    """Uma volta do laço: chama o backup_media.sh de verdade (com rclone falso) e loga ok."""
+    data = tmp_path / "data"
+    make_data(data)
+    env, log = loop_env(tmp_path, data)
+    p = run_loop(tmp_path, env)                                          # MAX_RUNS=1: uma volta e sai
+    assert p.returncode == 0, p.stdout + p.stderr
+    assert "media_backup: laço ligado" in p.stdout
+    assert "media_backup: início" in p.stdout and "media_backup: ok" in p.stdout
+    assert "limite de 1 execução(ões) atingido" in p.stdout
+    calls = log.read_text().splitlines()
+    assert [c for c in calls if c.startswith("sync ")]                   # o backup rodou mesmo
+    assert SECRET not in p.stdout + p.stderr and SECRET not in " ".join(calls)
+
+
+@needs_bash
+def test_loop_continua_depois_de_falha_e_nao_vaza_segredo(tmp_path):
+    data = tmp_path / "data"
+    make_data(data)
+    env, log = loop_env(tmp_path, data)
+    d = fake_bin(tmp_path, "rclone", f'echo "$@" >> "{posix(log)}"\n'
+                 'if [ "$1" = sync ]; then echo "Failed to sync: status code: 403" >&2; exit 7; fi\n'
+                 'if [ "$1" = size ]; then echo \'{"count":1,"bytes":1}\'; fi\n')
+    env["PATH"] = posix(d) + os.pathsep + os.environ["PATH"]
+    p = run_loop(tmp_path, env)
+    assert p.returncode == 0                                             # a falha do dia não derruba o laço
+    assert "media_backup: FALHOU código=1" in p.stderr and "o laço continua" in p.stderr
+    assert SECRET not in p.stdout + p.stderr
+
+
+@needs_bash
+def test_loop_recusa_configuracao_invalida(tmp_path):
+    data = tmp_path / "data"
+    make_data(data)
+    env, _ = loop_env(tmp_path, data)
+    for chave, valor in (("STUDIO_MEDIA_BACKUP_INTERVAL_S", "nao-numero"),
+                         ("STUDIO_MEDIA_BACKUP_INTERVAL_S", "1"),          # abaixo da fatia mínima
+                         ("STUDIO_MEDIA_BACKUP_DELAY_S", "-5"),
+                         ("STUDIO_MEDIA_BACKUP_MAX_RUNS", "x"),
+                         ("STUDIO_MEDIA_BACKUP_SCRIPT", posix(tmp_path / "nao-existe.sh"))):
+        p = run_loop(tmp_path, {**env, chave: valor})
+        assert p.returncode == 2, (chave, valor, p.stdout + p.stderr)
+
+
+@needs_bash
+def test_entrypoint_liga_o_laco_em_staging_e_desliga_em_dev(tmp_path):
+    """Quem decide ligar é o entrypoint: staging/production sim, dev não, STUDIO_MEDIA_BACKUP vence."""
+    loop = fake_bin(tmp_path, "loop.sh", f'echo "LOOP pid=$1" > "{posix(tmp_path / "loop.log")}"\n') / "loop.sh"
+    base = {"BACKUP_R2_ENDPOINT": "https://c.r2.example", "BACKUP_R2_ACCESS_KEY_ID": "AK1",
+            "BACKUP_R2_SECRET_ACCESS_KEY": SECRET, "STUDIO_MEDIA_BACKUP_LOOP": posix(loop)}
+    casos = [({"STUDIO_ENV": "staging"}, True), ({"STUDIO_ENV": "production"}, True),
+             ({"STUDIO_ENV": "dev"}, False),
+             ({"STUDIO_ENV": "staging", "STUDIO_MEDIA_BACKUP": "0"}, False),
+             ({"STUDIO_ENV": "dev", "STUDIO_MEDIA_BACKUP": "1"}, True)]
+    for extra, esperado in casos:
+        (tmp_path / "loop.log").unlink(missing_ok=True)
+        p = run_entry(tmp_path, {**base, **extra})
+        ligado = "backup diário da mídia ligado" in p.stderr
+        assert ligado is esperado, (extra, p.stderr)
+        assert ("backup diário da mídia desligado" in p.stderr) is (not esperado), extra
+        if esperado:
+            assert "LOOP pid=" in (tmp_path / "loop.log").read_text()     # recebeu o PID a vigiar
+        assert SECRET not in p.stdout + p.stderr
+
+
+@needs_bash
+def test_entrypoint_avisa_se_o_laco_faltar_na_imagem(tmp_path):
+    p = run_entry(tmp_path, {"STUDIO_ENV": "staging", "BACKUP_R2_ENDPOINT": "https://c.r2.example",
+                             "BACKUP_R2_ACCESS_KEY_ID": "AK1", "BACKUP_R2_SECRET_ACCESS_KEY": SECRET,
+                             "STUDIO_MEDIA_BACKUP_LOOP": posix(tmp_path / "nao-existe.sh")})
+    assert "laço de backup da mídia ausente" in p.stderr and "SEM cópia diária" in p.stderr
+
+
+def test_dockerfile_instala_o_laco_de_backup():
+    df = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+    assert "docker/media_backup_loop.sh /usr/local/bin/kiroo-media-backup" in df
+    assert "/usr/local/bin/kiroo-media-backup" in re.search(r"^RUN chmod 0755 .*$", df, re.M).group(0)
+
+
+@needs_bash
+def test_loop_sai_com_o_servidor_e_nao_fica_orfao(tmp_path):
+    """Sem MAX_RUNS o laço é infinito; ele sai sozinho quando o PID vigiado desaparece."""
+    data = tmp_path / "data"
+    make_data(data)
+    env, log = loop_env(tmp_path, data)
+    env.pop("STUDIO_MEDIA_BACKUP_MAX_RUNS")
+    p = run_loop(tmp_path, env, watch_pid="999999")                      # PID que não existe
+    assert p.returncode == 0
+    assert "servidor saiu antes da primeira execução; encerrando" in p.stdout
+    assert not log.exists()                                              # nem chamou o rclone

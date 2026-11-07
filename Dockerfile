@@ -87,8 +87,10 @@ COPY profiles/ ./profiles/
 COPY --from=litestream /out/litestream /usr/local/bin/litestream
 COPY litestream.yml /etc/litestream.yml
 COPY docker/entrypoint.sh /usr/local/bin/kiroo-entrypoint
+# laço do backup diário da mídia (sem cron: ver docker/media_backup_loop.sh)
+COPY docker/media_backup_loop.sh /usr/local/bin/kiroo-media-backup
 COPY scripts/backup_media.sh scripts/restore.sh scripts/verify_restore.py ./scripts/
-RUN chmod 0755 /usr/local/bin/kiroo-entrypoint /usr/local/bin/litestream ./scripts/*.sh
+RUN chmod 0755 /usr/local/bin/kiroo-entrypoint /usr/local/bin/kiroo-media-backup /usr/local/bin/litestream ./scripts/*.sh
 COPY assets/maps/ ./assets/maps/
 COPY --from=frontend /app/frontend/dist ./frontend/dist
 # licenças do pacote acompanham a imagem
