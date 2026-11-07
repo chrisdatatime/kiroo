@@ -39,7 +39,7 @@ from ..agent_chat import AgentChat
 from ..accounts import LOGIN_WINDOW_MIN, Accounts, AuthError
 from ..config import load_settings
 from ..credits import Ledger
-from ..db import Database
+from ..db import Database, checkpoint
 from ..factory import build
 from ..logs import REQUEST_INFO
 from ..models import ProductInput
@@ -1061,6 +1061,19 @@ class StudioHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
 
 
+def _checkpoint_loop(app) -> None:
+    """Checkpoint PASSIVE periódico do WAL (STUDIO_WAL_CHECKPOINT_S, padrão 300; 0 desliga)."""
+    try:
+        every = float(os.environ.get("STUDIO_WAL_CHECKPOINT_S") or 300)
+    except ValueError:
+        every = 300.0
+    while every > 0 and not app.stopping.wait(every):
+        try:
+            checkpoint(app.settings().db_path)
+        except Exception as exc:  # noqa: BLE001 — manutenção nunca derruba o servidor
+            log.warning("checkpoint do WAL falhou (%s)", type(exc).__name__)
+
+
 def serve(port: int | None = None, open_browser: bool = True, public_host: str | None = None, *,
           host: str | None = None, trust_proxy: str | None = None) -> None:
     cfg = ServerConfig.from_env()
@@ -1084,6 +1097,8 @@ def serve(port: int | None = None, open_browser: bool = True, public_host: str |
         httpd.server_close()
         release_instance_lock(lock)
         raise SystemExit(f"Falha ao preparar o banco ({type(exc).__name__}): {exc}") from exc
+
+    threading.Thread(target=_checkpoint_loop, args=(app,), name="wal-checkpoint", daemon=True).start()
 
     shown = "127.0.0.1" if host in ("0.0.0.0", "::", "") else host
     url = f"http://{shown}:{port}/"
