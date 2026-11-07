@@ -229,9 +229,11 @@ function P7-ErroCheckpoint($Erros) {
 
 function P7-Marcos([string[]]$Linhas, $Erros) {
     # Horarios (UTC, do relogio do Docker) dos marcos do desligamento no log do container (docker logs --timestamps).
-    $m = [ordered]@{ signal_ls = $null; sigterm_app = $null; interrompidas = $null; ls_shutdown = $null; erros = @() }
+    # settle_ini/settle_fim: eventos JSON do app (janela de assentamento, src/studio/shutdown.py).
+    $m = [ordered]@{ signal_ls = $null; sigterm_app = $null; interrompidas = $null; settle_ini = $null; settle_fim = $null; ls_shutdown = $null; erros = @() }
     $pad = [ordered]@{ signal_ls = 'signal received, litestream shutting down'; sigterm_app = 'SIGTERM: parando';
-        interrompidas = 'marcadas como interrompidas'; ls_shutdown = 'litestream shut down' }
+        interrompidas = 'marcadas como interrompidas'; settle_ini = '"event": "settle_start"'; settle_fim = '"event": "settle_end"';
+        ls_shutdown = 'litestream shut down' }
     foreach ($l in @($Linhas)) {
         foreach ($k in @($pad.Keys)) { if (-not $m[$k] -and "$l".Contains($pad[$k])) { $m[$k] = P7-Utc ("$l" -split '\s', 2)[0] } }
     }
@@ -250,10 +252,57 @@ function P7-LinhaDoTempo($Marcos, [string]$Stop, [string]$Finished) {
     $p = @("stop=$(if ($Stop) { $Stop } else { '?' })", "signal_ls=$(if ($ref) { $ref } else { '?' })")
     $ci = [Globalization.CultureInfo]::InvariantCulture   # ponto decimal, independente da cultura do Windows
     $rel = { param($t) if (-not $t) { '?' } elseif (-not $ref) { $t } else { [string]::Format($ci, '{0:+0.000;-0.000} s', (P7-Seg $ref $t)) } }
-    foreach ($k in @('sigterm_app', 'interrompidas', 'ls_shutdown')) { $p += "$k=$(& $rel $Marcos[$k])" }
+    foreach ($k in @('sigterm_app', 'interrompidas', 'settle_ini', 'settle_fim', 'ls_shutdown')) { $p += "$k=$(& $rel (P7-Campo $Marcos $k))" }
     foreach ($e in @($Marcos.erros)) { $t, $msg = "$e" -split ' ', 2; $p += "ERROR($msg)=$(& $rel $t)" }
     $p += "finished=$(& $rel $Finished)"
     return ($p -join ' | ')
+}
+
+function P7-Settle([string[]]$Linhas) {
+    # Janela de assentamento do app (STUDIO_SHUTDOWN_SETTLE_S), lida dos eventos JSON do log do container:
+    #   settle_start / settle_end (com settle_s, duration_ms, interrupted) ou settle_skipped (settle = 0).
+    # settle_s = $null quando nao ha nenhum desses eventos (imagem antiga, sem o settle, ou o app nao chegou ao fim da drenagem).
+    $o = [ordered]@{ settle_s = $null; inicio = $null; fim = $null; duracao_s = $null; interrompido = $null; estado = 'ausente' }
+    foreach ($l in @($Linhas)) {
+        $t = "$l"
+        if ($t -notmatch '"event":\s*"settle_(start|end|skipped)"') { continue }
+        $ev = $Matches[1]
+        $ts = P7-Utc ($t -split '\s', 2)[0]
+        $ss = if ($t -match '"settle_s":\s*(-?[0-9.]+)') { [double]::Parse($Matches[1], [Globalization.CultureInfo]::InvariantCulture) } else { $null }
+        switch ($ev) {
+            'skipped' { $o.settle_s = [double]0; $o.duracao_s = [double]0; $o.estado = 'desativado' }
+            'start' { if (-not $o.inicio) { $o.inicio = $ts }; if ($null -ne $ss) { $o.settle_s = $ss }; $o.estado = 'sem_fim' }
+            'end' {
+                $o.fim = $ts; if ($null -ne $ss) { $o.settle_s = $ss }
+                if ($t -match '"duration_ms":\s*([0-9.]+)') { $o.duracao_s = [math]::Round([double]::Parse($Matches[1], [Globalization.CultureInfo]::InvariantCulture) / 1000, 3) }
+                if ($t -match '"interrupted":\s*(true|false)') { $o.interrompido = ($Matches[1] -eq 'true') }
+                $o.estado = if ($o.interrompido) { 'interrompido' } else { 'completo' }
+            }
+        }
+    }
+    return $o
+}
+
+function P7-SettleTexto($S) {
+    # Uma linha legivel do settle de uma rodada.
+    switch ($S.estado) {
+        'ausente' { return 'ausente (nenhum evento settle_* no log: imagem sem o settle?)' }
+        'desativado' { return 'desativado (STUDIO_SHUTDOWN_SETTLE_S=0)' }
+        'sem_fim' { return "$($S.settle_s) s, iniciado as $($S.inicio) e SEM settle_end (processo morto antes do fim?)" }
+        default { return "$($S.settle_s) s, durou $($S.duracao_s) s$(if ($S.interrompido) { ', INTERROMPIDO por segundo sinal' })" }
+    }
+}
+
+function P7-SettleResumo($Rodadas) {
+    # "settle_s: 3 em a1, a2 / ausente em a3" (agrupa as rodadas pelo valor).
+    $g = [ordered]@{}
+    foreach ($r in @($Rodadas | Where-Object { $_ })) {
+        $v = P7-Campo $r 'settle_s'; $k = if ($null -eq $v -or "$v" -eq '') { 'ausente' } else { "$v" }
+        if (-not $g.Contains($k)) { $g[$k] = @() }
+        $g[$k] += "$(P7-Campo $r 'rodada')"
+    }
+    if (-not $g.Count) { return 'settle_s: sem rodadas' }
+    return 'settle_s: ' + (($g.Keys | ForEach-Object { "$_ em $($g[$_] -join ', ')" }) -join ' / ')
 }
 
 function P7-EscolheWal($Sonda, $DoLog) {
@@ -299,13 +348,13 @@ function P7-Conclusao($Rodadas) {
 
 function P7-Tabela($Rodadas) {
     # Tabela final das rodadas "a" (texto de largura fixa para o log).
-    $f = '{0,-6} {1,-7} {2,10} {3,-8} {4,8} {5,8} {6,5} {7,10} {8,-14} {9}'
-    $l = @(($f -f 'rodada', 'carga', 'wal_bytes', 'fonte', 'wal_pag', 'limite', 'saida', 'erros_ls', 'resultado', 'hipotese'))
+    $f = '{0,-6} {1,-7} {2,10} {3,-8} {4,8} {5,8} {6,5} {7,8} {8,10} {9,-14} {10}'
+    $l = @(($f -f 'rodada', 'carga', 'wal_bytes', 'fonte', 'wal_pag', 'limite', 'saida', 'settle_s', 'erros_ls', 'resultado', 'hipotese'))
     foreach ($r in @($Rodadas | Where-Object { $_ })) {
         $v = { param($k) $x = P7-Campo $r $k; if ($null -eq $x -or "$x" -eq '') { '?' } else { "$x" } }
         $el = & $v 'erros_litestream'; if ($el -like 'NAO_VERIFICADO*') { $el = 'NAO_VERIF' }
         $l += ($f -f (& $v 'rodada'), (& $v 'carga'), (& $v 'wal_bytes'), (& $v 'wal_fonte'), (& $v 'wal_paginas'), (& $v 'limite_paginas'),
-            (& $v 'saida'), $el, (& $v 'resultado'), (& $v 'hipotese'))
+            (& $v 'saida'), (& $v 'settle_s'), $el, (& $v 'resultado'), (& $v 'hipotese'))
     }
     return , $l
 }

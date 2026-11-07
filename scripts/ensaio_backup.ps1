@@ -575,7 +575,10 @@ function New-RodadaP7([string]$Vol) {
     Assert-VolumeP7 $Vol
     $a = @('run', '-d', '--name', $CONTAINER7, '--label', $ROTULO, '-p', "127.0.0.1:${PORTA7}:8765", '-v', "${Vol}:/data", '-v', "${Pasta}:/ensaio",
         '-e', 'STUDIO_SIGNUP=open', '-e', "STUDIO_ALLOWED_HOSTS=127.0.0.1:$PORTA7", '-e', 'STUDIO_MODE=simulated',
-        '-e', 'STUDIO_X264_PRESET=placebo') + (EnvArgs) + @($IMAGEM)
+        '-e', 'STUDIO_X264_PRESET=placebo') + (EnvArgs)
+    # janela de assentamento do app: por padrao a da imagem (3 s); STUDIO_SHUTDOWN_SETTLE_S no terminal e repassado pelo nome
+    if (-not [string]::IsNullOrWhiteSpace($env:STUDIO_SHUTDOWN_SETTLE_S)) { $a += @('-e', 'STUDIO_SHUTDOWN_SETTLE_S') }
+    $a += @($IMAGEM)
     $r = Invoke-Docker $a
     if ($r.Code -ne 0) { throw ('NAO_VERIFICADO: ' + "docker run falhou: $($r.Out)") }
     if (-not (Wait-Ready 120 $BASE7)) { throw ('NAO_VERIFICADO: ' + "/readyz nao ficou 200. Logs: $((Invoke-Docker @('logs', '--tail', '30', $CONTAINER7)).Out)") }
@@ -745,6 +748,10 @@ function Rodada-P7A([int]$I, $Ret) {
         # WAL no fechamento x erro de checkpoint (so MEDE; o veredito da rodada continua o mesmo, ver abaixo)
         $mc = P7-Marcos $logs $el
         $info.linha_do_tempo = P7-LinhaDoTempo $mc $info.stop_utc $info.finished_utc
+        # janela de assentamento do app (eventos settle_start/settle_end do log JSON): so informa, nao muda o veredito
+        $st = P7-Settle $logs
+        $info.settle_s = $st.settle_s
+        $info.settle = P7-SettleTexto $st
         $ps = P7-Campo $sonda 'page_size'; $psc = P7-Campo $sonda 'page_size_cabecalho'
         if ($null -eq $ps) { $ps = $psc }
         $info.page_size = $ps
@@ -973,9 +980,11 @@ function Passo7($e) {
         Say "  WAL no fechamento x erro do Litestream (limite: $P7_LIMITE_PAGINAS paginas = 32 + (page_size + 24) x $P7_LIMITE_PAGINAS bytes):"
         P7-Tabela $as | ForEach-Object { Say "    $_" }
         Say "    $(P7-Conclusao $as)"
+        Say "    $(P7-SettleResumo $as)"
         Say '    (so medicao: o veredito de cada rodada nao muda; toda linha ERROR do Litestream continua sendo FAIL)'
     }
     Say '  resumo do passo 7:'
+    if ($as.Count) { Say "    $(P7-SettleResumo $as) (STUDIO_SHUTDOWN_SETTLE_S lido do log do app)" }
     foreach ($g in $TIPOS7) {
         $x = @($todas | Where-Object { $_.rodada -like "$g*" })
         Say ("    {0}: PASS={1} FAIL={2} NAO_VERIFICADO={3}" -f $g, @($x | Where-Object { $_.resultado -eq 'PASS' }).Count,
