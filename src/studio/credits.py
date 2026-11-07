@@ -15,33 +15,17 @@ from __future__ import annotations
 
 import math
 import threading
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 
 from .db import Database, new_id, now
 
 ORPHAN_MINUTES = 15
-_LOCK = threading.Lock()
+# Serializa threads que compartilham UMA conexão (o orquestrador usa uma só); entre conexões/processos quem garante a
+# exclusão é o BEGIN IMMEDIATE do SQLite (lock de escrita do arquivo), que é o que protege o saldo de verdade.
+_LOCK = threading.RLock()
 
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS credit_entries (
-    id TEXT PRIMARY KEY,
-    workspace_id TEXT NOT NULL,
-    kind TEXT NOT NULL,
-    amount_cc INTEGER NOT NULL,
-    usd REAL,
-    hold_id TEXT,
-    production_id TEXT,
-    attempt_id TEXT,
-    stage TEXT,
-    note TEXT,
-    ext_ref TEXT UNIQUE,
-    created_by TEXT,
-    created_at TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS ix_credit_ws ON credit_entries(workspace_id, created_at);
-CREATE INDEX IF NOT EXISTS ix_credit_hold ON credit_entries(hold_id);
-CREATE INDEX IF NOT EXISTS ix_credit_prod ON credit_entries(production_id);
-"""
+# O schema vive em migrations.py (PRAGMA user_version).
 
 KINDS_IN = {"grant", "purchase", "adjust"}  # entradas manuais/compras
 LABELS = {"grant": "Créditos liberados", "purchase": "Compra", "adjust": "Ajuste", "reserve": "Reserva",
@@ -77,7 +61,23 @@ def fmt(cc: int) -> str:
 class Ledger:
     def __init__(self, db: Database):
         self.db = db
-        db.conn.executescript(SCHEMA)
+
+    @contextmanager
+    def _txn(self):
+        """Transação de escrita com lock do SQLite (BEGIN IMMEDIATE): leitura do saldo + lançamento viram atômicos,
+        mesmo entre conexões e processos diferentes. Espera o lock até o busy_timeout da conexão. Se o chamador já
+        abriu uma transação, participa dela."""
+        with _LOCK:
+            if self.db.conn.in_transaction:
+                yield
+                return
+            self.db.conn.execute("BEGIN IMMEDIATE")
+            try:
+                yield
+            except BaseException:
+                self.db.conn.execute("ROLLBACK")
+                raise
+            self.db.conn.execute("COMMIT")
 
     # ------------------------------------------------------------- leitura
     def balance(self, wid: str) -> int:
@@ -156,7 +156,7 @@ class Ledger:
             raise ValueError("tipo de lançamento inválido")
         if kind != "adjust" and credits_cc <= 0:
             raise ValueError("a quantidade precisa ser positiva")
-        with _LOCK:
+        with self._txn():
             if ext_ref:
                 row = self.db.conn.execute("SELECT id FROM credit_entries WHERE ext_ref=?", (ext_ref,)).fetchone()
                 if row:
@@ -170,18 +170,12 @@ class Ledger:
         if cc <= 0:
             return None
         hid = new_id("hold")
-        with _LOCK:
-            self.db.conn.execute("BEGIN IMMEDIATE")
-            try:
-                bal = self.balance(wid)
-                if not self.exempt(wid) and bal < cc:
-                    raise InsufficientCredits(bal, cc)
-                self._insert(workspace_id=wid, kind="reserve", amount_cc=-cc, usd=usd, hold_id=hid, production_id=pid,
-                             stage=stage, ext_ref=f"reserve:{hid}")
-                self.db.conn.execute("COMMIT")
-            except BaseException:
-                self.db.conn.execute("ROLLBACK")
-                raise
+        with self._txn():   # saldo lido e reserva gravada sob o mesmo lock: o saldo nunca fica negativo
+            bal = self.balance(wid)
+            if not self.exempt(wid) and bal < cc:
+                raise InsufficientCredits(bal, cc)
+            self._insert(workspace_id=wid, kind="reserve", amount_cc=-cc, usd=usd, hold_id=hid, production_id=pid,
+                         stage=stage, ext_ref=f"reserve:{hid}")
         return hid
 
     def attach(self, hid: str | None, attempt_id: str) -> None:
@@ -192,7 +186,7 @@ class Ledger:
         """Devolve a reserva sem cobrar (chamada não aconteceu ou foi recusada sem custo)."""
         if not hid:
             return
-        with _LOCK:
+        with self._txn():
             r = self.db.conn.execute("SELECT * FROM credit_entries WHERE hold_id=? AND kind='reserve'", (hid,)).fetchone()
             if r is None or self.db.conn.execute("SELECT 1 FROM credit_entries WHERE ext_ref=?", (f"release:{hid}",)).fetchone():
                 return
@@ -204,11 +198,11 @@ class Ledger:
         """Fecha uma reserva sem produção (teste de treinamento): devolve a reserva e cobra o custo real."""
         if not hid:
             return
-        r = self.db.conn.execute("SELECT * FROM credit_entries WHERE hold_id=? AND kind='reserve'", (hid,)).fetchone()
-        self.release(hid, note)
-        charge = to_cc(usd)
-        if r is not None and charge:
-            with _LOCK:
+        with self._txn():   # liberação e débito juntos: nunca fica só um dos dois
+            r = self.db.conn.execute("SELECT * FROM credit_entries WHERE hold_id=? AND kind='reserve'", (hid,)).fetchone()
+            self.release(hid, note)
+            charge = to_cc(usd)
+            if r is not None and charge:
                 self._insert(workspace_id=r["workspace_id"], kind="debit", amount_cc=-charge, usd=usd, hold_id=hid, production_id=None,
                              stage=r["stage"], ext_ref=f"debit:{hid}", note=note[:300])
 
@@ -233,22 +227,16 @@ class Ledger:
             usd = att["confirmed_cost_usd"] if (not att["simulated"] and att["confirmed_cost_usd"] is not None) \
                 else (att["estimated_cost_usd"] or 0.0)
             charge = to_cc(usd)
-            with _LOCK:
+            with self._txn():
                 if self.db.conn.execute("SELECT 1 FROM credit_entries WHERE ext_ref=?", (f"release:{hid}",)).fetchone():
                     continue
-                self.db.conn.execute("BEGIN IMMEDIATE")
-                try:
-                    self._insert(workspace_id=r["workspace_id"], kind="release", amount_cc=-r["amount_cc"], hold_id=hid,
-                                 production_id=pid, attempt_id=att["id"], stage=r["stage"], ext_ref=f"release:{hid}",
-                                 note="" if charge else "recusado sem custo")
-                    if charge:
-                        self._insert(workspace_id=r["workspace_id"], kind="debit", amount_cc=-charge, usd=usd, hold_id=hid,
-                                     production_id=pid, attempt_id=att["id"], stage=r["stage"], ext_ref=f"debit:{hid}",
-                                     note=f"{att['kind']} #{att['attempt_no']}")
-                    self.db.conn.execute("COMMIT")
-                except BaseException:
-                    self.db.conn.execute("ROLLBACK")
-                    raise
+                self._insert(workspace_id=r["workspace_id"], kind="release", amount_cc=-r["amount_cc"], hold_id=hid,
+                             production_id=pid, attempt_id=att["id"], stage=r["stage"], ext_ref=f"release:{hid}",
+                             note="" if charge else "recusado sem custo")
+                if charge:
+                    self._insert(workspace_id=r["workspace_id"], kind="debit", amount_cc=-charge, usd=usd, hold_id=hid,
+                                 production_id=pid, attempt_id=att["id"], stage=r["stage"], ext_ref=f"debit:{hid}",
+                                 note=f"{att['kind']} #{att['attempt_no']}")
             closed += 1
         return closed
 
