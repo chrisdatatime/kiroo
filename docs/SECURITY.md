@@ -85,11 +85,13 @@ declarado, senha com scrypt, trava de instância única, backup com Litestream.
 | 10 | Antivírus/decodificação completa de imagem | A checagem é pelos bytes iniciais e tamanho; a imagem não é decodificada inteira (sem Pillow). Arquivos só são servidos de volta com `nosniff` e tipo fixo. |
 | 11 | MFA para o administrador | Não há segundo fator. Mitigação: senha forte, admin só por CLI, sessão de 30 dias (avaliar encurtar para admin). |
 | 12 | Auditoria de ações de admin | `studio admin` não grava trilha de auditoria (quem concedeu crédito/liberou real). |
-| 13 | Teste instável `test_hardening::test_json_logs_have_no_personal_data_and_mask_secrets` | Falhou 1 vez numa rodada parcial desta fase e passou nas duas rodadas completas (a linha `request` é registrada depois da resposta e o teste pode remover o handler antes). Pré-existente; não mexi. |
 | 14 | Envio real de chamadas pagas no staging | O portão foi testado com provedores falsos. Ligar `STUDIO_ALLOW_PAID_CALLS=1` + teto baixo no staging e conferir uma geração real é NAO_VERIFICADO. |
 
 ## Verificação desta fase
-- `pytest` (venv Python 3.12 com o projeto instalado): **427 passaram, 1 desmarcado** (`-m "not real"`).
+- `pytest` (venv Python 3.12 com o projeto instalado), sobre a base `e34ee1a`: **430 passaram, 1 desmarcado** (`-m "not real"`).
+- Teste antes intermitente `test_hardening::test_json_logs_have_no_personal_data_and_mask_secrets`: a linha `request` é
+  registrada depois da resposta e o teste removia o handler antes (corrida; 1/30 isolado). Corrigido com espera por
+  evento, asserções intactas: 30/30, e 5/5 com atraso de 0,2 s injetado entre a resposta e o log.
 - `npm test` (frontend): **ok, check:brand + 11 testes**. `npm run build` compilou.
 - Tela de cadastro conferida no navegador com servidor local: convite da CLI + aceite → tela de confirmação; botão
   desabilitado sem o aceite; `/privacidade` renderiza.
