@@ -35,7 +35,7 @@ A porta vem de `PORT` (ou `STUDIO_PORT`); sem nenhuma, `8765`. `STUDIO_PORT` nã
 
 ## Fornecer as credenciais pelo terminal (sem chat, sem arquivo)
 
-As credenciais viram variáveis de ambiente **só da sessão do terminal** e o Docker as injeta como *secrets* de build. Não ficam em `ARG`, `ENV`, imagem, `.env` nem histórico.
+As credenciais viram variáveis de ambiente **só da sessão do terminal** e o Docker as repassa como `--build-arg` (sem valor na linha de comando: ele lê do ambiente). Entram só no `ARG` do estágio `assets`: não viram `ENV`, não chegam à imagem final nem ao `docker history` dela (prova: `scripts/verify_build_args.py`). Ficam no histórico do estágio intermediário, por isso a imagem só vai para registro **privado**.
 
 **PowerShell**
 
@@ -66,7 +66,9 @@ unset R2_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY
 
 ## Build
 
-Com o Compose (usa os secrets do ambiente):
+**Decisão (um só Dockerfile):** o Railway valida o Dockerfile e só aceita `RUN --mount=type=cache` e nenhum `VOLUME`. Em vez de manter um `Dockerfile.local` com o caminho `--secret` (lógica duplicada que divergiria), o único caminho é `ARG` no estágio `assets`, igual no Railway e no local. A segurança vem de o ARG ficar só nesse estágio, o que `scripts/verify_build_args.py` prova.
+
+Com o Compose (repassa as três variáveis do ambiente como build args):
 
 ```bash
 docker compose build
@@ -75,7 +77,7 @@ docker compose build
 Ou direto, com `docker build` (um comando, funciona igual no PowerShell e no bash):
 
 ```bash
-docker build --secret id=r2_account_id,env=R2_ACCOUNT_ID --secret id=r2_access_key_id,env=R2_ACCESS_KEY_ID --secret id=r2_secret_access_key,env=R2_SECRET_ACCESS_KEY --build-arg "GIT_COMMIT=$(git rev-parse HEAD)" -t kiroo:local .
+docker build --build-arg R2_ACCOUNT_ID --build-arg R2_ACCESS_KEY_ID --build-arg R2_SECRET_ACCESS_KEY --build-arg "GIT_COMMIT=$(git rev-parse HEAD)" -t kiroo:local .
 ```
 
 `GIT_COMMIT` grava o commit no rótulo `org.opencontainers.image.revision` (não é segredo). Confira com
@@ -83,7 +85,7 @@ docker build --secret id=r2_account_id,env=R2_ACCOUNT_ID --secret id=r2_access_k
 No `docker compose build`, exporte antes `GIT_COMMIT` (bash: `export GIT_COMMIT=$(git rev-parse HEAD)`;
 PowerShell: `$env:GIT_COMMIT = git rev-parse HEAD`); sem ela o rótulo fica `desconhecido`.
 
-Se faltar algum secret, o build falha cedo e diz qual (`secrets de build ausentes ou vazios: ...`), sem tentar a rede. Se o SHA256 do pacote não bater com `assets.lock`, falha antes de abrir o ZIP.
+Se faltar alguma credencial, o build falha cedo e diz qual (`credenciais de build ausentes ou vazias: ...`), sem tentar a rede. Se o SHA256 do pacote não bater com `assets.lock`, falha antes de abrir o ZIP.
 
 ## Rodar localmente
 
@@ -117,6 +119,8 @@ reference/
 
 Em `docker run`, o equivalente é `-v "$PWD/reference:/reference:ro"`. O volume de dados (`/data`) e os assets da imagem (`/app/assets`) ficam intactos: a referência tem a própria variável (`STUDIO_REFERENCE_DIR`). Sem `STUDIO_REFERENCE_DIR`, o aplicativo usa `STUDIO_ASSETS_DIR` (comportamento local de sempre). Quando a foto falta, o `doctor` mostra `referência Bia: AUSENTE em /reference/bia/PERFIL BIA.jpg (monte o volume ...)` e a preparação do produto marca a referência como indisponível.
 
+A imagem **não declara `VOLUME`** (o Railway recusa a instrução; lá o volume é o do painel). Por isso, em `docker run` passe sempre o volume nomeado explicitamente (`-v kiroo-data:/data`); sem `-v`, `/data` fica na camada gravável do contêiner e some com ele. O Compose já faz isso. O `/data` é criado e ajustado pela própria imagem e pelo entrypoint, não por `VOLUME`.
+
 O volume nomeado `kiroo-data` herda o dono `kiroo` na primeira montagem. Com *bind mount* em `/data`, ajuste o dono: `sudo chown -R 10001:10001 <pasta>`.
 
 ## Trocar o pacote de assets e o hash
@@ -147,7 +151,7 @@ A imagem contém arte sob licença que **proíbe redistribuir**. Nunca publique 
 
 - Use um registro privado (GitHub Container Registry privado, ECR, GAR, Docker Hub privado) e restrinja quem pode fazer *pull*.
 - Faça o push só depois de conferir a imagem (seção seguinte). Exemplo: `docker tag kiroo:local ghcr.io/ORG/kiroo:2026-11-06` e `docker push ...` depois de `docker login`.
-- Se a CI construir a imagem, guarde as credenciais de leitura do R2 como secrets da CI e repasse com `--secret id=...,env=...`; nunca com `--build-arg`.
+- Se a CI construir a imagem, guarde as credenciais de leitura do R2 como secrets da CI e repasse com `--build-arg NOME` (valor vindo do ambiente da CI, nunca escrito no comando) e use só registro privado.
 - A hospedagem precisa de credencial de *pull* do registro privado.
 
 ## Conferências depois do build real

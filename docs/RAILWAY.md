@@ -355,4 +355,4 @@ desenho, Hobby é o piso.
    separado e só de leitura.
 5. **Reavalie se (b) virar a opção melhor:** se um dia houver plano Pro, se a arte licenciada precisar
    de isolamento mais forte, ou se o build no Railway começar a demorar demais — aí o build no Actions
-   com imagem privada no GHCR passa a valer, e o Dockerfile já suporta os dois caminhos sem mudança.
+   com imagem privada no GHCR passa a valer, e o mesmo Dockerfile serve aos dois (as credenciais são sempre `ARG`; sem `--mount=type=secret` e sem `VOLUME`, que o validador do Railway recusa).

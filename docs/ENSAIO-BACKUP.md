@@ -64,9 +64,10 @@ Se forem diferentes, avisa e lista os arquivos que entram na imagem e mudaram de
 docker build --build-arg "GIT_COMMIT=$(git rev-parse HEAD)" -t kiroo:dados .
 ```
 
-Isso funciona sem as credenciais de leitura do R2 enquanto a camada de assets (`fetch_assets.py`) estiver no
-cache do BuildKit: os secrets são opcionais e não entram na chave de cache. Sem cache, acrescente os três
-`--secret` (docs/DOCKER.md). Não use `--no-cache` nem `--pull`.
+Isso só reaproveita a camada de assets (`fetch_assets.py`) do cache do BuildKit se os `ARG` R2_* forem os mesmos
+da construção anterior (o valor do ARG entra na chave de cache). Em dúvida, exporte as três variáveis R2_* e
+acrescente `--build-arg R2_ACCOUNT_ID --build-arg R2_ACCESS_KEY_ID --build-arg R2_SECRET_ACCESS_KEY`
+(docs/DOCKER.md). Não use `--no-cache` nem `--pull`.
 
 **Esperado:** quatro linhas `presente`, `volume kiroo-ensaio-dados criado com rotulo`, `objetos ja existentes:
 ensaio/db=0 ensaio/media=0` (ou o aviso de sobras de ensaio anterior), `RESULTADO passo 1: PASS`.
