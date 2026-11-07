@@ -4,10 +4,17 @@ Uso (dentro do RUN, com os BuildKit secrets montados):
 
     python fetch_assets.py --lock assets.lock --out /out [--map assets/maps/office.tmj]
 
-Credenciais de LEITURA do R2 chegam só como arquivos de secret (padrão /run/secrets/<id>):
-r2_account_id, r2_access_key_id, r2_secret_access_key. O script nunca as imprime, nunca as
-grava e nunca as repassa por ARG/ENV. Ordem: baixar -> conferir SHA256 -> extrair com
-segurança -> conferir MANIFEST e arquivos exigidos -> apagar o ZIP (no mesmo RUN).
+Credenciais de LEITURA do R2 chegam por um de dois caminhos, nesta ordem:
+
+1. arquivos de BuildKit secret (padrão /run/secrets/<id>): r2_account_id, r2_access_key_id,
+   r2_secret_access_key. É o caminho preferido (`docker build --secret`).
+2. variáveis de ambiente R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, que no build do
+   Dockerfile chegam pelos `ARG` do estágio `assets`. Só para plataformas que não oferecem
+   BuildKit secrets (o Railway não documenta `--secret`; ver docs/RAILWAY.md).
+
+O script nunca as imprime, nunca as grava e nunca as promove a ENV. Sem nenhum dos dois caminhos
+ele falha ANTES de qualquer rede (build falha fechado). Ordem: baixar -> conferir SHA256 ->
+extrair com segurança -> conferir MANIFEST e arquivos exigidos -> apagar o ZIP (no mesmo RUN).
 """
 
 from __future__ import annotations
@@ -25,6 +32,8 @@ import zlib
 from pathlib import Path, PurePosixPath
 
 SECRET_IDS = ("r2_account_id", "r2_access_key_id", "r2_secret_access_key")
+# Caminho 2 (ARG do estágio `assets`): o ARG vira variável de ambiente dentro do RUN.
+ENV_FOR_SECRET = {sid: sid.upper() for sid in SECRET_IDS}
 
 # Limites de extração (o pacote atual tem 25 arquivos e ~2,4 MB descompactados).
 MAX_FILES = 200
@@ -72,21 +81,36 @@ def read_lock(path: Path) -> dict:
     return lock
 
 
-def read_credentials(secrets_dir: Path) -> dict[str, str]:
+def read_credentials(secrets_dir: Path, env: dict[str, str] | None = None) -> dict[str, str]:
+    """Credenciais de leitura do R2: arquivo de secret quando existir, senão a variável de ambiente (ARG).
+
+    Nunca retorna valor vazio: o que falta vira AssetError com os NOMES do que falta (jamais valores).
+    """
+    e = os.environ if env is None else env
     creds: dict[str, str] = {}
-    missing = []
+    missing: list[str] = []
+    sources: dict[str, str] = {}
     for sid in SECRET_IDS:
         f = Path(secrets_dir) / sid
         try:
             value = f.read_text(encoding="utf-8").strip()
         except OSError:
             value = ""
+        source = "secret"
+        if not value:                                        # caminho 2: ARG -> variável de ambiente
+            value = (e.get(ENV_FOR_SECRET[sid]) or "").strip()
+            source = "arg"
         if not value:
-            missing.append(sid)
+            missing.append(f"{sid} (ou {ENV_FOR_SECRET[sid]})")
+            source = "ausente"
         creds[sid] = value
+        sources[sid] = source
     if missing:
-        raise AssetError("secrets de build ausentes ou vazios: " + ", ".join(missing)
-                         + ". Monte-os com --secret id=<nome>,env=<VARIAVEL> (ver docs/DOCKER.md).")
+        raise AssetError("credenciais de build ausentes ou vazias: " + ", ".join(missing)
+                         + ". Use --secret id=<nome>,env=<VARIAVEL> ou --build-arg <VARIAVEL> (docs/DOCKER.md).")
+    # Diagnóstico com CONTAGENS por caminho, nunca nomes de variável ao lado de valores.
+    print("credenciais de build: {} via secret, {} via ARG".format(
+        sum(1 for v in sources.values() if v == "secret"), sum(1 for v in sources.values() if v == "arg")))
     return creds
 
 
@@ -260,9 +284,9 @@ def verify_package(out: Path, map_file: Path | None = None) -> None:
 # --------------------------------------------------------------------------- orquestração
 
 def prepare(lock_path: Path, out: Path, *, secrets_dir: Path, work: Path, map_file: Path | None = None,
-            client_factory=make_r2_client) -> None:
+            client_factory=make_r2_client, env: dict[str, str] | None = None) -> None:
     lock = read_lock(lock_path)
-    creds = read_credentials(secrets_dir)  # falha cedo, antes de qualquer rede
+    creds = read_credentials(secrets_dir, env)  # falha cedo, antes de qualquer rede
     work = Path(work)
     work.mkdir(parents=True, exist_ok=True)
     zip_path = work / "package.zip"

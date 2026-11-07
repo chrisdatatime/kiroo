@@ -87,10 +87,12 @@ def make_lock(tmp_path: Path, zip_path: Path, sha: str | None = None) -> Path:
     return lock
 
 
-def run(tmp_path, secrets_dir, zip_path, *, lock=None, client=None, map_file=None):
+def run(tmp_path, secrets_dir, zip_path, *, lock=None, client=None, map_file=None, env=None):
     out, work = tmp_path / "out", tmp_path / "work"
+    # env={} por padrão: o caminho ARG (R2_* no ambiente) não pode interferir nos testes do caminho secret,
+    # mesmo numa máquina que tenha as credenciais reais exportadas.
     fa.prepare(lock or make_lock(tmp_path, zip_path), out, secrets_dir=secrets_dir, work=work, map_file=map_file,
-               client_factory=lambda creds: client or FakeClient(zip_path))
+               client_factory=lambda creds: client or FakeClient(zip_path), env={} if env is None else env)
     return out, work
 
 
@@ -155,6 +157,81 @@ def test_secret_vazio_conta_como_ausente(tmp_path, secrets_dir):
     build_zip(z, package_files())
     with pytest.raises(fa.AssetError, match="r2_account_id"):
         run(tmp_path, secrets_dir, z)
+
+
+# --- caminho 2: ARG do estágio `assets` (plataforma sem BuildKit secrets, ex. Railway) ---
+
+def _only_args(secrets_dir):
+    for sid in fa.SECRET_IDS:
+        (secrets_dir / sid).unlink()
+    return {fa.ENV_FOR_SECRET[s]: FAKE_SECRETS[s] for s in fa.SECRET_IDS}
+
+
+def test_arg_supre_secret_ausente(tmp_path, secrets_dir):
+    env = _only_args(secrets_dir)
+    z = tmp_path / "p.zip"
+    build_zip(z, package_files())
+    client = FakeClient(z)
+    out, _ = run(tmp_path, secrets_dir, z, client=client, env=env)
+    assert (out / "assets/characters/nina.png").is_file()
+    assert client.calls                                                  # baixou: as credenciais do ARG valeram
+
+
+@pytest.mark.parametrize("missing", fa.SECRET_IDS)
+def test_arg_parcial_falha_fechado(tmp_path, secrets_dir, missing):
+    env = _only_args(secrets_dir)
+    env.pop(fa.ENV_FOR_SECRET[missing])
+    z = tmp_path / "p.zip"
+    build_zip(z, package_files())
+    client = FakeClient(z)
+    with pytest.raises(fa.AssetError, match=fa.ENV_FOR_SECRET[missing]):
+        run(tmp_path, secrets_dir, z, client=client, env=env)
+    assert client.calls == []                                            # nem tentou a rede
+
+
+def test_sem_secret_e_sem_arg_falha_fechado_citando_os_dois_caminhos(tmp_path, secrets_dir):
+    _only_args(secrets_dir)
+    z = tmp_path / "p.zip"
+    build_zip(z, package_files())
+    client = FakeClient(z)
+    with pytest.raises(fa.AssetError) as exc:
+        run(tmp_path, secrets_dir, z, client=client, env={})
+    msg = str(exc.value)
+    assert client.calls == []
+    for sid in fa.SECRET_IDS:
+        assert sid in msg and fa.ENV_FOR_SECRET[sid] in msg              # diz os dois caminhos possíveis
+    assert "--secret" in msg and "--build-arg" in msg
+    assert not any(v in msg for v in FAKE_SECRETS.values())              # só nomes, nunca valores
+
+
+def test_arg_vazio_ou_em_branco_conta_como_ausente(tmp_path, secrets_dir):
+    _only_args(secrets_dir)
+    z = tmp_path / "p.zip"
+    build_zip(z, package_files())
+    for valor in ("", "   \n"):
+        env = {fa.ENV_FOR_SECRET[s]: FAKE_SECRETS[s] for s in fa.SECRET_IDS}
+        env["R2_SECRET_ACCESS_KEY"] = valor
+        with pytest.raises(fa.AssetError, match="R2_SECRET_ACCESS_KEY"):
+            run(tmp_path, secrets_dir, z, env=env)
+
+
+def test_secret_tem_precedencia_sobre_arg(tmp_path, secrets_dir):
+    """Com os dois caminhos presentes vale o secret: a plataforma não sobrescreve o build local por acidente."""
+    z = tmp_path / "p.zip"
+    build_zip(z, package_files())
+    visto = {}
+    env = {fa.ENV_FOR_SECRET[s]: "valor-do-arg-" + s for s in fa.SECRET_IDS}
+    out, work = tmp_path / "out", tmp_path / "work"
+    fa.prepare(make_lock(tmp_path, z), out, secrets_dir=secrets_dir, work=work, env=env,
+               client_factory=lambda creds: (visto.update(creds), FakeClient(z))[1])
+    assert visto == FAKE_SECRETS                                         # os valores vieram dos arquivos de secret
+
+
+def test_read_credentials_nao_imprime_valores(secrets_dir, capsys):
+    fa.read_credentials(secrets_dir, {})
+    saida = capsys.readouterr().out
+    assert "3 via secret, 0 via ARG" in saida
+    assert not any(v in saida for v in FAKE_SECRETS.values())
 
 
 def test_erro_do_sdk_nao_vaza_credencial_nem_chave(tmp_path, secrets_dir):
@@ -388,10 +465,44 @@ def test_repositorio_nao_rastreia_arquivos_licenciados():
     assert chk.violations(chk.tracked_files(ROOT)) == []
 
 
+def dockerfile_stages(code: str) -> dict[str, str]:
+    """Nome do estágio -> corpo (as linhas até o próximo FROM). Estágio sem AS recebe um nome sintético."""
+    stages: dict[str, str] = {}
+    name, buf = None, []
+    for line in code.splitlines():
+        m = re.match(r"^\s*FROM\s+\S+(?:\s+AS\s+(\S+))?\s*$", line, re.I)
+        if m:
+            if name is not None:
+                stages[name] = "\n".join(buf)
+            name, buf = m.group(1) or f"_sem_nome_{len(stages)}", []
+            continue
+        buf.append(line)
+    if name is not None:
+        stages[name] = "\n".join(buf)
+    return stages
+
+
 def test_dockerfile_nao_carrega_credenciais():
+    """ENV com credencial: proibido em qualquer estágio. ARG de credencial: só no estágio `assets`.
+
+    ENV persiste na imagem (aparece em `docker inspect`); ARG num estágio intermediário não é herdado pelo
+    estágio final. A prova com docker de verdade está em scripts/verify_build_args.py.
+    """
     text = (ROOT / "Dockerfile").read_text(encoding="utf-8")
     code = "\n".join(l for l in text.splitlines() if not l.lstrip().startswith("#"))
-    assert not re.search(r"^\s*(ARG|ENV)\b[^\n]*(R2_|SECRET|ACCESS_KEY)", code, re.I | re.M)
+    cred = r"R2_|SECRET|ACCESS_KEY"
+    assert not re.search(rf"^\s*ENV\b[^\n]*({cred})", code, re.I | re.M)
+    stages = dockerfile_stages(code)
+    assert {"assets", "frontend", "litestream", "runtime"} <= set(stages), sorted(stages)
+    for nome, corpo in stages.items():
+        args = [a for a in re.findall(r"^\s*ARG\s+([A-Za-z_][A-Za-z0-9_]*)", corpo, re.M) if re.search(cred, a, re.I)]
+        esperado = sorted(fa.ENV_FOR_SECRET.values()) if nome == "assets" else []
+        assert sorted(args) == esperado, (nome, args)
+        # qualquer estágio que use o `assets` só pode copiar de /out (nunca /tmp, /w ou o ZIP)
+        for origem in re.findall(r"^\s*COPY\s+--from=assets\s+(\S+)", corpo, re.M):
+            assert origem.startswith("/out/"), (nome, origem)
+    # o estágio final não declara ARG de credencial, logo não entra no history nem no Config.Env da imagem
+    assert "runtime" in stages and not re.search(rf"^\s*ARG\s+\S*({cred})", stages["runtime"], re.I | re.M)
     assert code.count("type=secret") == 3
     block = re.search(r"RUN --mount=type=secret.*?fetch_assets\.py[^\n]*", code, re.S).group(0)
     assert all(f"id={s}" in block for s in fa.SECRET_IDS)  # os 3 secrets só neste RUN
