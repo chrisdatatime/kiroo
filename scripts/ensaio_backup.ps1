@@ -48,14 +48,22 @@ if ($Volume -ne $VOLUME_ENSAIO) { throw "Volume recusado: '$Volume'. Este ensaio
 function Say([string]$m) { Write-Host "[ensaio] $m" }
 
 function Invoke-Native {
-    # Roda um executavel, devolve @{Code; Out} (stdout+stderr como texto). Nao lanca excecao por stderr (PS 5.1).
+    # Roda um EXECUTAVEL (nunca uma funcao/alias de mesmo nome: "& 'docker'" resolvia a antiga funcao Docker e
+    # recursava ate estourar a pilha). Devolve @{Code; Out} (stdout+stderr como texto). Nao lanca excecao por stderr (PS 5.1).
+    # Se o executavel nao existe ou nao pode ser iniciado, lanca 'NAO_VERIFICADO: ...' (o comando nem rodou).
     param([string]$Exe, [string[]]$ArgList)
+    $cmd = Get-Command -Name $Exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $cmd) { throw ('NAO_VERIFICADO: ' + "executavel '$Exe' nao encontrado no PATH") }
     $old = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-    try { $out = & $Exe @ArgList 2>&1 | ForEach-Object { "$_" } } finally { $ErrorActionPreference = $old }
+    $global:LASTEXITCODE = $null
+    try { $out = & $cmd.Source @ArgList 2>&1 | ForEach-Object { "$_" } }
+    catch { throw ('NAO_VERIFICADO: ' + "nao foi possivel executar '$($cmd.Source)': $($_.Exception.Message)") }
+    finally { $ErrorActionPreference = $old }
+    if ($null -eq $LASTEXITCODE) { throw ('NAO_VERIFICADO: ' + "'$Exe' nao devolveu codigo de saida") }
     return @{ Code = $LASTEXITCODE; Out = (@($out) -join "`n") }
 }
 
-function Docker([string[]]$ArgList) { Invoke-Native 'docker' $ArgList }
+function Invoke-Docker([string[]]$ArgList) { Invoke-Native 'docker' $ArgList }
 
 function EnvArgs {
     # "-e NOME" sem valor: o docker copia o valor do ambiente deste processo. Nada vai para a linha de comando.
@@ -65,7 +73,7 @@ function EnvArgs {
 }
 
 function Assert-VolumeEnsaio {
-    $r = Docker @('volume', 'inspect', '--format', '{{json .Labels}}', $VOLUME_ENSAIO)
+    $r = Invoke-Docker @('volume', 'inspect', '--format', '{{json .Labels}}', $VOLUME_ENSAIO)
     if ($r.Code -ne 0) { throw "volume $VOLUME_ENSAIO nao existe (rode o passo 1)" }
     if ($r.Out -notmatch '"kiroo\.ensaio"\s*:\s*"backup"') { throw "volume $VOLUME_ENSAIO existe SEM o rotulo $ROTULO; recusado" }
 }
@@ -122,7 +130,7 @@ function Run-Temp {
     # container descartavel com rotulo, --rm, --tmpfs /data (sem volume anonimo), pasta do ensaio em /ensaio
     param([string[]]$Extra, [string]$Entrypoint, [string[]]$Cmd)
     $a = @('run', '--rm', '--label', $ROTULO, '--tmpfs', '/data') + (EnvArgs) + @('-v', "${Pasta}:/ensaio") + $Extra + @('--entrypoint', $Entrypoint, $IMAGEM) + $Cmd
-    Docker $a
+    Invoke-Docker $a
 }
 
 function Run-NoVolume {
@@ -130,7 +138,7 @@ function Run-NoVolume {
     param([string]$Entrypoint, [string[]]$Cmd)
     Assert-VolumeEnsaio
     $a = @('run', '--rm', '--label', $ROTULO, '-e', 'STUDIO_DATA_DIR=/data') + (EnvArgs) + @('-v', "${VOLUME_ENSAIO}:/data", '-v', "${Pasta}:/ensaio", '--entrypoint', $Entrypoint, $IMAGEM) + $Cmd
-    Docker $a
+    Invoke-Docker $a
 }
 
 function Lista-Bucket([string]$Sub) {
@@ -146,7 +154,7 @@ function Restore-Container([string]$Dest, [string[]]$Opts) {
 }
 
 function Contagens([string]$DataDirNoContainer, [switch]$Vivo) {
-    if ($Vivo) { $r = Docker @('exec', $CONTAINER, 'python', '/app/scripts/verify_restore.py', '--data-dir', $DataDirNoContainer, '--json') }
+    if ($Vivo) { $r = Invoke-Docker @('exec', $CONTAINER, 'python', '/app/scripts/verify_restore.py', '--data-dir', $DataDirNoContainer, '--json') }
     else { $r = Run-Temp @() 'python' @('/app/scripts/verify_restore.py', '--data-dir', $DataDirNoContainer, '--json') }
     $j = $null
     try { $j = $r.Out.Substring($r.Out.IndexOf('{')) | ConvertFrom-Json } catch { throw "verify_restore sem JSON (codigo $($r.Code)): $($r.Out)" }
@@ -178,9 +186,9 @@ function Signup([string]$Email) {
 
 function Snapshot-Real {
     # SO consulta: existencia, data de criacao e tamanho (docker system df -v). Nunca monta o volume real.
-    $i = Docker @('volume', 'inspect', '--format', '{{.CreatedAt}}', $VOLUME_REAL)
+    $i = Invoke-Docker @('volume', 'inspect', '--format', '{{.CreatedAt}}', $VOLUME_REAL)
     if ($i.Code -ne 0) { return $null }
-    $df = Docker @('system', 'df', '-v')
+    $df = Invoke-Docker @('system', 'df', '-v')
     $tam = $null
     foreach ($l in ($df.Out -split "`n")) { if ($l -match ('^' + [regex]::Escape($VOLUME_REAL) + '\s+\d+\s+(\S+)')) { $tam = $Matches[1] } }
     return @{ criado = $i.Out.Trim(); tamanho = $tam }
@@ -198,14 +206,14 @@ function Passo1($e) {
     }
     if ($env:BACKUP_BUCKET -and $env:BACKUP_BUCKET -ne $BUCKET) { Say "  BACKUP_BUCKET deve ser '$BUCKET'"; $ok = $false }
     if (-not $ok) { throw ('NAO_VERIFICADO: ' + 'variaveis ausentes/erradas: defina-as no terminal e rode de novo') }
-    $d = Docker @('version', '--format', '{{.Server.Version}}')
+    $d = Invoke-Docker @('version', '--format', '{{.Server.Version}}')
     if ($d.Code -ne 0) { throw ('NAO_VERIFICADO: ' + "docker indisponivel: $($d.Out)") }
-    $img = Docker @('image', 'inspect', '--format', '{{.Id}}', $IMAGEM)
+    $img = Invoke-Docker @('image', 'inspect', '--format', '{{.Id}}', $IMAGEM)
     if ($img.Code -ne 0) { throw ('NAO_VERIFICADO: ' + "imagem $IMAGEM nao encontrada") }
     Say "  docker $($d.Out.Trim()); imagem $IMAGEM ok"
     # a imagem precisa ter a correcao (litestream.yml com BACKUP_R2_PREFIX e restore.sh com LITESTREAM_CONFIG);
     # imagem antiga replicaria em staging/ e o restore.sh nao acharia a configuracao.
-    $g1 = Docker @('run', '--rm', '--network', 'none', '--tmpfs', '/data', '--entrypoint', 'grep', $IMAGEM, '-c', 'BACKUP_R2_PREFIX', '/etc/litestream.yml', '/app/scripts/restore.sh', '/usr/local/bin/kiroo-entrypoint')
+    $g1 = Invoke-Docker @('run', '--rm', '--network', 'none', '--tmpfs', '/data', '--entrypoint', 'grep', $IMAGEM, '-c', 'BACKUP_R2_PREFIX', '/etc/litestream.yml', '/app/scripts/restore.sh', '/usr/local/bin/kiroo-entrypoint')
     if ($g1.Out -match ':0(\s|$)' -or $g1.Code -gt 1) { throw ('NAO_VERIFICADO: ' + "imagem $IMAGEM sem suporte a BACKUP_R2_PREFIX (reconstrua a partir de deploy/dados atual): $($g1.Out)") }
 
     # pasta do ensaio (com marcador)
@@ -217,19 +225,19 @@ function Passo1($e) {
     Prepare-Auxiliares
 
     # volume descartavel com rotulo
-    $v = Docker @('volume', 'inspect', '--format', '{{json .Labels}}', $VOLUME_ENSAIO)
+    $v = Invoke-Docker @('volume', 'inspect', '--format', '{{json .Labels}}', $VOLUME_ENSAIO)
     if ($v.Code -eq 0) {
         Assert-VolumeEnsaio
         throw "volume $VOLUME_ENSAIO ja existe (de um ensaio anterior). Rode o passo 6 e depois o 1 de novo."
     }
-    $c = Docker @('volume', 'create', '--label', $ROTULO, $VOLUME_ENSAIO)
+    $c = Invoke-Docker @('volume', 'create', '--label', $ROTULO, $VOLUME_ENSAIO)
     if ($c.Code -ne 0) { throw "volume create falhou: $($c.Out)" }
     Assert-VolumeEnsaio
     Say "  volume $VOLUME_ENSAIO criado com rotulo $ROTULO"
 
     # bucket: acesso de leitura e prefixo vazio
-    $db = Lista-Bucket "$PREFIXO/db"
-    $md = Lista-Bucket "$PREFIXO/media"
+    $db = @(Lista-Bucket "$PREFIXO/db")
+    $md = @(Lista-Bucket "$PREFIXO/media")
     Say "  bucket $BUCKET acessivel; objetos ja existentes: $PREFIXO/db=$($db.Count) $PREFIXO/media=$($md.Count)"
     # o prefixo e fixo e exclusivo do ensaio: so pode estar vazio ou ter sobras de ensaios anteriores.
     # As conferencias usam a geracao mais recente (Litestream) e so archive/ posterior ao inicio do passo 4.
@@ -246,9 +254,9 @@ function Passo2($e) {
     Assert-VolumeEnsaio
     $a = @('run', '-d', '--name', $CONTAINER, '--label', $ROTULO, '-p', "127.0.0.1:${Porta}:8765", '-v', "${VOLUME_ENSAIO}:/data",
         '-e', 'STUDIO_SIGNUP=open', '-e', "STUDIO_ALLOWED_HOSTS=127.0.0.1:$Porta", '-e', 'STUDIO_MODE=simulated') + (EnvArgs) + @($IMAGEM)
-    $r = Docker $a
+    $r = Invoke-Docker $a
     if ($r.Code -ne 0) { throw "docker run falhou: $($r.Out)" }
-    if (-not (Wait-Ready 120)) { throw "/readyz nao ficou 200 em 120 s. Logs: $((Docker @('logs', '--tail', '40', $CONTAINER)).Out)" }
+    if (-not (Wait-Ready 120)) { throw "/readyz nao ficou 200 em 120 s. Logs: $((Invoke-Docker @('logs', '--tail', '40', $CONTAINER)).Out)" }
     Say '  container no ar (/readyz 200)'
 
     $email = "ensaio-$(Get-Date -Format yyyyMMddHHmmss)@ensaio.test"
@@ -272,7 +280,7 @@ function Passo2($e) {
     }
     Say "  banco vivo:       $(Fmt $ant)"
     Start-Sleep -Seconds 10   # sync-interval do Litestream = 1 s; folga
-    $objs = Lista-Bucket "$PREFIXO/db"
+    $objs = @(Lista-Bucket "$PREFIXO/db")
     Say "  objetos em $PREFIXO/db: $($objs.Count)"
     $objs | Select-Object -First 15 | ForEach-Object { Say "    $_" }
     $dest = "restore-p2-$(Get-Date -Format HHmmss)"
@@ -288,7 +296,7 @@ function Passo2($e) {
 
 function Passo3($e) {
     Say 'Passo 3: docker stop -t 40'
-    $st = Docker @('inspect', '--format', '{{.State.Running}}', $CONTAINER)
+    $st = Invoke-Docker @('inspect', '--format', '{{.State.Running}}', $CONTAINER)
     if ($st.Out.Trim() -ne 'true') { throw ('NAO_VERIFICADO: ' + "container $CONTAINER nao esta rodando (rode o passo 2)") }
     # ultima escrita: uma conta nova, imediatamente antes do stop
     $ultima = "ultima-$(Get-Date -Format yyyyMMddHHmmssfff)@ensaio.test"
@@ -307,14 +315,14 @@ function Passo3($e) {
     }
     Start-Sleep -Milliseconds 500
     $t0 = Get-Date
-    $r = Docker @('stop', '-t', '40', $CONTAINER)
+    $r = Invoke-Docker @('stop', '-t', '40', $CONTAINER)
     $dur = ((Get-Date) - $t0).TotalSeconds
     $sondas = @(Receive-Job $job -Wait -AutoRemoveJob)
-    $exit = (Docker @('inspect', '--format', '{{.State.ExitCode}}', $CONTAINER)).Out.Trim()
+    $exit = (Invoke-Docker @('inspect', '--format', '{{.State.ExitCode}}', $CONTAINER)).Out.Trim()
     Say ("  docker stop levou {0:N1} s (codigo do comando {1}); codigo de saida do container: {2}" -f $dur, $r.Code, $exit)
     $viu503 = $sondas -contains '503'
     Say "  /readyz durante a parada: $(($sondas | Group-Object | ForEach-Object { "$($_.Name)x$($_.Count)" }) -join ' ')"
-    $logs = (Docker @('logs', '--timestamps', $CONTAINER)).Out -split "`n"
+    $logs = (Invoke-Docker @('logs', '--timestamps', $CONTAINER)).Out -split "`n"
     $rel = $logs | Where-Object { $_ -match 'SIGTERM|desligamento|drenand|interromp|readyz|litestream|sync|replica|snapshot|exit|signal' } | Select-Object -Last 25
     Say '  linhas relevantes do log:'; $rel | ForEach-Object { Say "    $_" }
     Set-Content -Path (Join-Path $Pasta 'passo3-log.txt') -Value $logs
@@ -334,7 +342,7 @@ function Passo3($e) {
 function Passo4($e) {
     Say 'Passo 4: midia (backup_media.sh)'
     $inicio = (Get-Date).ToUniversalTime().AddSeconds(-2).ToString('yyyy-MM-ddTHHmmssZ')
-    $st = Docker @('inspect', '--format', '{{.State.Running}}', $CONTAINER)
+    $st = Invoke-Docker @('inspect', '--format', '{{.State.Running}}', $CONTAINER)
     if ($st.Code -eq 0 -and $st.Out.Trim() -eq 'true') { throw ('NAO_VERIFICADO: ' + 'pare o container do ensaio antes (passo 3)') }
     $r = Run-NoVolume 'sh' @('/ensaio/sh/prepara_midia.sh', 'versao-1')
     if ($r.Code -ne 0) { throw "preparar midia falhou: $($r.Out)" }
@@ -373,14 +381,14 @@ function Passo5($e) {
 
 function Passo6($e) {
     Say 'Passo 6: limpeza (so o que tem o rotulo do ensaio)'
-    $ids = (Docker @('ps', '-a', '-q', '--filter', "label=$ROTULO")).Out -split "`n" | Where-Object { $_.Trim() }
-    foreach ($id in $ids) { $r = Docker @('rm', '-f', $id.Trim()); Say "  container $($id.Trim()) removido (codigo $($r.Code))" }
-    $v = Docker @('volume', 'inspect', '--format', '{{json .Labels}}', $VOLUME_ENSAIO)
+    $ids = (Invoke-Docker @('ps', '-a', '-q', '--filter', "label=$ROTULO")).Out -split "`n" | Where-Object { $_.Trim() }
+    foreach ($id in $ids) { $r = Invoke-Docker @('rm', '-f', $id.Trim()); Say "  container $($id.Trim()) removido (codigo $($r.Code))" }
+    $v = Invoke-Docker @('volume', 'inspect', '--format', '{{json .Labels}}', $VOLUME_ENSAIO)
     if ($v.Code -eq 0) {
         Assert-VolumeEnsaio
-        $r = Docker @('volume', 'rm', $VOLUME_ENSAIO); Say "  volume $VOLUME_ENSAIO removido (codigo $($r.Code))"
+        $r = Invoke-Docker @('volume', 'rm', $VOLUME_ENSAIO); Say "  volume $VOLUME_ENSAIO removido (codigo $($r.Code))"
     } else { Say "  volume $VOLUME_ENSAIO ja nao existe" }
-    $resto = (Docker @('volume', 'ls', '-q', '--filter', "label=$ROTULO")).Out.Trim()
+    $resto = (Invoke-Docker @('volume', 'ls', '-q', '--filter', "label=$ROTULO")).Out.Trim()
     if ($resto) { Say "  AINDA existem volumes com o rotulo: $resto (nao removidos automaticamente)" }
     $depois = Snapshot-Real
     $antes = $e['real_antes']
