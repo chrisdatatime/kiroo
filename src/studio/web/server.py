@@ -41,7 +41,7 @@ from ..config import load_settings
 from ..credits import Ledger
 from ..db import Database, checkpoint
 from ..factory import build
-from ..logs import REQUEST_INFO
+from ..logs import REQUEST_INFO, redact
 from ..models import ProductInput
 from ..orchestrator import OrchestratorError
 from ..profiles import KINDS, available_versions, load_profile
@@ -270,7 +270,7 @@ class App:
             orch.run(pid)
             interrupted = orch.stopped
         except Exception as exc:  # noqa: BLE001 — mostrado na interface
-            self.errors[pid] = f"{type(exc).__name__}: {exc}"[:500]
+            self.errors[pid] = redact(f"{type(exc).__name__}: {exc}")[:500]
         finally:
             if orch is not None:
                 orch.db.close()
@@ -411,7 +411,7 @@ class App:
                                                   "redirect_uri": redirect_uri, "grant_type": "authorization_code"})
             info = self.google_http(GOOGLE_USERINFO, None, {"Authorization": f"Bearer {tok['access_token']}"})
         except (urllib.error.URLError, OSError, KeyError, ValueError) as exc:
-            log.warning("Login com Google falhou: %s", exc)
+            log.warning("Login com Google falhou (%s)", type(exc).__name__)   # a mensagem pode ecoar o código/segredo
             return back("google_failed")
         if not info.get("sub") or not info.get("email"):
             return back("google_failed")
@@ -546,9 +546,9 @@ class App:
                 return self._post(path, payload if payload is not None else json.loads(body or b"{}"), ctx, token)
             return _json(405, {"error": "método não permitido"})
         except AuthError as exc:
-            return _json(400, {"error": str(exc)})
+            return _json(400, {"error": redact(exc)})
         except (OrchestratorError, ValueError, KeyError, StorageError, UploadError) as exc:
-            return _json(400, {"error": str(exc)})  # TrainingError e MusicError são ValueError
+            return _json(400, {"error": redact(exc)})  # TrainingError e MusicError são ValueError
 
     def _limited(self, bucket: str, key: str) -> Response | None:
         wait = self.limiter.hit(bucket, key)

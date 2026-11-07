@@ -14,9 +14,15 @@ REQUEST_INFO: contextvars.ContextVar[dict | None] = contextvars.ContextVar("stud
 
 
 def _mask(text: str, secrets: list[str]) -> str:
-    for secret in secrets:
+    for secret in sorted(secrets, key=len, reverse=True):
         text = text.replace(secret, "***")
     return text
+
+
+def redact(text) -> str:
+    """Mascara qualquer segredo conhecido do ambiente (para mensagens de erro que vão à interface ou ao banco)."""
+    from .config import secret_values
+    return _mask(str(text), [s for s in secret_values() if len(s) >= 6])
 
 
 class RedactingFilter(logging.Filter):
@@ -26,6 +32,12 @@ class RedactingFilter(logging.Filter):
 
     def filter(self, record: logging.LogRecord) -> bool:
         record.msg, record.args = _mask(record.getMessage(), self.secrets), None
+        if record.exc_info and not record.exc_text:   # o traceback também pode carregar a chave na mensagem
+            record.exc_text = logging.Formatter().formatException(record.exc_info)
+        if record.exc_text:
+            record.exc_text = _mask(record.exc_text, self.secrets)
+        if record.stack_info:
+            record.stack_info = _mask(record.stack_info, self.secrets)
         return True
 
 

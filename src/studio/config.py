@@ -83,8 +83,29 @@ class Settings:
         return self.data_dir / "studio.sqlite3"
 
     def secret_values(self) -> list[str]:
-        """Valores que nunca podem aparecer em logs ou artefatos."""
-        return [v for v in (self.gemini_api_key, os.environ.get("MP_ACCESS_TOKEN"), os.environ.get("MP_WEBHOOK_SECRET")) if v]
+        """Valores que nunca podem aparecer em logs, respostas ou artefatos."""
+        return secret_values(extra=[self.gemini_api_key])
+
+
+# Variáveis cujo VALOR é segredo (o nome pode aparecer; o valor nunca). MP_* entra inteiro (Mercado Pago).
+SECRET_VARS = ("GEMINI_API_KEY", "GOOGLE_API_KEY", "ANTHROPIC_API_KEY", "STUDIO_GOOGLE_CLIENT_SECRET",
+               "STUDIO_SMTP_PASSWORD", "BACKUP_R2_ACCESS_KEY_ID", "BACKUP_R2_SECRET_ACCESS_KEY",
+               "LITESTREAM_ACCESS_KEY_ID", "LITESTREAM_SECRET_ACCESS_KEY", "AWS_SECRET_ACCESS_KEY", "R2_SECRET_ACCESS_KEY")
+SECRET_PREFIXES = ("MP_",)
+SECRET_LISTS = ("STUDIO_INVITE_CODES",)   # vários valores separados por vírgula (legado)
+
+
+def secret_values(env=None, extra=None) -> list[str]:
+    """Todos os valores secretos conhecidos do ambiente: Gemini, Anthropic, Google OAuth, SMTP, Mercado Pago (MP_*),
+    backup R2/Litestream e códigos de convite antigos. Mais longos primeiro (um segredo que contém outro é mascarado
+    inteiro)."""
+    e = os.environ if env is None else env
+    out = {v for v in (extra or []) if v}
+    out |= {e.get(k) for k in SECRET_VARS if e.get(k)}
+    out |= {v for k, v in e.items() if k.startswith(SECRET_PREFIXES) and v}
+    for k in SECRET_LISTS:
+        out |= {c.strip() for c in (e.get(k) or "").split(",") if c.strip()}
+    return sorted((v.strip() for v in out if v and v.strip()), key=len, reverse=True)
 
 
 def load_settings(env_file: Path | None = None, **overrides) -> Settings:

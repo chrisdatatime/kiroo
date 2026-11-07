@@ -51,7 +51,8 @@ _BILLING_RE = re.compile(r"error code: 402|prepayment credits|credits are deplet
 def _classify(exc: Exception) -> Exception:
     """Converte exceções do SDK/HTTP em TransientError ou PermanentError (sem vazar a chave)."""
     code = getattr(exc, "code", None) or getattr(exc, "status_code", None)
-    msg = f"{type(exc).__name__}: {str(exc)[:500]}"
+    from ..logs import redact
+    msg = redact(f"{type(exc).__name__}: {str(exc)[:500]}")
     if code == 402 or _BILLING_RE.search(msg):
         return ProviderBillingError(msg)
     if isinstance(code, int):
