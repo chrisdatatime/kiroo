@@ -7,6 +7,8 @@
   PowerShell nativo (Windows PowerShell 5.1 ou pwsh). Nao usa Git Bash.
   Uso:   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ensaio_backup.ps1 -Passo 1
          (Passo = 1..6 ou "todos"; os passos 2..5 dependem do estado gravado pelos anteriores)
+         -Passo 4 -Diagnostico: so UM envio rclone (copyto) de arquivo pequeno para ensaio/diag/, com
+         -vv --dump headers (nunca --dump auth); cabecalhos de requisicao e resposta com credenciais mascaradas.
 
   Seguranca:
    * Credenciais: SO das variaveis do terminal. Vao aos containers com "-e NOME" (sem valor), nunca na linha de
@@ -22,7 +24,8 @@ param(
     [Parameter(Mandatory = $true)][ValidateSet('1', '2', '3', '4', '5', '6', 'todos')][string]$Passo,
     [string]$Volume = 'kiroo-ensaio-dados',
     [string]$Pasta = (Join-Path $env:TEMP 'kiroo-ensaio'),
-    [int]$Porta = 8799
+    [int]$Porta = 8799,
+    [switch]$Diagnostico
 )
 
 Set-StrictMode -Version 2
@@ -46,6 +49,20 @@ if ($Volume -ne $VOLUME_ENSAIO) { throw "Volume recusado: '$Volume'. Este ensaio
 # ------------------------------------------------------------------ utilitarios
 
 function Say([string]$m) { Write-Host "[ensaio] $m" }
+
+function Mask-Cred([string]$t) {
+    # Mascara credenciais em texto vindo do rclone (--dump headers). Valores das variaveis, cabecalhos de
+    # autenticacao e parametros de assinatura. Testado com valor ficticio em scripts	est_ensaio_backup.ps1.
+    if (-not $t) { return $t }
+    foreach ($v in @('BACKUP_R2_SECRET_ACCESS_KEY', 'BACKUP_R2_ACCESS_KEY_ID', 'BACKUP_R2_ENDPOINT')) {
+        $x = [Environment]::GetEnvironmentVariable($v)
+        if ($x -and $x.Length -ge 4) { $t = $t.Replace($x, "***$v***") }
+    }
+    $t = $t -replace '(?im)\b(Authorization|X-Amz-Security-Token|X-Amz-Credential|X-Amz-Signature|Cookie|Set-Cookie)\s*:.*$', '$1: ***'
+    $t = $t -replace '(?i)((?:X-Amz-)?(?:Credential|Signature|Security-Token)=)[^\s,&"]+', '$1***'
+    $t = $t -replace '(?i)\b[0-9a-f]{32}(\.r2\.cloudflarestorage\.com)', '***$1'   # id da conta no Host
+    return $t
+}
 
 function Invoke-Native {
     # Roda um EXECUTAVEL (nunca uma funcao/alias de mesmo nome: "& 'docker'" resolvia a antiga funcao Docker e
@@ -285,7 +302,8 @@ function Passo2($e) {
     $objs | Select-Object -First 15 | ForEach-Object { Say "    $_" }
     $dest = "restore-p2-$(Get-Date -Format HHmmss)"
     $rr = Restore-Container $dest @('--db-only')
-    Say "  restore.sh --db-only codigo $($rr.Code)"
+    $rot = switch ($rr.Code) { 0 { 'ok' } 5 { 'midia incompleta, esperado com --db-only' } default { 'falha' } }
+    Say "  restore.sh --db-only codigo $($rr.Code) ($rot)"
     if ($rr.Code -ne 0 -and $rr.Code -ne 5) { throw "restore falhou: $($rr.Out)" }   # 5 = midia ausente (esperado com --db-only)
     $cr = Contagens "/ensaio/$dest"
     Say "  restauracao:      $(Fmt $cr)"
@@ -339,7 +357,45 @@ function Passo3($e) {
     return 'FAIL'
 }
 
+function Show-Backup([string]$Nome, $r) {
+    # Codigos do backup_media.sh: 0 ok | 1 falha do rclone | 2 config | 3 origem vazia | 4 outra execucao.
+    $sig = switch ($r.Code) { 0 { 'ok' } 1 { 'FALHA do rclone' } 2 { 'uso/config invalida' } 3 { 'recusado: origem vazia' } 4 { 'outra execucao em andamento' } default { 'codigo inesperado' } }
+    Say "  ${Nome}: codigo $($r.Code) ($sig)"
+    $txt = Mask-Cred $r.Out
+    $res = @($txt -split "`n" | Where-Object { $_ -match 'resumo:' }) | Select-Object -Last 1
+    if ($res -and $res -match 'enviados=(\d+) objetos.*objetos=(\d+) bytes=(\d+); manifesto: (.*)$') {
+        Say ("    objetos enviados: {0}; origem: {1} objetos, {2:N0} bytes ({3:N1} MB); manifesto: {4}" -f $Matches[1], $Matches[2], [int64]$Matches[3], ([int64]$Matches[3] / 1MB), $Matches[4])
+    } else { Say '    (sem linha de resumo do backup_media.sh)' }
+    if ($r.Code -ne 0) {
+        $txt -split "`n" | Where-Object { $_ -match 'ERRO|FALHOU|501|Failed|nada foi apagado' } | Select-Object -Last 12 | ForEach-Object { Say "    $_" }
+    }
+    return ($r.Code -eq 0)
+}
+
+function Passo4Diag($e) {
+    Say 'Passo 4 -Diagnostico: um envio rclone copyto com -vv --dump headers (sem --dump auth)'
+    Write-Sh 'diag.sh' @(
+        'set -u',
+        '. /ensaio/sh/rclone_env.sh',
+        'f=/tmp/kiroo-diag.txt; printf "diagnostico do ensaio %s\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$f"',
+        'dst="KBK:$BACKUP_BUCKET/$BACKUP_R2_PREFIX/diag/$(date -u +%Y-%m-%dT%H%M%SZ).txt"',
+        'echo "diag: $(rclone version | head -n 1); arquivo de $(wc -c < "$f") bytes -> $dst"',
+        '# so cabecalhos: --dump auth NUNCA (imprimiria a assinatura). Uma tentativa, para ver a primeira resposta.',
+        'rclone copyto "$f" "$dst" -vv --dump headers --retries 1 --low-level-retries 1 2>&1',
+        'rc=$?; echo "diag: rclone saiu com codigo $rc"; exit $rc')
+    $r = Run-Temp @() 'sh' @('/ensaio/sh/diag.sh')
+    $txt = Mask-Cred $r.Out
+    $arq = Join-Path $Pasta "diag-$(Get-Date -Format yyyyMMdd-HHmmss).txt"
+    Set-Content -Path $arq -Value $txt -Encoding UTF8
+    $txt -split "`n" | ForEach-Object { Say "  $_" }
+    Say "  saida (mascarada) gravada em $arq"
+    if ($txt -match '\b501\b') { Say '  R2 respondeu 501: compare os cabecalhos da REQUISICAO acima (X-Amz-Acl, X-Amz-Checksum-*, Content-Encoding) com docs/BACKUP.md' }
+    if ($r.Code -eq 0) { return 'PASS' }
+    return 'FAIL'
+}
+
 function Passo4($e) {
+    if ($Diagnostico) { return (Passo4Diag $e) }
     Say 'Passo 4: midia (backup_media.sh)'
     $inicio = (Get-Date).ToUniversalTime().AddSeconds(-2).ToString('yyyy-MM-ddTHHmmssZ')
     $st = Invoke-Docker @('inspect', '--format', '{{.State.Running}}', $CONTAINER)
@@ -347,14 +403,14 @@ function Passo4($e) {
     $r = Run-NoVolume 'sh' @('/ensaio/sh/prepara_midia.sh', 'versao-1')
     if ($r.Code -ne 0) { throw "preparar midia falhou: $($r.Out)" }
     $bk = { param($x) Run-NoVolume 'bash' (@('/app/scripts/backup_media.sh') + $x) }
-    $d = & $bk @('--dry-run'); Say "  --dry-run: codigo $($d.Code)"; ($d.Out -split "`n" | Select-Object -Last 8) | ForEach-Object { Say "    $_" }
-    if ($d.Code -ne 0) { return 'FAIL' }
-    $a = & $bk @(); Say "  real #1: codigo $($a.Code)"; ($a.Out -split "`n" | Select-Object -Last 8) | ForEach-Object { Say "    $_" }
-    if ($a.Code -ne 0) { return 'FAIL' }
+    $d = & $bk @('--dry-run')
+    if (-not (Show-Backup '--dry-run' $d)) { return 'FAIL' }
+    $a = & $bk @()
+    if (-not (Show-Backup 'real #1' $a)) { Say '  se o erro for 501 no manifesto: rode -Passo 4 -Diagnostico'; return 'FAIL' }
     Start-Sleep -Seconds 2   # o carimbo de archive/<data> e por segundo
     $r = Run-NoVolume 'sh' @('/ensaio/sh/prepara_midia.sh', 'versao-2')
-    $b = & $bk @(); Say "  real #2 (arquivo alterado): codigo $($b.Code)"
-    if ($b.Code -ne 0) { return 'FAIL' }
+    $b = & $bk @()
+    if (-not (Show-Backup 'real #2 (arquivo alterado)' $b)) { return 'FAIL' }
     $arch = Lista-Bucket "$PREFIXO/media/archive" | Where-Object { $_ -match 'productions/ensaio-marcador\.txt$' -and $_.Split('/')[0] -ge $inicio }
     Say "  em archive/: $($arch -join ', ')"
     if (-not $arch) { return 'FAIL' }

@@ -24,6 +24,29 @@ switch -Regex ($j) {
   '^image inspect'          { 'sha256:stub'; exit 0 }
   '^run .*--entrypoint grep' { '/etc/litestream.yml:2'; '/app/scripts/restore.sh:3'; '/usr/local/bin/kiroo-entrypoint:1'; exit 0 }
   '^run .*lista\.sh'        { exit 0 }
+  '^inspect '               { [Console]::Error.WriteLine('Error: No such object (stub)'); exit 1 }
+  '^run .*prepara_midia\.sh' { 'versao-1'; exit 0 }
+  '^run .*diag\.sh' {
+    # saida no formato do rclone --dump headers, com credenciais FICTICIAS que a mascara precisa esconder
+    'diag: rclone v1.60.1-DEV; arquivo de 40 bytes -> KBK:kiroo-backups/ensaio/diag/x.txt'
+    '2026/11/07 12:00:00 DEBUG : >>>>>> HTTP REQUEST (req 0xc000)'
+    'PUT /kiroo-backups/ensaio/diag/x.txt HTTP/1.1'
+    'Host: 0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com'
+    ('Authorization: AWS4-HMAC-SHA256 Credential=' + $env:BACKUP_R2_ACCESS_KEY_ID + '/20261107/auto/s3/aws4_request, SignedHeaders=host, Signature=assinaturaficticia0123')
+    'X-Amz-Security-Token: tokenficticio-XYZ'
+    'X-Amz-Acl: private'
+    'GET /?X-Amz-Credential=AKIDFICTICIO99&X-Amz-Signature=sigficticia77 HTTP/1.1'
+    ('linha crua com o segredo ' + $env:BACKUP_R2_SECRET_ACCESS_KEY)
+    '2026/11/07 12:00:00 DEBUG : <<<<<< HTTP RESPONSE (req 0xc000)'
+    'HTTP/1.1 501 Not Implemented'
+    'diag: rclone saiu com codigo 1'
+    exit 1 }
+  '^run .*backup_media\.sh.*--dry-run' { 'backup_media: resumo: enviados=0 objetos; origem copiada: objetos=3 bytes=2048; manifesto: nao gravado em --dry-run [dry-run]'; exit 0 }
+  '^run .*backup_media\.sh' {
+    'backup_media: resumo: enviados=1 objetos; origem copiada: objetos=3 bytes=2048; manifesto: NAO GRAVADO (manifests/x.json)'
+    [Console]::Error.WriteLine('backup_media: ERRO ao gravar o manifesto (codigo 1): status code: 501')
+    [Console]::Error.WriteLine('backup_media: FALHOU (x): manifesto(rc=1)')
+    exit 1 }
   '^volume inspect .*kiroo-ensaio-dados' { if (Test-Path $vol) { '{"kiroo.ensaio":"backup"}'; exit 0 }; [Console]::Error.WriteLine('no such volume'); exit 1 }
   '^volume inspect .*kiroo_kiroo-data'   { [Console]::Error.WriteLine('no such volume'); exit 1 }
   '^volume create'          { if ($modo -eq 'create_falha') { [Console]::Error.WriteLine('permissao negada (stub)'); exit 1 }; New-Item -ItemType File $vol | Out-Null; 'kiroo-ensaio-dados'; exit 0 }
@@ -35,26 +58,27 @@ $segredo = 'valor-ficticio-NAO-deve-aparecer'
 $sys = Join-Path $env:SystemRoot 'System32'
 $pathSemDocker = "$sys;$(Split-Path $psExe)"
 
-function Rodar([string]$Nome, [hashtable]$Env, [string]$Pasta) {
+function Rodar([string]$Nome, [hashtable]$Env, [string]$Pasta, [string[]]$Args2 = @('-Passo', '1'), [switch]$ManterVolume) {
     $caso = Join-Path $tmp $Nome; New-Item -ItemType Directory -Force $caso | Out-Null
     if (-not $Pasta) { $Pasta = Join-Path $caso 'pasta' }
-    Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $stubDir 'volume.criado')
+    if (-not $ManterVolume) { Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $stubDir 'volume.criado') }
     $base = @{ PATH = "$stubDir;$pathSemDocker"; STUB_DIR = $stubDir; STUB_MODO = ''; STUDIO_ENV = 'staging';
         BACKUP_R2_ENDPOINT = $segredo; BACKUP_R2_ACCESS_KEY_ID = $segredo; BACKUP_R2_SECRET_ACCESS_KEY = $segredo; BACKUP_BUCKET = 'kiroo-backups' }
     foreach ($k in $Env.Keys) { $base[$k] = $Env[$k] }
     $salvo = @{}; foreach ($k in $base.Keys) { $salvo[$k] = [Environment]::GetEnvironmentVariable($k); [Environment]::SetEnvironmentVariable($k, $base[$k]) }
     try {
         $old = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
-        $out = & $psExe -NoProfile -ExecutionPolicy Bypass -File $script -Passo 1 -Pasta $Pasta 2>&1 | ForEach-Object { "$_" }
+        $out = & $psExe -NoProfile -ExecutionPolicy Bypass -File $script @Args2 -Pasta $Pasta 2>&1 | ForEach-Object { "$_" }
         $code = $LASTEXITCODE; $ErrorActionPreference = $old
     } finally { foreach ($k in $salvo.Keys) { [Environment]::SetEnvironmentVariable($k, $salvo[$k]) } }
     return @{ Out = (@($out) -join "`n"); Code = $code }
 }
 
 $falhas = 0
-function Checa([string]$Nome, $r, [string]$Esperado, [string[]]$Contem) {
+function Checa([string]$Nome, $r, [string]$Esperado, [string[]]$Contem, [string[]]$NaoContem = @(), [string]$PassoN = '1') {
     $erros = @()
-    if ($r.Out -notmatch "RESULTADO passo 1: $Esperado(\s|$)") { $erros += "esperava RESULTADO $Esperado" }
+    if ($r.Out -notmatch "RESULTADO passo ${PassoN}: $Esperado(\s|$)") { $erros += "esperava RESULTADO $Esperado" }
+    foreach ($c in $NaoContem) { if ($r.Out -match [regex]::Escape($c)) { $erros += "apareceu '$c'" } }
     if ($r.Out -match 'call depth|profundidade da chamada|CallDepth') { $erros += 'ESTOURO DE PILHA' }
     if ($r.Out -match [regex]::Escape($segredo)) { $erros += 'valor de credencial impresso' }
     foreach ($c in $Contem) { if ($r.Out -notmatch $c) { $erros += "faltou /$c/" } }
@@ -83,6 +107,22 @@ try {
     $arq = Join-Path $tmp 'sou-um-arquivo'; Set-Content $arq 'x'
     $r = Rodar 'excecao' @{} $arq
     Checa 'excecao nao tratada -> FAIL com mensagem' $r 'FAIL' @('ERRO: .+')
+
+    # passos 4 e 4 -Diagnostico: precisam da pasta e do volume do passo 1 (mesma pasta, volume mantido)
+    $p4 = Join-Path $tmp 'p4\pasta'
+    $null = Rodar 'p4_prep' @{} $p4
+    $r = Rodar 'p4' @{} $p4 @('-Passo', '4') -ManterVolume
+    Checa 'passo 4: codigo 1 do backup_media -> FAIL com objetos e tamanho' $r 'FAIL' @(
+        '--dry-run: codigo 0 \(ok\)', 'real #1: codigo 1 \(FALHA do rclone\)', 'objetos enviados: 1; origem: 3 objetos, 2.048 bytes|objetos enviados: 1; origem: 3 objetos, 2,048 bytes',
+        'manifesto: NAO GRAVADO', 'FALHOU .*manifesto\(rc=1\)', '-Passo 4 -Diagnostico') -PassoN '4'
+    $r = Rodar 'p4_diag' @{} $p4 @('-Passo', '4', '-Diagnostico') -ManterVolume
+    Checa 'passo 4 -Diagnostico: cabecalhos com credenciais mascaradas' $r 'FAIL' @(
+        'HTTP REQUEST', 'X-Amz-Acl: private', 'HTTP/1\.1 501 Not Implemented', 'Authorization: \*\*\*', 'X-Amz-Security-Token: \*\*\*',
+        'X-Amz-Credential=\*\*\*', '\*\*\*\.r2\.cloudflarestorage\.com', 'R2 respondeu 501') @(
+        'assinaturaficticia0123', 'tokenficticio-XYZ', 'AKIDFICTICIO99', 'sigficticia77', '0123456789abcdef0123456789abcdef') -PassoN '4'
+    $diag = Get-ChildItem $p4 -Filter 'diag-*.txt' | Select-Object -First 1
+    if (-not $diag -or (Get-Content $diag.FullName -Raw) -match ([regex]::Escape($segredo) + '|assinaturaficticia|tokenficticio')) { $falhas++; Write-Host 'FALHOU  arquivo diag-*.txt ausente ou com credencial' }
+    else { Write-Host 'ok      arquivo diag-*.txt gravado ja mascarado' }
 } finally {
     Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $tmp
 }
