@@ -2,7 +2,7 @@
 
 Imagem multi-stage que traz a arte licenciada (LimeZu) de um **pacote privado no Cloudflare R2**, sem nunca gravar credenciais nem o ZIP em camadas.
 
-> **Status da validação:** o downloader, o Dockerfile (lido por testes estáticos), o `.dockerignore` e o check de Git têm testes automáticos com dados fictícios. O build real foi feito e conferido manualmente por Christian (ver "Evidências do build real"). O roteiro de verificação foi executado por Christian no Docker local (ver "Resultados da execução local"); resta repetir `2a-fs` após a correção. A sessão de desenvolvimento não tem Docker. Para isso há `scripts/verify_phase3.sh` e `scripts/verify_image_layers.py` (seção abaixo).
+> **Status da validação:** o downloader, o Dockerfile (lido por testes estáticos), o `.dockerignore` e o check de Git têm testes automáticos com dados fictícios. O build real foi feito e conferido manualmente por Christian (ver "Evidências do build real"). O roteiro de verificação foi executado por Christian no Docker local (ver "Resultados da execução local"); todas as verificações passaram, incluindo `2a-fs` após a correção. A sessão de desenvolvimento não tem Docker. Para isso há `scripts/verify_phase3.sh` e `scripts/verify_image_layers.py` (seção abaixo).
 
 ## Visão geral
 
@@ -225,13 +225,23 @@ Dados da imagem **não informados** nesta sessão e a preencher por quem rodou o
 
 `scripts/verify_image_layers.py` varre todas as camadas de `docker save` procurando o nome do ZIP, qualquer `*.zip`, caminhos de assets fora do esperado e os valores reais das variáveis `R2_*` (lidos do ambiente; imprime só `True/False`). Tem testes com imagem sintética (`tests/test_verify_image_layers.py`).
 
-`scripts/verify_phase3.sh [a|b|c|d|all]` (Git Bash/Linux, com o Compose rodando) cobre: **a** camadas e `Config.Env` sem `R2_*`; **b** usuário não-root e permissões de escrita; **c** backup do volume (confere que abre) e persistência após `down` (sem `-v`) + `up --force-recreate`, comparando contagens, `integrity_check` e checksums da mídia; **d** o e2e de desligamento/retomada (`scripts/e2e_shutdown.py`) em contêiner descartável com dados próprios, e SIGTERM no serviço real. O script nunca usa `down -v`, `volume rm` nem `prune`. Foi executado por Christian no Docker local (ver abaixo); a sessão de desenvolvimento só checou a sintaxe com `bash -n` e testou a lógica de `2a-fs` com um `docker` simulado. SIGKILL no serviço real e o `/readyz` 503 durante o desligamento ficam para verificação manual.
+`scripts/verify_phase3.sh [a|b|c|d|all]` (Git Bash/Linux, com o Compose rodando) cobre: **a** camadas e `Config.Env` sem `R2_*`; **b** usuário não-root e permissões de escrita; **c** backup do volume (confere que abre) e persistência após `down` (sem `-v`) + `up --force-recreate`, comparando contagens, `integrity_check` e checksums da mídia; **d** o e2e de desligamento/retomada (`scripts/e2e_shutdown.py`) em contêiner descartável com dados próprios, e SIGTERM no serviço real. O script nunca usa `down -v`, `volume rm` nem `prune`. Foi executado por Christian no Docker local, com todas as verificações aprovadas (ver abaixo); a sessão de desenvolvimento só checou a sintaxe com `bash -n` e testou a lógica de `2a-fs` com um `docker` simulado. SIGKILL no serviço real e o `/readyz` 503 durante o desligamento ficam para verificação manual.
 
 ### Resultados da execução local (evidência fornecida por Christian)
 
-**Fonte:** relato de Christian, que rodou `scripts/verify_phase3.sh` no Docker local em 2026-11-06. A sessão de desenvolvimento não tem Docker e **não reproduziu** estes resultados; o texto original da saída não foi anexado a ela. Segundo esse relato, todas as verificações do roteiro foram executadas, exceto `2a-fs`, que terminou com `rc=2` e `NAO_VERIFICADO`.
+**Fonte:** relatos de Christian, que rodou `scripts/verify_phase3.sh` no Docker local em 2026-11-06 e repetiu `2a-fs` depois da correção. A sessão de desenvolvimento não tem Docker e **não reproduziu** estes resultados; só recebeu o texto abaixo.
 
-**Causa do `rc=2` em `2a-fs`** (diagnosticada na sessão pelo código, sem Docker): o script do contêiner terminava com `ls -d /app/assets/bia /reference/bia`, e `ls` sai com 2 quando os caminhos **não existem**, que é o resultado desejado. O `docker run` herdava esse código e a verificação o tratava como falha de execução. Correção: o script do contêiner agora fecha com um marcador `---END`, e o `rc` do `docker run` só é diferente de zero em falha real. Saída sem `---LIC` ou sem `---END`, ou `rc` diferente de 0, continua sendo `NAO_VERIFICADO` (agora com as 3 últimas linhas da saída no motivo, que listam só nomes de arquivos). A verificação não foi relaxada: `.zip` ou `bia` na imagem continuam sendo `FAIL`. A lógica foi testada na sessão com um `docker` simulado (PASS, FAIL e NAO_VERIFICADO); **a re-execução real de `2a-fs` continua pendente**:
+- Primeira execução: todas as verificações do roteiro foram executadas e passaram, exceto `2a-fs`, que terminou com `rc=2` e `NAO_VERIFICADO`.
+- Segunda execução, só `2a-fs`, depois da correção (evidência executada por Christian):
+
+```text
+[PASS] 2a-fs — nenhum *.zip; 3 licença(s) LimeZu em /app/licenses; sem /app/assets/bia nem /reference/bia na imagem
+RESUMO: PASS=1 FAIL=0 NAO_VERIFICADO=0
+```
+
+- **Fechamento: todas as verificações locais do roteiro passaram** (soma das duas execuções, segundo Christian). Isso fecha a validação da imagem no Docker local. Não substitui CI, a confirmação de licença para SaaS nem a definição do build de produção (ver `DEPLOY-DIAGNOSTICO.md`).
+
+**Causa do `rc=2` em `2a-fs`** (diagnosticada na sessão pelo código): o script do contêiner terminava com `ls -d /app/assets/bia /reference/bia`, e `ls` sai com 2 quando os caminhos **não existem**, que é o resultado desejado. O `docker run` herdava esse código e a verificação o tratava como falha de execução. Correção (commit `05536cd`): o script do contêiner fecha com um marcador `---END`; `rc` diferente de 0, ou falta de `---LIC`/`---END`, continua sendo `NAO_VERIFICADO`; `.zip` ou `bia` na imagem continuam sendo `FAIL`. Para repetir só esta verificação:
 
 ```powershell
 & "C:\Program Files\Git\bin\bash.exe" -lc "cd '/c/Users/chris/OneDrive/Documentos/Projetos/shopee-video-studio' && bash scripts/verify_phase3.sh --only 2a-fs"
