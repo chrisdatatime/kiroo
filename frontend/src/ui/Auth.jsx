@@ -208,7 +208,7 @@ export default function AuthScreen({ onDone, resetToken, initialMode, onBack, si
       if (mode === 'login') { await auth('login', { email: f.email, password: f.password }); enter(); }
       else if (mode === 'signup') {
         const r = await auth('signup', { name: f.name, email: f.email, password: f.password, invite: f.invite, consent: f.consent });
-        setSentInfo({ sent: !!r.sent }); setCooldown(RESEND_S); go('verify');
+        setSentInfo({ sent: !!r.sent, text: r.message }); setCooldown(RESEND_S); go('verify');
       } else if (mode === 'forgot') {
         const r = await auth('forgot', { email: f.email });
         setSentInfo({ sent: !!r.sent, text: r.message }); go('sent');
@@ -227,8 +227,8 @@ export default function AuthScreen({ onDone, resetToken, initialMode, onBack, si
   };
   const resend = () => run(async () => {
     const r = await auth('resend');
-    setSentInfo({ sent: !!r.sent }); setCooldown(RESEND_S);
-    setMsg({ ok: true, text: r.sent ? 'Enviamos um novo código.' : 'Novo código gerado.' });
+    setSentInfo({ sent: !!r.sent, text: r.message }); setCooldown(RESEND_S);
+    setMsg({ ok: !!r.sent, text: r.sent ? 'Enviamos um novo código.' : (r.message || 'Novo código gerado.') });
   });
 
   const copy = COPY[mode];
@@ -241,6 +241,7 @@ export default function AuthScreen({ onDone, resetToken, initialMode, onBack, si
   let sub = copy.sub;
   if (mode === 'verify') sub = sentInfo?.sent
     ? <>Enviamos um código de 6 dígitos para <strong className="text-[var(--au-ink)]">{f.email}</strong>. Ele vale por 30 minutos.</>
+    : sentInfo?.text ? <>{sentInfo.text}</>
     : <>O código de 6 dígitos para <strong className="text-[var(--au-ink)]">{f.email}</strong> foi gerado. O envio por e-mail ainda não está ativo neste estúdio: peça o código ao administrador ou confirme depois.</>;
 
   return (

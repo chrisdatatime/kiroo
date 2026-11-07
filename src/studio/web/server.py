@@ -147,6 +147,9 @@ def _cookie(headers: dict, name: str = COOKIE) -> str | None:
     return None
 
 
+SEND_FAILED_MSG = ("Não foi possível enviar o e-mail agora. Seu código foi gerado: peça ao administrador para "
+                   "confirmar seu e-mail ou tente reenviar daqui a pouco.")
+
 class App:
     def __init__(self, port: int = 8765, *, settings_loader=load_settings, sim_pacing: bool = True,
                  allowed_hosts: set[str] | None = None, secure_cookie: bool | None = None,
@@ -599,7 +602,8 @@ class App:
                 token, info = acc.create_session(uid, wid)
                 # a conta já entra (modo DEMO); o código de confirmação vai para o e-mail
                 sent = self._send_verification(acc, uid, acc.user(uid)["email"])
-                return _json(200, {"ok": True, "admin": False, "verify": True, "sent": sent},
+                return _json(200, {"ok": True, "admin": False, "verify": True, "sent": sent,
+                                   **({} if sent else {"message": SEND_FAILED_MSG})},
                              self._set_cookie(token, 30 * 86400, secure=secure))
             if path == "/api/auth/login":
                 token, info = acc.login(p.get("email", ""), p.get("password", ""), ip)
@@ -623,7 +627,8 @@ class App:
                 if not sess:
                     return _json(401, {"error": "entre na sua conta"})
                 if path == "/api/auth/resend":
-                    return _json(200, {"ok": True, "sent": self._send_verification(acc, sess["user_id"], sess["email"])})
+                    sent = self._send_verification(acc, sess["user_id"], sess["email"])
+                    return _json(200, {"ok": True, "sent": sent, **({} if sent else {"message": SEND_FAILED_MSG})})
                 acc.verify_email(sess["user_id"], str(p.get("code", "")))
                 return _json(200, {"ok": True})
             if path == "/api/auth/reset":
