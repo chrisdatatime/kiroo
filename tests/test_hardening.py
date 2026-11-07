@@ -307,10 +307,15 @@ def test_json_logs_have_no_personal_data_and_mask_secrets(live, capsys):
     logger = logging.getLogger("studio")
     logger.setLevel(logging.INFO)
     records = []
+    # A linha "request" é registrada pela thread do servidor DEPOIS de enviar a resposta (finally de _serve): o
+    # cliente pode receber o corpo e o teste remover o handler antes dela. Espera o registro chegar, sem afrouxar nada.
+    logged = threading.Event()
 
     class Grab(logging.Handler):
         def emit(self, record):
             records.append(JsonFormatter(["AIzaFAKE-TEST-SECRET-0123456789"]).format(record))
+            if record.getMessage() == "request":
+                logged.set()
 
     h = Grab()
     logger.addHandler(h)
@@ -321,6 +326,7 @@ def test_json_logs_have_no_personal_data_and_mask_secrets(live, capsys):
                   headers={"X-Studio-Client": "game", "Content-Type": "application/json"})
         c.getresponse().read()
         c.close()
+        assert logged.wait(10), "a linha de acesso 'request' não foi registrada"
         logger.warning("chave AIzaFAKE-TEST-SECRET-0123456789 vazou")
     finally:
         logger.removeHandler(h)
