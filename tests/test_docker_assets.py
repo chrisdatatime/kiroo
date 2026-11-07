@@ -200,7 +200,7 @@ def test_sem_secret_e_sem_arg_falha_fechado_citando_os_dois_caminhos(tmp_path, s
     assert client.calls == []
     for sid in fa.SECRET_IDS:
         assert sid in msg and fa.ENV_FOR_SECRET[sid] in msg              # diz os dois caminhos possíveis
-    assert "--secret" in msg and "--build-arg" in msg
+    assert "--build-arg" in msg
     assert not any(v in msg for v in FAKE_SECRETS.values())              # só nomes, nunca valores
 
 
@@ -503,11 +503,54 @@ def test_dockerfile_nao_carrega_credenciais():
             assert origem.startswith("/out/"), (nome, origem)
     # o estágio final não declara ARG de credencial, logo não entra no history nem no Config.Env da imagem
     assert "runtime" in stages and not re.search(rf"^\s*ARG\s+\S*({cred})", stages["runtime"], re.I | re.M)
-    assert code.count("type=secret") == 3
-    block = re.search(r"RUN --mount=type=secret.*?fetch_assets\.py[^\n]*", code, re.S).group(0)
-    assert all(f"id={s}" in block for s in fa.SECRET_IDS)  # os 3 secrets só neste RUN
+    assert re.search(r"^RUN python fetch_assets\.py", stages["assets"], re.M)  # lê as credenciais dos ARG
     assert "USER kiroo" in code and "STUDIO_DATA_DIR=/data" in code and "STUDIO_REFERENCE_DIR=/reference" in code
     assert "assets/bia" not in code
+
+
+def _dockerfile_logico(texto: str) -> str:
+    """Dockerfile sem comentários e com continuações de linha unidas, como o validador do Railway lê."""
+    sem_comentarios = "\n".join(l for l in texto.splitlines() if not l.lstrip().startswith("#"))
+    return re.sub(r"\\[ \t]*\n", " ", sem_comentarios)
+
+
+def checar_regras_railway(texto: str) -> list[str]:
+    """As duas recusas do Railway: RUN --mount que não seja type=cache, e instrução VOLUME."""
+    erros = []
+    for n, linha in enumerate(_dockerfile_logico(texto).splitlines(), 1):
+        if re.match(r"\s*RUN\b", linha, re.I):
+            for m in re.findall(r"--mount=(\S+)", linha):
+                if not re.search(r"(^|,)type=cache(,|$)", m):
+                    erros.append(f"RUN --mount={m} (só type=cache) na instrução {n}")
+        if re.match(r"\s*VOLUME\b", linha, re.I):
+            erros.append(f"VOLUME na instrução {n}")
+    return erros
+
+
+def test_dockerfile_aceito_pelo_validador_do_railway():
+    """Regressão das mensagens do Railway: 'missing a type=cache argument' e 'docker VOLUME ... not supported'."""
+    assert checar_regras_railway((ROOT / "Dockerfile").read_text(encoding="utf-8")) == []
+
+
+def test_regras_railway_controles():
+    """Controle positivo: o checador enxerga as violações (senão o teste acima seria cego)."""
+    ruim = ("RUN --mount=type=secret,id=x \\\n    python a.py\n"
+            "RUN --mount=type=cache,target=/c --mount=type=bind,source=a,target=b true\n"
+            'VOLUME ["/data"]\n')
+    erros = checar_regras_railway(ruim)
+    assert len(erros) == 3 and any("secret" in e for e in erros) and any("bind" in e for e in erros)
+    assert any(e.startswith("VOLUME") for e in erros)
+    # controle negativo: cache é aceito
+    assert checar_regras_railway("RUN --mount=type=cache,target=/root/.cache pip install x\n") == []
+
+
+def test_compose_sem_secrets_de_build_e_com_volume_de_dados():
+    text = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    code = "\n".join(l for l in text.splitlines() if not l.lstrip().startswith("#"))
+    assert not re.search(r"^\s*secrets:", code, re.M)
+    assert "kiroo-data:/data" in code
+    for v in fa.ENV_FOR_SECRET.values():
+        assert re.search(rf"^\s+{v}:\s*$", code, re.M), v
 
 
 def test_dockerignore_exclui_o_que_deve():
