@@ -21,9 +21,18 @@ Add-Content -Path (Join-Path $env:STUB_DIR 'chamadas.log') -Value ($a -join ' ')
 $j = $a -join ' '
 switch -Regex ($j) {
   '^version'                { if ($modo -eq 'daemon_fora') { [Console]::Error.WriteLine('Cannot connect to the Docker daemon'); exit 1 }; '27.0.0-stub'; exit 0 }
+  '^image inspect .*revision' { "$env:STUB_REV"; exit 0 }
   '^image inspect'          { 'sha256:stub'; exit 0 }
   '^run .*--entrypoint grep' { '/etc/litestream.yml:2'; '/app/scripts/restore.sh:3'; '/usr/local/bin/kiroo-entrypoint:1'; exit 0 }
-  '^run .*lista\.sh'        { exit 0 }
+  '^run .*lista\.sh' {
+    [Console]::Error.WriteLine('NOTICE: Config file "/nonexistent/.rclone.conf" not found - using defaults')
+    if ($j -match 'media/archive') { '2099-01-01T000000Z/productions/ensaio-marcador.txt' }
+    exit 0 }
+  '^run .*le\.sh' {
+    # rclone cat: conteudo no stdout, NOTICE no stderr (o bug: o NOTICE entrava na comparacao)
+    [Console]::Error.WriteLine('NOTICE: Config file "/nonexistent/.rclone.conf" not found - using defaults')
+    if ($j -match 'media/archive/') { 'versao-1' } elseif ($modo -eq 'p4_errado') { 'versao-1' } else { 'versao-2' }
+    exit 0 }
   '^inspect '               { [Console]::Error.WriteLine('Error: No such object (stub)'); exit 1 }
   '^run .*prepara_midia\.sh' { 'versao-1'; exit 0 }
   '^run .*diag\.sh' {
@@ -41,8 +50,11 @@ switch -Regex ($j) {
     'HTTP/1.1 501 Not Implemented'
     'diag: rclone saiu com codigo 1'
     exit 1 }
-  '^run .*backup_media\.sh.*--dry-run' { 'backup_media: resumo: enviados=0 objetos; origem copiada: objetos=3 bytes=2048; manifesto: nao gravado em --dry-run [dry-run]'; exit 0 }
+  '^run .*backup_media\.sh.*--dry-run' {
+    if ($modo -eq 'bm2') { [Console]::Error.WriteLine('backup_media: variaveis ausentes (so os nomes): BACKUP_R2_ENDPOINT'); exit 2 }
+    'backup_media: resumo: enviados=0 objetos; origem copiada: objetos=3 bytes=2048; manifesto: nao gravado em --dry-run [dry-run]'; exit 0 }
   '^run .*backup_media\.sh' {
+    if ($modo -like 'p4_*') { 'backup_media: resumo: enviados=1 objetos; origem copiada: objetos=3 bytes=2048; manifesto: gravado em manifests/x.json'; exit 0 }
     'backup_media: resumo: enviados=1 objetos; origem copiada: objetos=3 bytes=2048; manifesto: NAO GRAVADO (manifests/x.json)'
     [Console]::Error.WriteLine('backup_media: ERRO ao gravar o manifesto (codigo 1): status code: 501')
     [Console]::Error.WriteLine('backup_media: FALHOU (x): manifesto(rc=1)')
@@ -52,6 +64,14 @@ switch -Regex ($j) {
   '^volume create'          { if ($modo -eq 'create_falha') { [Console]::Error.WriteLine('permissao negada (stub)'); exit 1 }; New-Item -ItemType File $vol | Out-Null; 'kiroo-ensaio-dados'; exit 0 }
   default                   { [Console]::Error.WriteLine("stub: comando inesperado: $j"); exit 99 }
 }
+'@
+
+Set-Content -Encoding ASCII (Join-Path $stubDir 'git.cmd') "@`"$psExe`" -NoProfile -ExecutionPolicy Bypass -File `"%~dp0git_stub.ps1`" %*`r`n@exit /b %ERRORLEVEL%"
+Set-Content -Encoding ASCII (Join-Path $stubDir 'git_stub.ps1') @'
+$j = @($args) -join ' '
+if ($j -match 'rev-parse HEAD') { "$env:STUB_HEAD"; exit 0 }
+if ($j -match 'diff --name-only') { 'scripts/ensaio_backup.ps1'; exit 0 }
+exit 1
 '@
 
 $segredo = 'valor-ficticio-NAO-deve-aparecer'
@@ -123,6 +143,29 @@ try {
     $diag = Get-ChildItem $p4 -Filter 'diag-*.txt' | Select-Object -First 1
     if (-not $diag -or (Get-Content $diag.FullName -Raw) -match ([regex]::Escape($segredo) + '|assinaturaficticia|tokenficticio')) { $falhas++; Write-Host 'FALHOU  arquivo diag-*.txt ausente ou com credencial' }
     else { Write-Host 'ok      arquivo diag-*.txt gravado ja mascarado' }
+
+    # regressao do NOTICE no stderr: conteudo certo -> PASS; conteudo errado -> FAIL (comparacao exata)
+    $r = Rodar 'p4_ok' @{ STUB_MODO = 'p4_ok' } $p4 @('-Passo', '4') -ManterVolume
+    Checa 'passo 4 com NOTICE no stderr e conteudo certo -> PASS' $r 'PASS' @("archive contem 'versao-1'; current contem 'versao-2'", 'ignorado na comparacao') @("contem 'NOTICE") -PassoN '4'
+    $r = Rodar 'p4_errado' @{ STUB_MODO = 'p4_errado' } $p4 @('-Passo', '4') -ManterVolume
+    Checa 'passo 4 com NOTICE e conteudo errado -> FAIL' $r 'FAIL' @("current contem 'versao-1'") -PassoN '4'
+
+    # variaveis ausentes nos passos 4 e 5 -> NAO_VERIFICADO com a lista; codigo 2 do backup_media mostra a mensagem
+    $r = Rodar 'p4_sem_vars' @{ STUDIO_ENV = $null; BACKUP_BUCKET = $null } $p4 @('-Passo', '4') -ManterVolume
+    Checa 'passo 4 sem variaveis -> NAO_VERIFICADO com lista' $r 'NAO_VERIFICADO' @('variaveis ausentes: STUDIO_ENV, BACKUP_BUCKET') -PassoN '4'
+    $r = Rodar 'p5_sem_vars' @{ BACKUP_R2_ACCESS_KEY_ID = $null } $p4 @('-Passo', '5') -ManterVolume
+    Checa 'passo 5 sem variaveis -> NAO_VERIFICADO com lista' $r 'NAO_VERIFICADO' @('variaveis ausentes: BACKUP_R2_ACCESS_KEY_ID') -PassoN '5'
+    $r = Rodar 'p4_bm2' @{ STUB_MODO = 'bm2' } $p4 @('-Passo', '4') -ManterVolume
+    Checa 'passo 4: codigo 2 do backup_media mostra a mensagem' $r 'FAIL' @('codigo 2 \(uso/config invalida\)', 'backup_media: variaveis ausentes \(so os nomes\): BACKUP_R2_ENDPOINT') -PassoN '4'
+
+    # commit da imagem x HEAD
+    $h = 'a' * 40; $o = 'b' * 40
+    $r = Rodar 'rev_igual' @{ STUB_REV = $h; STUB_HEAD = $h }
+    Checa 'passo 1: imagem do HEAD atual' $r 'PASS' @('imagem construida do HEAD atual \(aaaaaaa\)') @('AVISO: imagem construida')
+    $r = Rodar 'rev_diferente' @{ STUB_REV = $o; STUB_HEAD = $h }
+    Checa 'passo 1: commit diferente -> aviso de reconstruir' $r 'PASS' @("AVISO: imagem construida do commit $o, diferente do HEAD $h", 'exigem RECONSTRUIR', 'scripts/ensaio_backup\.ps1')
+    $r = Rodar 'rev_ausente' @{ STUB_REV = '' }
+    Checa 'passo 1: imagem sem commit -> aviso' $r 'PASS' @('AVISO: imagem kiroo:dados sem commit gravado')
 } finally {
     Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $tmp
 }
