@@ -7,7 +7,9 @@
 #     --secret id=r2_account_id,env=R2_ACCOUNT_ID \
 #     --secret id=r2_access_key_id,env=R2_ACCESS_KEY_ID \
 #     --secret id=r2_secret_access_key,env=R2_SECRET_ACCESS_KEY \
+#     --build-arg GIT_COMMIT=$(git rev-parse HEAD) \
 #     -t kiroo:local .
+# GIT_COMMIT vira o rótulo org.opencontainers.image.revision (não é segredo; o ensaio compara com o HEAD).
 #
 # A imagem resultante contém arte licenciada (LimeZu): só para registro PRIVADO.
 
@@ -93,3 +95,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD ["python", "-c", "import os,urllib.request as u; u.urlopen('http://127.0.0.1:%s/healthz' % (os.environ.get('STUDIO_PORT') or os.environ.get('PORT') or '8765'), timeout=4)"]
 ENTRYPOINT ["tini", "--", "kiroo-entrypoint"]
 CMD ["python", "-m", "studio", "ui", "--no-browser"]
+# Commit de origem, por último: mudar o commit não invalida o cache das camadas acima.
+ARG GIT_COMMIT=desconhecido
+LABEL org.opencontainers.image.revision=$GIT_COMMIT
+

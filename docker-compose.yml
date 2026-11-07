@@ -9,6 +9,8 @@ services:
   kiroo:
     build:
       context: .
+      args:
+        GIT_COMMIT: ${GIT_COMMIT:-desconhecido}   # commit de origem (rotulo da imagem); nao e segredo
       secrets:
         - r2_account_id
         - r2_access_key_id
