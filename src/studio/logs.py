@@ -33,7 +33,8 @@ class JsonFormatter(logging.Formatter):
     """Uma linha JSON por registro. Só campos conhecidos: nível, mensagem fixa, id da requisição, rota, status,
     duração e workspace. O corpo das requisições, e-mails, códigos e tokens nunca entram aqui."""
 
-    FIELDS = ("request_id", "method", "route", "status", "duration_ms", "workspace_id", "pid", "event")
+    FIELDS = ("request_id", "method", "route", "status", "duration_ms", "workspace_id", "pid", "event",
+              "settle_s", "interrupted")
 
     def __init__(self, secrets: list[str] | None = None):
         super().__init__()

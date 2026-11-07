@@ -11,6 +11,8 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .shutdown import STOP_GRACE_DEFAULT_S, budget_error, parse_seconds, parse_settle
+
 SIGNUP_MODES = ("closed", "invite", "open")
 TRUST_PROXY_MODES = ("none", "cloudflare", "forwarded")
 LOCK_NAME = "studio.lock"
@@ -43,6 +45,8 @@ class ServerConfig:
     secure_cookie: bool = False
     bootstrap_admin_email: str | None = None
     shutdown_grace_s: float = 25.0
+    shutdown_settle_s: float = 3.0      # janela de assentamento depois da drenagem (studio.shutdown)
+    stop_grace_s: float = 40.0          # prazo da plataforma entre SIGTERM e SIGKILL (stop_grace_period do compose)
     resume_max_attempts: int = 3
 
     @classmethod
@@ -64,9 +68,16 @@ class ServerConfig:
             allowed_hosts=tuple(h.lower() for h in _csv(get("STUDIO_ALLOWED_HOSTS"))),
             secure_cookie=get("STUDIO_SECURE_COOKIE") == "1",
             bootstrap_admin_email=(get("STUDIO_BOOTSTRAP_ADMIN_EMAIL") or "").strip().lower() or None,
-            shutdown_grace_s=float(get("STUDIO_SHUTDOWN_GRACE_S") or 25),
+            shutdown_grace_s=parse_seconds("STUDIO_SHUTDOWN_GRACE_S", get("STUDIO_SHUTDOWN_GRACE_S"), 25.0, 0.0),
+            shutdown_settle_s=parse_settle(get("STUDIO_SHUTDOWN_SETTLE_S")),
+            stop_grace_s=parse_seconds("STUDIO_STOP_GRACE_S", get("STUDIO_STOP_GRACE_S"), STOP_GRACE_DEFAULT_S, 1.0),
             resume_max_attempts=int(get("STUDIO_RESUME_MAX_ATTEMPTS") or 3),
         )
+
+
+    def shutdown_budget_error(self) -> str | None:
+        """Recusa de subida quando grace + fechamento do HTTP + settle + fechamento do Litestream > prazo da plataforma."""
+        return budget_error(self.shutdown_grace_s, self.shutdown_settle_s, self.stop_grace_s)
 
 
 # ------------------------------------------------------------------ IP do cliente

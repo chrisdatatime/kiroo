@@ -47,6 +47,7 @@ from ..orchestrator import OrchestratorError
 from ..profiles import KINDS, available_versions, load_profile
 from ..profiles import snapshot as snapshot_profiles
 from ..providers.simulated import SimulationScript
+from ..shutdown import HTTP_CLOSE_S, Inflight, SignalController, minimum_platform_s, settle
 from ..runtime import backup_blocks_ready, backup_start_error, backup_warning, InstanceLockError, ServerConfig, acquire_instance_lock, client_ip, release_instance_lock
 from ..spend import spend_report
 from ..states import TERMINAL, ProductionStatus as PS
@@ -165,6 +166,7 @@ class App:
         self.trust_proxy = trust_proxy or cfg.trust_proxy   # none | cloudflare | forwarded
         self.stopping = threading.Event()   # SIGTERM: sem jobs novos; os laços de produção param entre etapas
         self.runs: dict[str, threading.Thread] = {}
+        self.inflight = Inflight()          # requisições HTTP em andamento (a drenagem espera a última terminar)
         self.errors: dict[str, str] = {}
         self.lock = threading.Lock()
         self.chat = AgentChat()  # conversa com os agentes (Fase 6); testes trocam o caller por um mock
@@ -1032,26 +1034,27 @@ def make_handler(app: App):
             route = urlparse(self.path).path
             status = 500
             try:
-                try:
-                    body = b""
-                    if method == "POST":
-                        length = int(self.headers.get("Content-Length") or 0)
-                        if self.path.startswith("/api/auth/") and length > MAX_AUTH_BODY:
-                            resp = _json(413, {"error": "envio grande demais"})
-                        elif length > MAX_BODY:
-                            resp = _json(413, {"error": "envio grande demais (máx. 150 MB por vez)"})
+                with app.inflight:
+                    try:
+                        body = b""
+                        if method == "POST":
+                            length = int(self.headers.get("Content-Length") or 0)
+                            if self.path.startswith("/api/auth/") and length > MAX_AUTH_BODY:
+                                resp = _json(413, {"error": "envio grande demais"})
+                            elif length > MAX_BODY:
+                                resp = _json(413, {"error": "envio grande demais (máx. 150 MB por vez)"})
+                            else:
+                                body = self.rfile.read(length)
+                                resp = None
                         else:
-                            body = self.rfile.read(length)
                             resp = None
-                    else:
-                        resp = None
-                    if resp is None:
-                        resp = app.handle(method, self.path, dict(self.headers), body, peer=self.client_address[0])
-                except Exception:  # noqa: BLE001 — a resposta não vaza detalhe; o log tem só o tipo da exceção
-                    log.error("erro interno", exc_info=True)
-                    resp = _json(500, {"error": "erro interno"})
-                status = resp.status
-                self._send(resp, info["request_id"], route)
+                        if resp is None:
+                            resp = app.handle(method, self.path, dict(self.headers), body, peer=self.client_address[0])
+                    except Exception:  # noqa: BLE001 — a resposta não vaza detalhe; o log tem só o tipo da exceção
+                        log.error("erro interno", exc_info=True)
+                        resp = _json(500, {"error": "erro interno"})
+                    status = resp.status
+                    self._send(resp, info["request_id"], route)
             finally:
                 level = logging.DEBUG if route in ("/healthz", "/readyz") else logging.INFO
                 log.log(level, "request", extra={"method": method, "route": route, "status": status,
@@ -1086,11 +1089,27 @@ def _checkpoint_loop(app) -> None:
             log.warning("checkpoint do WAL falhou (%s)", type(exc).__name__)
 
 
+def _finish_shutdown(app, ckpt: threading.Thread | None, abort, *, clock=time.monotonic) -> dict:
+    """Fim da drenagem, com o HTTP já fechado: espera as requisições em andamento e a thread do checkpoint periódico
+    (juntas, até HTTP_CLOSE_S) e abre a janela de assentamento (studio.shutdown.settle). Devolve o resultado do settle."""
+    until = clock() + HTTP_CLOSE_S
+    req_left = app.inflight.wait_idle(HTTP_CLOSE_S)
+    if ckpt is not None and ckpt.is_alive():
+        ckpt.join(max(until - clock(), 0.0))
+    with app.lock:
+        runs_alive = sum(1 for t in app.runs.values() if t.is_alive())
+    ckpt_alive = bool(ckpt is not None and ckpt.is_alive())
+    lvl = logging.WARNING if (req_left or ckpt_alive or runs_alive) else logging.INFO
+    log.log(lvl, "drenagem concluida: requisicoes em andamento=%d, checkpoint periodico %s, producoes ainda em chamada=%d",
+            req_left, "ATIVO" if ckpt_alive else "parado", runs_alive, extra={"event": "drained"})
+    return settle(app.cfg.shutdown_settle_s, abort, clock=clock)
+
+
 def serve(port: int | None = None, open_browser: bool = True, public_host: str | None = None, *,
           host: str | None = None, trust_proxy: str | None = None) -> None:
-    cfg = ServerConfig.from_env()
     try:
-        err = backup_start_error()
+        cfg = ServerConfig.from_env()
+        err = backup_start_error() or cfg.shutdown_budget_error()
     except ValueError as exc:
         err = str(exc)
     if err:
@@ -1121,7 +1140,11 @@ def serve(port: int | None = None, open_browser: bool = True, public_host: str |
         warn = str(exc)
     if warn:
         log.critical(warn, extra={"event": "backup_missing"})
-    threading.Thread(target=_checkpoint_loop, args=(app,), name="wal-checkpoint", daemon=True).start()
+    ckpt = threading.Thread(target=_checkpoint_loop, args=(app,), name="wal-checkpoint", daemon=True)
+    ckpt.start()
+    log.info("desligamento: grace %gs + settle %gs; a plataforma precisa dar pelo menos %gs (STUDIO_STOP_GRACE_S=%g)",
+             cfg.shutdown_grace_s, cfg.shutdown_settle_s, minimum_platform_s(cfg.shutdown_grace_s, cfg.shutdown_settle_s),
+             cfg.stop_grace_s, extra={"event": "shutdown_budget"})
 
     shown = "127.0.0.1" if host in ("0.0.0.0", "::", "") else host
     url = f"http://{shown}:{port}/"
@@ -1144,17 +1167,14 @@ def serve(port: int | None = None, open_browser: bool = True, public_host: str |
     except Exception as exc:  # noqa: BLE001
         log.error("falha ao retomar produções (%s)", type(exc).__name__)
 
-    draining = threading.Event()
-
     def drain():   # em outra thread: httpd.shutdown() não pode ser chamado de quem roda serve_forever
+        log.info("SIGTERM: parando de aceitar jobs; aguardando até %ss", app.cfg.shutdown_grace_s, extra={"event": "stop"})
         app.shutdown()
         httpd.shutdown()
 
-    def on_term(signum, frame):
-        if not draining.is_set():
-            draining.set()
-            log.info("SIGTERM: parando de aceitar jobs; aguardando até %ss", app.cfg.shutdown_grace_s, extra={"event": "stop"})
-            threading.Thread(target=drain, daemon=True, name="drain").start()
+    # 1º sinal: drenagem; 2º sinal: encerra a janela de assentamento (sai sem esperar o settle).
+    ctl = SignalController(drain)
+    on_term = ctl.on_signal
 
     # SIGTERM (Linux/contêiner). No Windows o SIGTERM não chega ao handler (vira TerminateProcess); o desligamento
     # gracioso lá é o CTRL_BREAK_EVENT, que o Python entrega como SIGBREAK.
@@ -1165,11 +1185,19 @@ def serve(port: int | None = None, open_browser: bool = True, public_host: str |
             except (ValueError, OSError):  # fora da thread principal (testes)
                 pass
     try:
-        httpd.serve_forever()
-    except KeyboardInterrupt:
-        app.shutdown(3.0)
+        try:
+            httpd.serve_forever()
+        except KeyboardInterrupt:
+            ctl.draining.set()
+            app.shutdown(3.0)
+        finally:
+            httpd.server_close()
+        # HTTP fechado e produções marcadas: a janela só existe depois de uma drenagem (sinal ou Ctrl+C).
+        if ctl.draining.is_set():
+            _finish_shutdown(app, ckpt, ctl.abort)
+    except KeyboardInterrupt:   # Ctrl+C durante a espera final: sai já
+        pass
     finally:
-        httpd.server_close()
         release_instance_lock(lock)
 
 

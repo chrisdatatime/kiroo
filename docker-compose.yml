@@ -30,10 +30,13 @@ services:
       - BACKUP_R2_ACCESS_KEY_ID
       - BACKUP_R2_SECRET_ACCESS_KEY
       - BACKUP_BUCKET
+      # Prazo SIGTERM -> SIGKILL que a plataforma dá; IGUAL ao stop_grace_period abaixo. O servidor recusa subir se
+      # STUDIO_SHUTDOWN_GRACE_S + 2 (HTTP) + STUDIO_SHUTDOWN_SETTLE_S + 5 (Litestream) passar disso (docs/RUNBOOK.md).
+      - STUDIO_STOP_GRACE_S=40
     volumes:
       - kiroo-data:/data                       # banco, produções, uploads (persistente)
       - ./reference:/reference:ro              # referência pessoal: ./reference/bia/PERFIL BIA.jpg (opcional)
-    stop_grace_period: 40s                     # > STUDIO_SHUTDOWN_GRACE_S (25)
+    stop_grace_period: 40s                     # >= grace 25 + HTTP 2 + settle 3 + Litestream 5 = 35 (STUDIO_STOP_GRACE_S)
     restart: unless-stopped
 
 secrets:
