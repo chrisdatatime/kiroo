@@ -61,6 +61,10 @@ studio admin reset-link --email voce@kiroo.app                              # se
 | Variável | Padrão | O que faz |
 |---|---|---|
 | `STUDIO_SHUTDOWN_GRACE_S` | `25` | Tolerância após `SIGTERM`. Ajuste o `stop_grace_period`/`terminationGracePeriodSeconds` do orquestrador para um valor maior que este. |
+| `STUDIO_ENV` | `dev` | `dev`/`staging`/`production`. Backup ausente: staging sobe com CRITICAL e `warnings` em `/readyz` (200); **production recusa subir**. Ver `docs/BACKUP.md`. |
+| `STUDIO_ALLOW_NO_BACKUP` | — | `1` libera subir em production sem backup; `/readyz` devolve 503 com warning enquanto faltar. |
+| `BACKUP_R2_ENDPOINT`, `BACKUP_R2_ACCESS_KEY_ID`, `BACKUP_R2_SECRET_ACCESS_KEY`, `BACKUP_BUCKET` | — | Backup no R2 (Litestream e `scripts/backup_media.sh`). As chaves são segredos. |
+| `STUDIO_WAL_CHECKPOINT_S` | `300` | Intervalo do checkpoint PASSIVE do WAL (0 desliga). |
 | `STUDIO_RESUME_MAX_ATTEMPTS` | `3` | Retomadas automáticas por produção antes de desistir (a produção vai a *pausada* e um evento `resume_abandoned` é gravado). O contador zera quando uma execução termina normalmente. |
 
 **Desligamento (SIGTERM; no Windows, CTRL_BREAK_EVENT/SIGBREAK, porque o SIGTERM de lá mata o processo sem chamar o handler):** o servidor passa a responder `503` em `/readyz`, recusa criar/avançar produções (`503` + `Retry-After`), mantém as consultas, e espera até `STUDIO_SHUTDOWN_GRACE_S` os laços terminarem a etapa em curso (eles só param **entre** etapas, nunca no meio de uma chamada paga). O que sobrar fica marcado `interrupted` com um evento no log de eventos da produção. `Ctrl+C` espera só 3 s.
