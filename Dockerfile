@@ -2,24 +2,17 @@
 #
 # Kiroo — imagem de produção/teste. Veja docs/DOCKER.md.
 #
-# Build PREFERIDO (credenciais de LEITURA do R2 por BuildKit secrets; nada fica em metadado):
-#   docker build \
-#     --secret id=r2_account_id,env=R2_ACCOUNT_ID \
-#     --secret id=r2_access_key_id,env=R2_ACCESS_KEY_ID \
-#     --secret id=r2_secret_access_key,env=R2_SECRET_ACCESS_KEY \
-#     --build-arg GIT_COMMIT=$(git rev-parse HEAD) \
-#     -t kiroo:local .
-#
-# Build ALTERNATIVO, para plataforma que não oferece `--secret` (o Railway não documenta BuildKit secrets;
-# ver docs/RAILWAY.md): as mesmas credenciais entram pelos três ARG do estágio `assets`.
-#   docker build \
-#     --build-arg R2_ACCOUNT_ID --build-arg R2_ACCESS_KEY_ID --build-arg R2_SECRET_ACCESS_KEY \
-#     --build-arg GIT_COMMIT=$(git rev-parse HEAD) -t kiroo:local .
+# Build (Railway e local): as credenciais de LEITURA do R2 entram pelos três ARG do estágio `assets`.
+#   docker build #     --build-arg R2_ACCOUNT_ID --build-arg R2_ACCESS_KEY_ID --build-arg R2_SECRET_ACCESS_KEY #     --build-arg GIT_COMMIT=$(git rev-parse HEAD) -t kiroo:local .
+# (`--build-arg NOME` sem valor lê o valor da variável de ambiente do terminal.)
+# Sem BuildKit secret aqui: o validador do Railway só aceita montagens do tipo cache.
 # Os três ARG existem SÓ no estágio `assets`, nunca viram ENV e o estágio final não os declara, então não
 # entram na imagem final nem no `docker history` dela (prova: python scripts/verify_build_args.py).
-# Ainda assim o valor fica no histórico do estágio intermediário: só publique a imagem em registro PRIVADO
-# e prefira o caminho com `--secret` onde ele existir.
+# Ainda assim o valor fica no histórico do estágio intermediário: só publique a imagem em registro PRIVADO.
 # GIT_COMMIT vira o rótulo org.opencontainers.image.revision (não é segredo; o ensaio compara com o HEAD).
+#
+# /data: sem instrução VOLUME (o Railway não a aceita; o volume é o do painel). Em `docker run`/compose,
+# passe o volume nomeado explicitamente (-v kiroo-data:/data). O entrypoint cria e ajusta /data.
 #
 # A imagem resultante contém arte licenciada (LimeZu): só para registro PRIVADO.
 
@@ -31,17 +24,14 @@ COPY docker/requirements-assets.lock ./
 RUN pip install --require-hashes -r requirements-assets.lock
 COPY docker/fetch_assets.py assets.lock ./
 COPY assets/maps/office.tmj ./office.tmj
-# Caminho 2 das credenciais (só onde `--secret` não existe). Escopo: ESTE estágio. Sem ENV, sem herança: o
-# estágio final não declara estes ARG e copia de /out apenas arquivos de arte/licença.
+# Escopo das credenciais: ESTE estágio. Sem ENV, sem herança: o estágio final não declara estes ARG e copia
+# de /out apenas arquivos de arte/licença.
 ARG R2_ACCOUNT_ID=""
 ARG R2_ACCESS_KEY_ID=""
 ARG R2_SECRET_ACCESS_KEY=""
-# Download, SHA256, extração segura e remoção do ZIP acontecem neste único RUN, com os secrets montados só nele.
-# fetch_assets.py lê o secret quando existe e cai para a variável de ambiente (o ARG) quando não existe.
-RUN --mount=type=secret,id=r2_account_id \
-    --mount=type=secret,id=r2_access_key_id \
-    --mount=type=secret,id=r2_secret_access_key \
-    python fetch_assets.py --lock assets.lock --map office.tmj --out /out --work /tmp/kiroo-assets
+# Download, SHA256, extração segura e remoção do ZIP acontecem neste único RUN.
+# fetch_assets.py lê as credenciais das variáveis de ambiente que o ARG expõe só durante este RUN.
+RUN python fetch_assets.py --lock assets.lock --map office.tmj --out /out --work /tmp/kiroo-assets
 
 # ---------------------------------------------------------------- 2) frontend
 FROM node:22-bookworm-slim AS frontend
@@ -109,7 +99,6 @@ ENV PYTHONPATH=/app/src \
 # A porta vem de PORT (ou STUDIO_PORT); sem nenhuma, 8765. Não fixamos STUDIO_PORT aqui para não anular o PORT da plataforma.
 
 USER kiroo
-VOLUME ["/data"]
 EXPOSE 8765
 STOPSIGNAL SIGTERM
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \

@@ -2,7 +2,7 @@
 #
 # Credenciais de LEITURA do R2: exporte no terminal (nunca em arquivo versionado nem no chat):
 #   R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY
-# Elas só existem durante `docker compose build` (BuildKit secrets) e não vão ao runtime.
+# Elas só existem durante `docker compose build` (ARG do estágio `assets`) e não vão à imagem final.
 name: kiroo
 
 services:
@@ -11,10 +11,10 @@ services:
       context: .
       args:
         GIT_COMMIT: ${GIT_COMMIT:-desconhecido}   # commit de origem (rotulo da imagem); nao e segredo
-      secrets:
-        - r2_account_id
-        - r2_access_key_id
-        - r2_secret_access_key
+        # sem valor: o Compose lê da variável de ambiente do terminal (nada é gravado em arquivo)
+        R2_ACCOUNT_ID:
+        R2_ACCESS_KEY_ID:
+        R2_SECRET_ACCESS_KEY:
     image: kiroo:local
     init: true
     ports:
@@ -38,14 +38,6 @@ services:
       - ./reference:/reference:ro              # referência pessoal: ./reference/bia/PERFIL BIA.jpg (opcional)
     stop_grace_period: 40s                     # >= grace 25 + HTTP 2 + settle 3 + Litestream 5 = 35 (STUDIO_STOP_GRACE_S)
     restart: unless-stopped
-
-secrets:
-  r2_account_id:
-    environment: R2_ACCOUNT_ID
-  r2_access_key_id:
-    environment: R2_ACCESS_KEY_ID
-  r2_secret_access_key:
-    environment: R2_SECRET_ACCESS_KEY
 
 volumes:
   kiroo-data:

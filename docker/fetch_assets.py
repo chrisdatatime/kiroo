@@ -1,16 +1,15 @@
 """Baixa e prepara o pacote privado de assets licenciados (stage `assets` do Dockerfile).
 
-Uso (dentro do RUN, com os BuildKit secrets montados):
+Uso (dentro do RUN, com as credenciais nas variáveis de ambiente dos ARG):
 
     python fetch_assets.py --lock assets.lock --out /out [--map assets/maps/office.tmj]
 
 Credenciais de LEITURA do R2 chegam por um de dois caminhos, nesta ordem:
 
-1. arquivos de BuildKit secret (padrão /run/secrets/<id>): r2_account_id, r2_access_key_id,
-   r2_secret_access_key. É o caminho preferido (`docker build --secret`).
+1. arquivos de secret (padrão /run/secrets/<id>): r2_account_id, r2_access_key_id, r2_secret_access_key.
+   O Dockerfile NÃO monta mais secrets (o Railway recusa); este caminho só vale se alguém os montar de fora.
 2. variáveis de ambiente R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, que no build do
-   Dockerfile chegam pelos `ARG` do estágio `assets`. Só para plataformas que não oferecem
-   BuildKit secrets (o Railway não documenta `--secret`; ver docs/RAILWAY.md).
+   Dockerfile chegam pelos `ARG` do estágio `assets`. É o caminho do Dockerfile (docs/DOCKER.md).
 
 O script nunca as imprime, nunca as grava e nunca as promove a ENV. Sem nenhum dos dois caminhos
 ele falha ANTES de qualquer rede (build falha fechado). Ordem: baixar -> conferir SHA256 ->
@@ -107,7 +106,7 @@ def read_credentials(secrets_dir: Path, env: dict[str, str] | None = None) -> di
         sources[sid] = source
     if missing:
         raise AssetError("credenciais de build ausentes ou vazias: " + ", ".join(missing)
-                         + ". Use --secret id=<nome>,env=<VARIAVEL> ou --build-arg <VARIAVEL> (docs/DOCKER.md).")
+                         + ". Use --build-arg <VARIAVEL> (docs/DOCKER.md).")
     # Diagnóstico com CONTAGENS por caminho, nunca nomes de variável ao lado de valores.
     print("credenciais de build: {} via secret, {} via ARG".format(
         sum(1 for v in sources.values() if v == "secret"), sum(1 for v in sources.values() if v == "arg")))
