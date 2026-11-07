@@ -237,6 +237,8 @@ class Accounts:
             return None  # não revela se o e-mail existe
         token = secrets.token_urlsafe(32)
         exp = (datetime.now(timezone.utc) + timedelta(minutes=RESET_MINUTES)).isoformat(timespec="seconds")
+        # um link válido por vez: pedir outro invalida os anteriores ainda não usados
+        self.db.conn.execute("DELETE FROM password_resets WHERE user_id=? AND used_at IS NULL", (u["id"],))
         self.db.conn.execute("INSERT INTO password_resets(token_hash, user_id, expires_at) VALUES (?,?,?)", (_sha(token), u["id"], exp))
         return token
 
@@ -249,6 +251,7 @@ class Accounts:
         self.db.conn.execute("UPDATE users SET pw_hash=?, email_verified_at=COALESCE(email_verified_at, ?) WHERE id=?",
                              (hash_password(new_password), now(), row["user_id"]))
         self.db.conn.execute("UPDATE password_resets SET used_at=? WHERE token_hash=?", (now(), row["token_hash"]))
+        self.db.conn.execute("DELETE FROM password_resets WHERE user_id=? AND used_at IS NULL", (row["user_id"],))
         self.db.conn.execute("DELETE FROM sessions WHERE user_id=?", (row["user_id"],))  # derruba sessões antigas
 
     # ----------------------------------------------------------- produções

@@ -36,7 +36,7 @@ from urllib.parse import parse_qs, unquote, urlencode, urlparse
 
 from .. import agent_config, creative_options, mailer
 from ..agent_chat import AgentChat
-from ..accounts import LOGIN_WINDOW_MIN, Accounts, AuthError
+from ..accounts import LOGIN_WINDOW_MIN, RESET_MINUTES, VERIFY_MINUTES, Accounts, AuthError
 from ..config import load_settings
 from ..credits import Ledger
 from ..db import Database, checkpoint
@@ -340,8 +340,7 @@ class App:
             token = acc.start_reset(email)
         finally:
             db.close()
-        sent = self.send_mail(email, "Kiroo: defina a senha do administrador",
-                              f"Abra o link para definir a senha (vale por 30 minutos):\n\n{self.base_url()}/?reset={token}\n")
+        sent = self.send_mail(email, *mailer.admin_setup_email(f"{self.base_url()}/?reset={token}", RESET_MINUTES))
         if not sent:
             log.warning("administrador criado por STUDIO_BOOTSTRAP_ADMIN_EMAIL, mas o link de senha não foi enviado "
                         "(SMTP ausente). Gere um com: studio admin reset-link --email <e-mail>")
@@ -375,9 +374,7 @@ class App:
 
     def _send_verification(self, acc: Accounts, uid: str, email: str) -> bool:
         code = acc.start_verification(uid)
-        return self.send_mail(email, f"Kiroo: seu código é {code}",
-                              f"Seu código de confirmação do Kiroo é {code}.\n\nEle vale por 30 minutos. "
-                              "Se você não criou uma conta no Kiroo, ignore este e-mail.")
+        return self.send_mail(email, *mailer.verification_email(code, VERIFY_MINUTES))
 
     # --- login com Google (OAuth 2.0, código no servidor; o segredo nunca vai ao navegador)
     def _google(self, path: str, url, headers: dict) -> Response:
@@ -572,11 +569,10 @@ class App:
                 return _json(200, {"ok": True}, self._set_cookie("", 0, secure=secure))
             if path == "/api/auth/forgot":
                 tok = acc.start_reset(p.get("email", ""))
-                if tok:  # sem SMTP, o e-mail (com o link) vai para o log do servidor: só o operador vê
-                    link = f"{self._origin(headers)}/?reset={tok}"
-                    self.send_mail(acc.user_by_email(p.get("email", ""))["email"], "Kiroo: redefinir sua senha",
-                                   f"Para criar uma nova senha no Kiroo, abra o link abaixo (vale por 30 minutos):\n\n{link}\n\n"
-                                   "Se você não pediu isso, ignore este e-mail: sua senha continua a mesma.")
+                if tok:  # sem SMTP: em desenvolvimento o link vai para o log; em staging/produção não vai a lugar nenhum
+                    base = self.base_url() if self.public_host else self._origin(headers)
+                    self.send_mail(acc.user_by_email(p.get("email", ""))["email"],
+                                   *mailer.reset_email(f"{base}/?reset={tok}", RESET_MINUTES))
                 if mailer.configured():
                     return _json(200, {"ok": True, "sent": True, "message": "Se houver uma conta com este e-mail, enviamos um link "
                                                                              "para criar uma nova senha. Ele vale por 30 minutos."})
@@ -1152,10 +1148,10 @@ def serve(port: int | None = None, open_browser: bool = True, public_host: str |
     if open_browser:
         print(f"Kiroo em {url}  (Ctrl+C para sair)", flush=True)
         webbrowser.open(url)
-    if app.secure_cookie and not mailer.configured():
-        log.warning("STUDIO_SMTP_HOST ausente com STUDIO_SECURE_COOKIE=1: códigos de confirmação e links de senha NÃO são "
-                    "registrados no log. Sem SMTP, a confirmação de e-mail e o 'esqueci a senha' ficam indisponíveis; "
-                    "use `studio admin reset-link`.")
+    if mailer.protected_env() and not mailer.configured():
+        log.warning("E-mail transacional desligado (%s): em staging/produção códigos de confirmação e links de senha NÃO "
+                    "são registrados no log. A confirmação de e-mail e o 'esqueci a senha' ficam indisponíveis; use "
+                    "`studio admin reset-link` e `studio admin verify-email`.", mailer.config_error())
     try:
         app.bootstrap_admin()
     except Exception as exc:  # noqa: BLE001

@@ -114,6 +114,11 @@ def _admin(settings, args) -> int:
             acc.set_workspace(wid, allow_real=int(args.acao == "allow-real"),
                               **({} if args.acao == "allow-real" else {"mode": "simulated"}))
             print("modo real " + ("liberado" if args.acao == "allow-real" else "bloqueado (voltou para DEMO)"))
+        elif args.acao == "verify-email":   # sem SMTP: o operador confirma o e-mail depois de conferir com a pessoa
+            from .db import now
+            db.conn.execute("UPDATE users SET email_verified_at=COALESCE(email_verified_at, ?) WHERE id=?", (now(), u["id"]))
+            db.conn.execute("DELETE FROM email_codes WHERE user_id=?", (u["id"],))
+            print("e-mail marcado como confirmado")
         elif args.acao == "reset-link":
             from .runtime import ServerConfig
             cfg = ServerConfig.from_env()
@@ -201,7 +206,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--set", type=float, required=True, dest="value")
 
     p = sub.add_parser("admin", help="contas: criar usuário, liberar modo real, link de nova senha, créditos")
-    p.add_argument("acao", choices=["create-user", "allow-real", "deny-real", "reset-link", "list",
+    p.add_argument("acao", choices=["create-user", "allow-real", "deny-real", "reset-link", "verify-email", "list",
                                     "grant-credits", "adjust-credits", "credits"])
     p.add_argument("--email")
     p.add_argument("--name", default="")
