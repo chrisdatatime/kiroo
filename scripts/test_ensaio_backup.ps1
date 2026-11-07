@@ -174,7 +174,17 @@ try {
     Checa 'passo 1: imagem sem rotulo nenhum (null) -> aviso' $r 'PASS' @('AVISO: imagem kiroo:dados sem commit gravado')
     $r = Rodar 'rev_igual_sem_aviso' @{ STUB_REV = $h; STUB_HEAD = $h }
     Checa 'passo 1: rotulo igual ao HEAD -> nenhum aviso de commit' $r 'PASS' @('imagem construida do HEAD atual') @('AVISO: imagem kiroo:dados sem commit', 'AVISO: imagem construida', 'AVISO: commit da imagem')
-    $log = Get-Content (Join-Path $stubDir 'chamadas.log') -Raw
+    # passo 7 sem docker real: variaveis ausentes e pasta ausente -> NAO_VERIFICADO (nada de container/volume criado)
+    $n0 = @(Get-Content (Join-Path $stubDir 'chamadas.log') -ErrorAction SilentlyContinue).Count
+    $r = Rodar 'p7_sem_vars' @{ BACKUP_R2_ENDPOINT = $null } $p4 @('-Passo', '7') -ManterVolume
+    Checa 'passo 7 sem variaveis -> NAO_VERIFICADO com lista' $r 'NAO_VERIFICADO' @('variaveis ausentes: BACKUP_R2_ENDPOINT') -PassoN '7'
+    $r = Rodar 'p7_sem_pasta' @{} (Join-Path $tmp 'p7-nada') @('-Passo', '7')
+    Checa 'passo 7 sem a pasta do passo 1 -> NAO_VERIFICADO' $r 'NAO_VERIFICADO' @('pasta do ensaio ausente') -PassoN '7'
+    $chamadas = @(Get-Content (Join-Path $stubDir 'chamadas.log') -ErrorAction SilentlyContinue) | Select-Object -Skip $n0
+    if ($chamadas -match '^(run|volume create|stop|kill)') { $falhas++; Write-Host "FALHOU  passo 7 NAO_VERIFICADO mexeu no docker: $($chamadas -join ' | ')" }
+    else { Write-Host 'ok      passo 7 NAO_VERIFICADO nao cria container nem volume' }
+
+    $log = (@(Get-Content (Join-Path $stubDir 'chamadas.log') -ErrorAction SilentlyContinue) -join "`n")
     if ($log -match 'image inspect --format \{\{index') { $falhas++; Write-Host 'FALHOU  passo 1 ainda usa {{index ...}} (quebra no PS 5.1)' }
     else { Write-Host 'ok      passo 1 le os rotulos com {{json .Config.Labels}}' }
 } finally {

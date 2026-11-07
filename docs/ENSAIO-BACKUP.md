@@ -203,14 +203,49 @@ Os tempos são o primeiro dado medido de RTO (em BACKUP.md §8 ainda são metas)
 - `hash divergente` → arquivo corrompido ou alterado depois do registro; anote o id.
 - código 1 → banco corrompido ou schema incompatível: é falha real.
 
+## Passo 7 — Desligamento sob carga (rodar antes do passo 6)
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ensaio_backup.ps1 -Passo 7
+```
+
+Precisa só do passo 1 (pasta) e das 5 variáveis. Não usa o container nem o volume dos passos 2–5: cada rodada
+cria o seu volume (`kiroo-ensaio-p7-a1..a5`, `kiroo-ensaio-p7-c1..c5`, com o rótulo do ensaio), o container
+`kiroo-ensaio-p7` na porta `-Porta`+1 (8800) e apaga os dois ao fim da rodada. Leva uns 25–35 min.
+
+**Como a produção fica em andamento (sem custo de IA, sem mudar código):** modo simulado + `STUDIO_X264_PRESET=placebo`
+(a montagem final leva ~80 s em vez de ~2 s) + piloto `automatico` pela API (`POST /api/productions/<pid>/autonomy`),
+que aprova as revisões inconclusivas do revisor simulado. `STUDIO_POLL_INTERVAL_S` **não** serve: no modo simulado o
+servidor fixa o intervalo de consulta em 0,8 s.
+
+Rodadas (cada uma termina em PASS, FAIL ou NAO_VERIFICADO com o motivo; falha de execução = NAO_VERIFICADO):
+
+- **a1..a5** — produção na montagem; cadastros sequenciais (`w7-<rodada>-<n>@ensaio.test`) contínuos e `/readyz` a cada
+  100 ms; `docker stop -t 40`. FAIL se: tempo ≥ 40 s; código de saída ≠ 0; nenhum 503 antes da primeira sonda sem
+  conexão; alguma linha não-JSON com `error` no log depois de `SIGTERM: parando` (Litestream); `run_state` ≠
+  `interrupted` (lido do volume parado, conexão só leitura); o restore da **geração da rodada** no R2 não contém o
+  último cadastro com 200 recebido antes do SIGTERM.
+- **b1..b5** — `docker start` no mesmo volume: a produção retoma (evento `resumed`) e chega a `awaiting_final_review`
+  com `run_state=idle`; as tentativas confirmadas antes do stop continuam iguais (id, tipo, cena, número, hash,
+  criação, operação remota); nenhuma tentativa nova para cena+tipo que já estava `succeeded` ou `submitted`; montagem
+  registrada uma vez.
+- **c1..c5** — `docker kill -s SIGKILL` (ímpares: com operação remota `submitted`; pares: na montagem). Ponto de
+  sincronização: um cadastro confirmado (200) e, depois dele, leitura do banco confirmado por conexão sqlite somente
+  leitura (inclui o `-wal`), numa transação, que precisa enxergar esse cadastro. FAIL se, depois do reinício, algo do
+  snapshot mudou (diff impresso), se a escrita de sincronização sumiu, se uma etapa registrada se repetiu, se a
+  produção não termina, ou se o Litestream não abriu geração nova.
+
+Arquivos de cada rodada ficam na pasta do ensaio: `p7-<rodada>-escritas.txt`, `-readyz.txt`, `-log.txt`,
+`-snapshot.json`, `-final.json`. Nada é apagado no bucket: a réplica das rodadas fica em `ensaio/db`.
+
 ## Passo 6 — Limpeza
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ensaio_backup.ps1 -Passo 6
 ```
 
-Faz: remove os containers com o rótulo `kiroo.ensaio=backup`; remove o volume `kiroo-ensaio-dados` só se tiver
-o rótulo; avisa (sem apagar) se sobrar outro volume com o rótulo; compara data de criação e tamanho de
+Faz: remove os containers com o rótulo `kiroo.ensaio=backup`; remove o volume `kiroo-ensaio-dados` e os
+`kiroo-ensaio-p7-*` que sobrarem do passo 7, só se tiverem o rótulo; avisa (sem apagar) se sobrar outro volume com o rótulo; compara data de criação e tamanho de
 `kiroo_kiroo-data` com o anotado no passo 1; imprime o resumo dos resultados; apaga a pasta do ensaio só se
 ela tiver o marcador. **Não apaga nada do bucket.**
 
@@ -234,4 +269,5 @@ Objetos que ficam no bucket (apague só se e quando quiser): `ensaio/db/...` (r�
 | 3 docker stop | NAO_VERIFICADO | tempo: — |
 | 4 Mídia | NAO_VERIFICADO | |
 | 5 Restore | NAO_VERIFICADO | banco — / mídia — / total — |
+| 7 Desligamento sob carga | NAO_VERIFICADO | a: — / b: — / c: — |
 | 6 Limpeza | NAO_VERIFICADO | |
