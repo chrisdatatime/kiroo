@@ -21,7 +21,11 @@ Add-Content -Path (Join-Path $env:STUB_DIR 'chamadas.log') -Value ($a -join ' ')
 $j = $a -join ' '
 switch -Regex ($j) {
   '^version'                { if ($modo -eq 'daemon_fora') { [Console]::Error.WriteLine('Cannot connect to the Docker daemon'); exit 1 }; '27.0.0-stub'; exit 0 }
-  '^image inspect .*revision' { "$env:STUB_REV"; exit 0 }
+  # como o docker real: {{index .Config.Labels "..."}} chega sem as aspas internas (PS 5.1) e o template falha
+  '^image inspect .*index .*Labels' { [Console]::Error.WriteLine('template parsing error: template: :1: function "org" not defined'); exit 64 }
+  '^image inspect .*json \.Config\.Labels' {
+    if ($env:STUB_REV_MODO -eq 'null') { 'null' } elseif ($env:STUB_REV) { '{"maintainer":"x","org.opencontainers.image.revision":"' + $env:STUB_REV + '"}' } else { '{"maintainer":"x"}' }
+    exit 0 }
   '^image inspect'          { 'sha256:stub'; exit 0 }
   '^run .*--entrypoint grep' { '/etc/litestream.yml:2'; '/app/scripts/restore.sh:3'; '/usr/local/bin/kiroo-entrypoint:1'; exit 0 }
   '^run .*lista\.sh' {
@@ -166,6 +170,13 @@ try {
     Checa 'passo 1: commit diferente -> aviso de reconstruir' $r 'PASS' @("AVISO: imagem construida do commit $o, diferente do HEAD $h", 'exigem RECONSTRUIR', 'scripts/ensaio_backup\.ps1')
     $r = Rodar 'rev_ausente' @{ STUB_REV = '' }
     Checa 'passo 1: imagem sem commit -> aviso' $r 'PASS' @('AVISO: imagem kiroo:dados sem commit gravado')
+    $r = Rodar 'rev_null' @{ STUB_REV_MODO = 'null'; STUB_HEAD = $h }
+    Checa 'passo 1: imagem sem rotulo nenhum (null) -> aviso' $r 'PASS' @('AVISO: imagem kiroo:dados sem commit gravado')
+    $r = Rodar 'rev_igual_sem_aviso' @{ STUB_REV = $h; STUB_HEAD = $h }
+    Checa 'passo 1: rotulo igual ao HEAD -> nenhum aviso de commit' $r 'PASS' @('imagem construida do HEAD atual') @('AVISO: imagem kiroo:dados sem commit', 'AVISO: imagem construida', 'AVISO: commit da imagem')
+    $log = Get-Content (Join-Path $stubDir 'chamadas.log') -Raw
+    if ($log -match 'image inspect --format \{\{index') { $falhas++; Write-Host 'FALHOU  passo 1 ainda usa {{index ...}} (quebra no PS 5.1)' }
+    else { Write-Host 'ok      passo 1 le os rotulos com {{json .Config.Labels}}' }
 } finally {
     Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $tmp
 }
