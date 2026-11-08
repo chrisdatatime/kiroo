@@ -40,6 +40,12 @@ Variáveis: [.env.example](../.env.example) e [RUNBOOK.md](RUNBOOK.md).
   criação de produção (por usuário); 429 com `Retry-After`; tudo em `STUDIO_RATE_*`. — `src/studio/ratelimit.py`,
   `tests/test_rate_limit.py`
 - Continua: limite de login por e-mail e por IP (8 / 15 min) e de convite errado por IP, gravados no banco.
+- Cloudflare Turnstile no cadastro, login, esqueci a senha e reenvio de código: token conferido no servidor em `siteverify`
+  (timeout 5 s, sem seguir redirecionamento, IP real conforme `STUDIO_TRUST_PROXY`) **antes** de consultar usuário, sessão ou
+  consumir convite, então não revela quais e-mails existem. Token ausente/inválido/expirado/reutilizado → `400 captcha_invalido`;
+  Cloudflare fora do ar, segredo recusado ou meia configuração em staging/produção → `503 captcha_indisponivel` (falha fechada).
+  O segredo entra em `secret_values()`; token e segredo nunca vão a log. CSP libera só `https://challenges.cloudflare.com`
+  (`script-src` e `frame-src`). — `src/studio/turnstile.py`, `tests/test_turnstile.py`, `docs/TURNSTILE.md`
 
 ### 4. Autorização
 - IDOR: usuário A contra o workspace B em todas as rotas com id (estado, as 16 ações de produção, mídia, chat, troca

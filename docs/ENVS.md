@@ -52,6 +52,17 @@ Como ler as colunas:
 | `STUDIO_BOOTSTRAP_ADMIN_EMAIL` | não | não | execução | `voce@exemplo.com` | Cria o administrador no primeiro boot e manda o link para definir a senha. Depois de usar, pode remover. Exige e-mail configurado (seção 5). |
 | `STUDIO_INVITE_CODES` | — | — | — | *(não usar)* | Aposentado. Se existir, é ignorado com aviso no log. |
 
+### Verificação anti-robô (Cloudflare Turnstile)
+
+| Variável | Obrig. | Segredo | Quando | Valor no staging | Para que serve |
+|---|---|---|---|---|---|
+| `STUDIO_TURNSTILE_SITE_KEY` | recomendada | não (pública) | execução | *(chave do widget, `0x4...`)* | Chave pública: o servidor a entrega em `GET /api/config` e o navegador carrega o widget. Passo a passo em `docs/TURNSTILE.md`. |
+| `STUDIO_TURNSTILE_SECRET_KEY` | recomendada | **sim** | execução | *(segredo do widget)* | Segredo usado só no servidor para validar o token em `siteverify`. Mascarado em logs e erros. |
+
+As duas andam juntas. Sem nenhuma, o recurso fica desligado (aviso no log em staging/produção). **Só uma delas em staging/produção
+falha fechada**: cadastro, login, esqueci a senha e reenvio de código recusam tudo (`503 captcha_indisponivel`) e a subida registra um
+aviso crítico. Em `dev`, só uma delas apenas desliga o recurso e avisa.
+
 ## 4. Desligamento (precisa casar com o Railway)
 
 | Variável | Obrig. | Segredo | Quando | Valor no staging | Para que serve |
