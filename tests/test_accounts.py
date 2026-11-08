@@ -260,8 +260,8 @@ def _google_app(app, info):
     return calls
 
 
-def _google_login(app):
-    r = app.handle("GET", "/api/auth/google/start", BASE, b"")
+def _google_login(app, query=""):
+    r = app.handle("GET", "/api/auth/google/start" + (f"?{query}" if query else ""), BASE, b"")
     assert r.status == 302 and r.headers["Location"].startswith("https://accounts.google.com/")
     state = r.headers["Set-Cookie"].split(";")[0].split("=", 1)[1]
     assert f"state={state}" in r.headers["Location"] and "segredo" not in r.headers["Location"]
@@ -271,11 +271,12 @@ def _google_login(app):
 
 def test_google_creates_account_without_admin_and_links_later(app):
     calls = _google_app(app, {"sub": "g-1", "email": "Chris@Gmail.com", "email_verified": True, "name": "Chris"})
-    r = _google_login(app)
+    r = _google_login(app, "intent=signup&consent=1")
     assert r.status == 302 and r.headers["Location"] == "/"
     cookies = r.headers["Set-Cookie"]
     assert isinstance(cookies, list) and "Max-Age=0" in cookies[0] and cookies[1].startswith("studio_session=")
     assert calls[0][1]["client_secret"] == "segredo" and calls[0][1]["redirect_uri"] == "http://127.0.0.1:8765/api/auth/google/callback"
+    assert calls[0][1]["code_verifier"]
     st, me = app.handle("GET", "/api/me", {**BASE, "Cookie": cookies[1].split(";")[0]}, b""), None
     me = json.loads(st.body)
     assert me["admin"] is False and me["user"]["email"] == "chris@gmail.com" and me["user"]["email_verified"] is True

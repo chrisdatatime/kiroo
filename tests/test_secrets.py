@@ -128,8 +128,11 @@ def test_google_login_failure_logs_no_secret(app, caplog):
     def fail(url, data=None, headers=None):
         raise urllib.error.URLError(f"recusado: client_secret={data and data.get('client_secret')}")
     app.google_http = fail
-    h = {"Host": "127.0.0.1:8765", "Cookie": "studio_oauth=estado123"}
-    r = app.handle("GET", "/api/auth/google/callback?state=estado123&code=abc", h, b"")
+    base = {"Host": "127.0.0.1:8765"}
+    start = app.handle("GET", "/api/auth/google/start", base, b"")   # state real: guardado no servidor, uso único
+    state = start.headers["Set-Cookie"].split(";")[0].split("=", 1)[1]
+    h = {**base, "Cookie": f"studio_oauth={state}"}
+    r = app.handle("GET", f"/api/auth/google/callback?state={state}&code=abc", h, b"")
     assert r.status == 302 and "google_failed" in r.headers["Location"]
     assert not leaked(caplog.text) and "URLError" in caplog.text
 
