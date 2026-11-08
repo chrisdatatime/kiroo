@@ -10,8 +10,10 @@ Proteções:
 
 from __future__ import annotations
 
+import base64
 import dataclasses
 import gzip
+import hashlib
 import hmac
 import json
 import secrets
@@ -36,7 +38,7 @@ from urllib.parse import parse_qs, unquote, urlencode, urlparse
 
 from .. import agent_config, creative_options, mailer, paid_gate
 from ..agent_chat import AgentChat
-from ..accounts import (LOGIN_WINDOW_MIN, RESET_MINUTES, TERMS_VERSION, VERIFY_MINUTES, Accounts, AuthError,
+from ..accounts import (LOGIN_WINDOW_MIN, RESET_MINUTES, TERMS_VERSION, VERIFY_MINUTES, Accounts, AuthError, GoogleAuthError,
                         verify_password)
 from ..config import load_settings
 from ..credits import Ledger
@@ -116,6 +118,52 @@ GOOGLE_TOKEN = "https://oauth2.googleapis.com/token"
 GOOGLE_USERINFO = "https://openidconnect.googleapis.com/v1/userinfo"
 
 
+GOOGLE_FLOW_S = 600                 # um login com Google precisa terminar em 10 min
+GOOGLE_FLOW_MAX = 5000              # teto de logins em andamento na memória (o mais antigo sai)
+
+
+class GoogleFlows:
+    """Logins com Google em andamento, na memória do processo (há uma instância só; reiniciar só obriga a clicar de novo).
+
+    A chave é o SHA-256 do `state` (que vai também num cookie HttpOnly do navegador que começou). Cada entrada guarda o
+    `code_verifier` do PKCE e, no cadastro, o convite e o aceite dos Termos. `take` remove: o state vale uma vez só."""
+
+    def __init__(self, ttl_s: int = GOOGLE_FLOW_S, cap: int = GOOGLE_FLOW_MAX, clock=time.monotonic):
+        self.ttl, self.cap, self.clock = ttl_s, cap, clock
+        self._d: dict[str, tuple[float, dict]] = {}
+        self._lock = threading.Lock()
+
+    @staticmethod
+    def _key(state: str) -> str:
+        return hashlib.sha256(state.encode()).hexdigest()
+
+    def put(self, state: str, data: dict) -> None:
+        t = self.clock()
+        with self._lock:
+            for k in [k for k, (exp, _) in self._d.items() if exp <= t]:
+                del self._d[k]
+            while len(self._d) >= self.cap:
+                self._d.pop(next(iter(self._d)))
+            self._d[self._key(state)] = (t + self.ttl, data)
+
+    def take(self, state: str) -> dict | None:
+        with self._lock:
+            hit = self._d.pop(self._key(state), None)
+        if not hit or hit[0] <= self.clock():
+            return None
+        return hit[1]
+
+    def __len__(self) -> int:
+        return len(self._d)
+
+
+def _pkce_pair() -> tuple[str, str]:
+    """(code_verifier, code_challenge S256), RFC 7636."""
+    verifier = secrets.token_urlsafe(64)[:96]
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
+    return verifier, challenge
+
+
 def _google_http(url: str, data: dict | None = None, headers: dict | None = None) -> dict:
     """POST (form) quando há data, senão GET. Respostas do Google são JSON."""
     body = urlencode(data).encode() if data is not None else None
@@ -185,6 +233,9 @@ class App:
         self.google_client_id = os.environ.get("STUDIO_GOOGLE_CLIENT_ID") or None
         self.google_client_secret = os.environ.get("STUDIO_GOOGLE_CLIENT_SECRET") or None
         self.google_http = _google_http
+        self.google_flows = GoogleFlows()
+        # endereços fixos do Google; só os testes trocam (servidor falso em 127.0.0.1). Não vêm do ambiente.
+        self.google_auth_url, self.google_token_url, self.google_userinfo_url = GOOGLE_AUTH, GOOGLE_TOKEN, GOOGLE_USERINFO
         self.send_mail = mailer.send
 
     # ------------------------------------------------------------ contexto
@@ -371,9 +422,14 @@ class App:
         return {"Set-Cookie": flags}
 
     def _origin(self, headers: dict) -> str:
-        """Endereço de quem chamou (para links em e-mails e o retorno do Google). Host já foi conferido na lista."""
+        """Endereço de quem chamou (links em e-mails sem host público). Host já foi conferido na lista."""
         scheme = "https" if (self._is_public(headers) or self.secure_cookie) else "http"
         return f"{scheme}://{headers.get('Host', '')}"
+
+    def google_redirect_uri(self) -> str:
+        """URI de retorno do Google, FIXA: https://$STUDIO_PUBLIC_HOST/api/auth/google/callback (sem host público,
+        o endereço local). Nunca vem do cabeçalho Host. É exatamente esta que se cadastra no Google Cloud."""
+        return self.base_url() + "/api/auth/google/callback"
 
     @property
     def google_enabled(self) -> bool:
@@ -385,48 +441,85 @@ class App:
 
     # --- login com Google (OAuth 2.0, código no servidor; o segredo nunca vai ao navegador)
     def _google(self, path: str, url, headers: dict) -> Response:
-        secure = self._is_public(headers) or self.secure_cookie
-        clear_state = f"{OAUTH_COOKIE}=; Path=/api/auth/google; HttpOnly; SameSite=Lax; Max-Age=0" + ("; Secure" if secure else "")
+        """start: cria state (uso único, guardado no servidor e num cookie) + PKCE e manda para o Google.
+        callback: confere o state contra o cookie, troca o código (com o code_verifier) e entra/cria conta.
+        Nada de código, token ou segredo vai para log, erro ou resposta: os erros voltam como /?entrar&erro=<código>."""
+        secure = bool(self.public_host) or self.secure_cookie
+        cookie_tail = "; Path=/api/auth/google; HttpOnly; SameSite=Lax" + ("; Secure" if secure else "")
+        clear_state = f"{OAUTH_COOKIE}={cookie_tail}; Max-Age=0"
 
         def back(err: str | None = None, cookies: list | None = None) -> Response:
             loc = "/" if not err else "/?" + urlencode({"entrar": "", "erro": err})
-            return Response(302, "text/plain", b"", headers={"Location": loc, "Set-Cookie": [clear_state, *(cookies or [])]})
+            return Response(302, "text/plain", b"", headers={"Location": loc, "Set-Cookie": [clear_state, *(cookies or [])],
+                                                             "Cache-Control": "no-store", "Referrer-Policy": "no-referrer"})
 
         if not self.google_enabled:
             return back("google_off")
-        redirect_uri = self._origin(headers) + "/api/auth/google/callback"
+        q = parse_qs(url.query)
         if path == "/api/auth/google/start":
-            state = secrets.token_urlsafe(24)
-            q = urlencode({"client_id": self.google_client_id, "redirect_uri": redirect_uri, "response_type": "code",
-                           "scope": "openid email profile", "state": state, "prompt": "select_account"})
-            flags = f"{OAUTH_COOKIE}={state}; Path=/api/auth/google; HttpOnly; SameSite=Lax; Max-Age=600" + ("; Secure" if secure else "")
-            return Response(302, "text/plain", b"", headers={"Location": f"{GOOGLE_AUTH}?{q}", "Set-Cookie": flags})
+            if self.public_host and headers.get("Host", "").lower() != self.public_host:
+                # o cookie do state precisa nascer no mesmo host que recebe o retorno do Google
+                return Response(302, "text/plain", b"", headers={
+                    "Location": f"https://{self.public_host}/api/auth/google/start" + (f"?{url.query}" if url.query else "")})
+            intent = q.get("intent", ["login"])[0]
+            flow = {"verifier": None, "invite": None, "terms": None}
+            if intent == "signup":
+                if self.signup == "closed":
+                    return back("convite")
+                if q.get("consent", [""])[0] != "1":
+                    return back("google_consent")
+                flow["terms"] = TERMS_VERSION
+                if self.signup == "invite":
+                    invite = re.sub(r"[^A-Za-z0-9-]", "", q.get("invite", [""])[0])[:64]
+                    if not invite:
+                        return back("convite")
+                    flow["invite"] = invite
+            state = secrets.token_urlsafe(32)
+            verifier, challenge = _pkce_pair()
+            flow["verifier"] = verifier
+            self.google_flows.put(state, flow)
+            gq = urlencode({"client_id": self.google_client_id, "redirect_uri": self.google_redirect_uri(),
+                            "response_type": "code", "scope": "openid email profile", "state": state,
+                            "code_challenge": challenge, "code_challenge_method": "S256", "prompt": "select_account"})
+            return Response(302, "text/plain", b"", headers={"Location": f"{self.google_auth_url}?{gq}", "Cache-Control": "no-store",
+                                                             "Set-Cookie": f"{OAUTH_COOKIE}={state}{cookie_tail}; Max-Age={GOOGLE_FLOW_S}"})
         if path != "/api/auth/google/callback":
             return _json(404, {"error": "não encontrado"})
-        q = parse_qs(url.query)
         state, code = q.get("state", [""])[0], q.get("code", [""])[0]
         expected = _cookie(headers, OAUTH_COOKIE) or ""
+        if not expected or not state or not hmac.compare_digest(state.encode(), expected.encode()):
+            return back("google_state")   # state de outro navegador não consome o login de quem começou
+        flow = self.google_flows.take(state)   # consumido aqui, mesmo se algo abaixo falhar: vale uma vez só
         if q.get("error"):
             return back("google_cancel")
-        if not expected or not state or not hmac.compare_digest(state, expected) or not code:
+        if not flow or not code:
             return back("google_state")
         try:
-            tok = self.google_http(GOOGLE_TOKEN, {"code": code, "client_id": self.google_client_id,
+            tok = self.google_http(self.google_token_url, {"code": code, "client_id": self.google_client_id,
                                                   "client_secret": self.google_client_secret,
-                                                  "redirect_uri": redirect_uri, "grant_type": "authorization_code"})
-            info = self.google_http(GOOGLE_USERINFO, None, {"Authorization": f"Bearer {tok['access_token']}"})
-        except (urllib.error.URLError, OSError, KeyError, ValueError) as exc:
+                                                  "redirect_uri": self.google_redirect_uri(),
+                                                  "grant_type": "authorization_code", "code_verifier": flow["verifier"]})
+            info = self.google_http(self.google_userinfo_url, None, {"Authorization": f"Bearer {tok['access_token']}"})
+        except (urllib.error.URLError, OSError, KeyError, TypeError, ValueError) as exc:
             log.warning("Login com Google falhou (%s)", type(exc).__name__)   # a mensagem pode ecoar o código/segredo
             return back("google_failed")
-        if not info.get("sub") or not info.get("email"):
+        if not isinstance(info, dict) or not info.get("sub") or not info.get("email"):
             return back("google_failed")
+        key = f"s:{self._client_ip(headers)}"
         s, db, acc = self._db()
         try:
+            if flow["invite"] and acc.throttled(key):
+                return back("google_throttled")
             try:
-                uid, _created = acc.google_user(str(info["sub"]), info["email"], info.get("name") or "",
-                                               bool(info.get("email_verified")), allow_create=self.signup == "open")
-            except AuthError as exc:
-                return back("convite" if "convite" in str(exc) else "google_unverified")
+                uid, _created = acc.google_user(str(info["sub"]), str(info["email"]), str(info.get("name") or ""),
+                                               info.get("email_verified") is True, signup=self.signup,
+                                               invite=flow["invite"], terms_version=flow["terms"])
+            except GoogleAuthError as exc:
+                if exc.code == "convite_invalido":
+                    acc.record_fail(key)
+                return back(exc.code)
+            except AuthError:
+                return back("google_failed")
             wid = acc.workspaces_of(uid)[0]["id"]
             token, _ = acc.create_session(uid, wid)
         finally:
@@ -485,7 +578,7 @@ class App:
         if path.startswith("/api/"):   # limite por IP antes de abrir o banco
             ip = self._client_ip(headers)
             limited = self._limited("api_ip", ip)
-            if not limited and path.startswith("/api/auth/") and (method == "POST" or path == "/api/auth/google/start"):
+            if not limited and path.startswith("/api/auth/") and (method == "POST" or path.startswith("/api/auth/google/")):
                 limited = self._limited("auth", ip)
             if limited:
                 return limited

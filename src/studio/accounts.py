@@ -37,6 +37,13 @@ class AuthError(ValueError):
     pass
 
 
+class GoogleAuthError(AuthError):
+    """Recusa do login com Google; `code` é o código curto que volta na URL (`/?entrar&erro=<code>`)."""
+    def __init__(self, code: str, message: str):
+        super().__init__(message)
+        self.code = code
+
+
 def _sha(s: str) -> str:
     return hashlib.sha256(s.encode()).hexdigest()
 
@@ -219,22 +226,50 @@ class Accounts:
         self.db.conn.execute("DELETE FROM email_codes WHERE user_id=?", (uid,))
 
     # ----------------------------------------------------------- Google
-    def google_user(self, sub: str, email: str, name: str, email_verified: bool, *, allow_create: bool) -> tuple[str, bool]:
-        """Conta ligada ao Google: pelo id da conta Google; senão, liga à conta com o mesmo e-mail (só se o Google
-        confirmou o e-mail); senão cria (quando o cadastro está aberto). Devolve (user_id, criada_agora)."""
+    def google_user(self, sub: str, email: str, name: str, email_verified: bool, *, signup: str,
+                    invite: str | None = None, terms_version: str | None = None) -> tuple[str, bool]:
+        """Conta ligada ao Google. Devolve (user_id, criada_agora). Erros têm `.code` (vai na URL de volta).
+
+        - Só aceita e-mail que o Google confirmou (`email_verified is True`), inclusive para quem já está ligado.
+        - Liga pelo id da conta Google; senão, pela conta com o mesmo e-mail. Se essa conta local nunca confirmou o
+          e-mail, quem a criou pode não ser o dono: a senha é anulada e as sessões caem (o dono entra pelo Google).
+        - Conta nova segue STUDIO_SIGNUP: closed recusa; invite exige convite válido (uso único, preso ao e-mail se
+          o convite tiver e-mail); open cria. Nos dois últimos, exige o aceite dos Termos (terms_version)."""
+        if email_verified is not True:
+            raise GoogleAuthError("google_unverified", "o Google não confirmou este e-mail; entre com e-mail e senha")
+        email = (email or "").strip().lower()
         row = self.db.conn.execute("SELECT id FROM users WHERE google_sub=?", (sub,)).fetchone()
         if row:
             return row["id"], False
-        if not email_verified:
-            raise AuthError("o Google não confirmou este e-mail; entre com e-mail e senha")
         u = self.user_by_email(email)
         if u:
+            if u["google_sub"]:   # e-mail já ligado a OUTRA conta Google: não troca o vínculo em silêncio
+                raise GoogleAuthError("google_other", "este e-mail já está ligado a outra conta Google")
+            if u["email_verified_at"] is None:
+                self.db.conn.execute("UPDATE users SET pw_hash=? WHERE id=?", (NO_PASSWORD, u["id"]))
+                self.db.conn.execute("DELETE FROM sessions WHERE user_id=?", (u["id"],))
             self.db.conn.execute("UPDATE users SET google_sub=?, email_verified_at=COALESCE(email_verified_at, ?) WHERE id=?",
                                  (sub, now(), u["id"]))
             return u["id"], False
-        if not allow_create:
-            raise AuthError("Não há conta com este e-mail. O acesso é por convite: peça sua conta ao administrador.")
-        uid, _ = self.create_user(email, None, name, verified=True, google_sub=sub)
+        if signup == "closed":
+            raise GoogleAuthError("convite", "Não há conta com este e-mail. O acesso é por convite: peça sua conta ao administrador.")
+        if signup == "invite" and not invite:
+            raise GoogleAuthError("convite", "Não há conta com este e-mail. Para criar, use Criar conta com o código de convite.")
+        if not terms_version:
+            raise GoogleAuthError("google_consent", "para criar a conta, aceite os Termos de Uso e a Política de Privacidade")
+        invite_id = None
+        if signup == "invite":
+            invite_id = self.claim_invite(invite or "", email)
+            if not invite_id:
+                raise GoogleAuthError("convite_invalido", "código de convite inválido, já usado, expirado ou de outro e-mail")
+        try:
+            uid, _ = self.create_user(email, None, name, verified=True, google_sub=sub, terms_version=terms_version)
+        except Exception:
+            if invite_id:
+                self.finish_invite(invite_id, None)
+            raise
+        if invite_id:
+            self.finish_invite(invite_id, uid)
         return uid, True
 
     # ----------------------------------------------------------- senha
