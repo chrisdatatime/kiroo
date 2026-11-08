@@ -257,7 +257,7 @@ def test_hsts_only_with_secure_cookie(loader):
 
 def test_csp_allows_what_phaser_needs_and_nothing_inline():
     csp = srv.CSP_APP
-    assert "script-src 'self';" in csp and "unsafe-eval" not in csp
+    assert "script-src 'self' https://challenges.cloudflare.com;" in csp and "unsafe-eval" not in csp
     for need in ("img-src 'self' data: blob:", "worker-src 'self' blob:", "connect-src 'self' data: blob:", "media-src 'self' blob:"):
         assert need in csp
 

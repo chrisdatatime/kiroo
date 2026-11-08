@@ -243,7 +243,7 @@ def test_forgot_sends_link_and_reset_verifies_email(app):
 
 def test_auth_config_is_public(app):
     r = app.handle("GET", "/api/auth/config", BASE, b"")
-    assert r.status == 200 and json.loads(r.body) == {"signup": "open", "google": False, "email": False, "terms_version": TERMS_VERSION}
+    assert r.status == 200 and json.loads(r.body) == {"signup": "open", "google": False, "turnstile": None, "email": False, "terms_version": TERMS_VERSION}
     assert json.loads(app.handle("GET", "/api/config", BASE, b"").body)["signup"] == "open"
     r = app.handle("GET", "/api/auth/google/start", BASE, b"")  # sem credenciais: volta ao login com aviso
     assert r.status == 302 and "erro=google_off" in r.headers["Location"]

@@ -53,6 +53,7 @@ from ..providers.simulated import SimulationScript
 from ..ratelimit import RateLimitConfig, RateLimiter, classify as rate_bucket
 from ..shutdown import HTTP_CLOSE_S, Inflight, SignalController, minimum_platform_s, settle
 from ..runtime import backup_blocks_ready, backup_start_error, backup_warning, InstanceLockError, ServerConfig, acquire_instance_lock, client_ip, release_instance_lock
+from .. import turnstile
 from ..spend import spend_report
 from ..states import TERMINAL, ProductionStatus as PS
 from ..storage import ProductionStorage, StorageError
@@ -77,10 +78,18 @@ SECURITY_HEADERS = {"X-Content-Type-Options": "nosniff", "X-Frame-Options": "DEN
                     "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()"}
 # CSP do app (React + Phaser, tudo servido pela própria origem). Phaser decodifica texturas/áudio de blob:/data:.
 # Sem 'unsafe-eval' e sem scripts inline. O painel legado (/painel) tem um <script> inline e usa CSP própria.
-CSP_APP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
-           "media-src 'self' blob:; font-src 'self' data:; connect-src 'self' data: blob:; worker-src 'self' blob:; "
-           "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'")
-CSP_PANEL = CSP_APP.replace("script-src 'self'", "script-src 'self' 'unsafe-inline'")
+CHALLENGES = "https://challenges.cloudflare.com"   # Turnstile (captcha): este é o ÚNICO lugar que o libera na CSP
+
+
+def _csp(script: str) -> str:
+    return (f"default-src 'self'; script-src {script} {CHALLENGES}; frame-src {CHALLENGES}; "
+            "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
+            "media-src 'self' blob:; font-src 'self' data:; connect-src 'self' data: blob:; worker-src 'self' blob:; "
+            "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'")
+
+
+CSP_APP = _csp("'self'")
+CSP_PANEL = _csp("'self' 'unsafe-inline'")
 HSTS = "max-age=31536000"
 HASHED_ASSET = re.compile(r".+-[A-Za-z0-9_-]{8,}\.[A-Za-z0-9]+$")   # nome com hash do Vite: index-BO_rcp--.js
 COMPRESSIBLE = {"text/html", "text/css", "text/javascript", "application/javascript", "application/json", "image/svg+xml",
@@ -198,6 +207,11 @@ def _cookie(headers: dict, name: str = COOKIE) -> str | None:
 SEND_FAILED_MSG = ("Não foi possível enviar o e-mail agora. Seu código foi gerado: peça ao administrador para "
                    "confirmar seu e-mail ou tente reenviar daqui a pouco.")
 
+CAPTCHA_PATHS = ("/api/auth/signup", "/api/auth/login", "/api/auth/forgot", "/api/auth/resend")
+CAPTCHA_BAD_MSG = "Não foi possível confirmar a verificação de segurança. Tente de novo."
+CAPTCHA_DOWN_MSG = "A verificação de segurança está indisponível agora. Tente de novo em instantes."
+
+
 class App:
     def __init__(self, port: int = 8765, *, settings_loader=load_settings, sim_pacing: bool = True,
                  allowed_hosts: set[str] | None = None, secure_cookie: bool | None = None,
@@ -233,6 +247,11 @@ class App:
         self.google_client_id = os.environ.get("STUDIO_GOOGLE_CLIENT_ID") or None
         self.google_client_secret = os.environ.get("STUDIO_GOOGLE_CLIENT_SECRET") or None
         self.google_http = _google_http
+        # Turnstile: liga só com as duas chaves. Testes trocam turnstile_url (servidor falso em 127.0.0.1).
+        self.turnstile_site, self.turnstile_secret = turnstile.keys()
+        self.turnstile_on = bool(self.turnstile_site and self.turnstile_secret)
+        self.turnstile_broken = turnstile.fail_closed()
+        self.turnstile_url = turnstile.SITEVERIFY_URL
         self.google_flows = GoogleFlows()
         # endereços fixos do Google; só os testes trocam (servidor falso em 127.0.0.1). Não vêm do ambiente.
         self.google_auth_url, self.google_token_url, self.google_userinfo_url = GOOGLE_AUTH, GOOGLE_TOKEN, GOOGLE_USERINFO
@@ -603,7 +622,9 @@ class App:
             if method == "POST" and path.startswith("/api/auth/"):
                 return self._auth(path, headers, json.loads(body or b"{}"))
             if method == "GET" and path in ("/api/config", "/api/auth/config"):  # o que a tela de acesso pode oferecer
-                return _json(200, {"signup": self.signup, "google": self.google_enabled, "email": mailer.configured(),
+                return _json(200, {"signup": self.signup, "google": self.google_enabled,
+                                   "turnstile": self.turnstile_site if self.turnstile_on and not self.turnstile_broken else None,
+                                   "email": mailer.configured(),
                                    "terms_version": TERMS_VERSION})
             if method == "GET" and path in LEGAL_PAGES:   # rascunhos públicos (PARA REVISÃO JURÍDICA)
                 return Response(200, "text/html; charset=utf-8", (STATIC / LEGAL_PAGES[path]).read_bytes(),
@@ -660,11 +681,26 @@ class App:
                      {"Retry-After": str(wait)})
 
     # --- autenticação
+    def _captcha(self, p: dict, ip: str) -> Response | None:
+        """Turnstile nas rotas públicas. None = pode seguir. Código estável, sem detalhes; token e segredo nunca vão a log."""
+        if self.turnstile_broken:   # staging/produção com meia configuração: falha fechada
+            return _json(503, {"error": CAPTCHA_DOWN_MSG, "code": "captcha_indisponivel"})
+        if not self.turnstile_on:
+            return None
+        res = turnstile.verify(self.turnstile_secret, p.get("captcha"), ip, url=self.turnstile_url)
+        if res == turnstile.OK:
+            return None
+        if res == turnstile.UNAVAILABLE:
+            return _json(503, {"error": CAPTCHA_DOWN_MSG, "code": "captcha_indisponivel"})
+        return _json(400, {"error": CAPTCHA_BAD_MSG, "code": "captcha_invalido"})
+
     def _auth(self, path: str, headers: dict, p: dict) -> Response:
         if headers.get(CLIENT_HEADER) != "game":
             return _json(403, {"error": "cliente não permitido"})
         ip = self._client_ip(headers)
         secure = self._is_public(headers)
+        if path in CAPTCHA_PATHS and (blocked := self._captcha(p, ip)):   # antes do banco: sem usuário, convite ou sessão
+            return blocked
         s, db, acc = self._db()
         try:
             if path == "/api/auth/signup":
@@ -1320,6 +1356,9 @@ def serve(port: int | None = None, open_browser: bool = True, public_host: str |
         warn = str(exc)
     if warn:
         log.critical(warn, extra={"event": "backup_missing"})
+    tw = turnstile.startup_warning()
+    if tw:
+        getattr(log, tw[0])(tw[1], extra={"event": "turnstile_config"})
     ckpt = threading.Thread(target=_checkpoint_loop, args=(app,), name="wal-checkpoint", daemon=True)
     ckpt.start()
     log.info("desligamento: grace %gs + settle %gs; a plataforma precisa dar pelo menos %gs (STUDIO_STOP_GRACE_S=%g)",
