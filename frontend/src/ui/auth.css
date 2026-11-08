@@ -88,6 +88,7 @@ span.au-brand { cursor: default; }
 .au-notice[data-tone="ok"] { background: #EAF6E4; color: #1D5E2E; border: 1px solid #C5E5BA; }
 
 .au-fine { margin: 22px 0 0; font-size: 13px; line-height: 1.5; color: var(--au-mute); text-wrap: pretty; }
+.au-fine.au-google-need { margin-top: 8px; }
 
 /* código de 6 dígitos */
 .au-code { position: relative; display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; cursor: text; }

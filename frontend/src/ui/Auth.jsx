@@ -8,6 +8,7 @@ import { auth, authConfig } from '../engine/api.js';
 import { ART } from '../landing/art.js';
 import logo from '../assets/brand/wordmark-preto-laranja.svg';
 import { AboutContent } from './About.jsx';
+import { googleStart, GOOGLE_ERRORS } from './googleStart.js';
 import './auth.css';
 
 // Acesso ao Kiroo: entrar, criar conta, confirmar e-mail, esqueci a senha e nova senha (?reset=token).
@@ -17,14 +18,6 @@ import './auth.css';
 
 const MIN_PASSWORD = 10;
 const RESEND_S = 45;
-const GOOGLE_ERRORS = {
-  google_off: 'O login com Google não está ativo neste estúdio.',
-  google_cancel: 'O login com Google foi cancelado.',
-  google_state: 'O login com Google expirou antes de terminar. Tente de novo.',
-  google_failed: 'Não conseguimos falar com o Google agora. Tente de novo em instantes.',
-  google_unverified: 'O Google não confirmou este e-mail. Entre com e-mail e senha.',
-  convite: 'Não há conta com este e-mail. O acesso é por convite: peça sua conta ao administrador.',
-};
 const TEAM = [
   { id: 'nina', look: { shirt: '#FF8FC0', acc: 'bone' } },
   { id: 'theo', look: { shirt: '#FF5B2E', acc: 'fones' } },
@@ -94,11 +87,13 @@ function SubmitButton({ busy, children, busyLabel, disabled }) {
   );
 }
 
-function GoogleButton({ label }) {
+function GoogleButton({ label, href, need }) {
   const [going, setGoing] = React.useState(false);
   return (
-    <Button asChild variant="outline" className="au-google h-11 w-full rounded-[12px] text-[15px] font-medium" aria-busy={going || undefined}>
-      <a href="/api/auth/google/start" onClick={() => setGoing(true)}>
+    <>
+    <Button type="button" variant="outline" className="au-google h-11 w-full rounded-[12px] text-[15px] font-medium" aria-busy={going || undefined}
+      disabled={!href || going} aria-describedby={need ? 'au-google-need' : undefined}
+      onClick={() => { if (!href) return; setGoing(true); window.location.assign(href); }}>
         {going ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : (
           <svg viewBox="0 0 18 18" width="18" height="18" aria-hidden="true">
             <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z" />
@@ -108,8 +103,9 @@ function GoogleButton({ label }) {
           </svg>
         )}
         {going ? 'Abrindo o Google…' : label}
-      </a>
     </Button>
+    {need && <p className="au-fine au-google-need" id="au-google-need">{need}</p>}
+    </>
   );
 }
 
@@ -236,6 +232,7 @@ export default function AuthScreen({ onDone, resetToken, initialMode, onBack, si
   const pwOk = f.password.length >= MIN_PASSWORD;
   const errInvalid = msg && !msg.ok;
   const showGoogle = cfg.google && (mode === 'login' || mode === 'signup');
+  const gStart = googleStart({ mode, signup: cfg.signup, invite: f.invite, consent: f.consent });
   const showTabs = cfg.signup !== 'closed' && (mode === 'login' || mode === 'signup');
 
   let sub = copy.sub;
@@ -284,9 +281,9 @@ export default function AuthScreen({ onDone, resetToken, initialMode, onBack, si
               </div>
             )}
 
-            {showGoogle && (
+            {showGoogle && mode === 'login' && (
               <>
-                <GoogleButton label={mode === 'signup' ? 'Criar conta com Google' : 'Continuar com Google'} />
+                <GoogleButton label="Continuar com Google" href={gStart.href} />
                 <div className="au-or"><span>ou com e-mail</span></div>
               </>
             )}
@@ -367,6 +364,13 @@ export default function AuthScreen({ onDone, resetToken, initialMode, onBack, si
                   <button type="button" className="au-link self-center" onClick={() => go('login')}><ArrowLeft className="size-3.5" aria-hidden="true" />Voltar para entrar</button>
                 )}
               </form>
+            )}
+
+            {showGoogle && mode === 'signup' && (
+              <>
+                <div className="au-or"><span>ou</span></div>
+                <GoogleButton label="Criar conta com Google" href={gStart.href} need={gStart.need} />
+              </>
             )}
 
             {mode === 'login' && !cfg.signup && <p className="au-fine">Acesso por convite. Peça sua conta ao administrador do estúdio.</p>}

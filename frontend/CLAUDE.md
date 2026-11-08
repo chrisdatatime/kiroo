@@ -75,6 +75,7 @@ src/
 - Acesso (`ui/Auth.jsx`): componentes shadcn (Button/Input/Label) com os tokens da home; `GET /api/config` diz o modo de cadastro, se há Google e envio de e-mail.
   Depois do cadastro vem a etapa do código (`/api/auth/verify`, `/api/auth/resend`; pode confirmar depois: a conta já entra em DEMO; `user.email_verified` em `/api/me`).
   Google é OAuth no servidor (`/api/auth/google/start` → `callback`), só com `STUDIO_GOOGLE_CLIENT_ID/SECRET`; erros voltam como `/?entrar&erro=<código>`.
+  Criar conta com Google leva `intent=signup&consent=1` (+ `invite`) — `ui/googleStart.js` (testado) monta o link e lista as mensagens de erro.
   Sem `STUDIO_SMTP_HOST`, código e link de nova senha vão para o log do servidor (`src/studio/mailer.py`). Não há Clerk: a sessão continua sendo a do servidor Python.
 - Duas coisas diferentes chamadas "créditos": `v.credits` é o medidor da produção (usado/limite) e `v.wallet` é o saldo
   do workspace (`S.credits`). Uma pausa com "saldo de créditos" vira o aviso `kind: 'saldo'` no BudgetBox.
