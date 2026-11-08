@@ -9,6 +9,7 @@ import { ART } from '../landing/art.js';
 import logo from '../assets/brand/wordmark-preto-laranja.svg';
 import { AboutContent } from './About.jsx';
 import { googleStart, GOOGLE_ERRORS } from './googleStart.js';
+import { captchaMessage, captchaNeeded, loadTurnstile } from './turnstile.js';
 import './auth.css';
 
 // Acesso ao Kiroo: entrar, criar conta, confirmar e-mail, esqueci a senha e nova senha (?reset=token).
@@ -109,6 +110,30 @@ function GoogleButton({ label, href, need }) {
   );
 }
 
+// Verificação de segurança (Cloudflare Turnstile). O token vale uma vez: resetKey muda após cada tentativa.
+function TurnstileBox({ siteKey, resetKey, onToken, onFail }) {
+  const host = React.useRef(null);
+  const wid = React.useRef(null);
+  const cb = React.useRef({ onToken, onFail });
+  cb.current = { onToken, onFail };
+  React.useEffect(() => {
+    let dead = false;
+    loadTurnstile().then((ts) => {
+      if (dead || !host.current) return;
+      wid.current = ts.render(host.current, {
+        sitekey: siteKey, theme: 'light', size: 'flexible', language: 'pt-br',
+        callback: (t) => cb.current.onToken(t),
+        'expired-callback': () => cb.current.onToken(''),
+        'timeout-callback': () => cb.current.onToken(''),
+        'error-callback': () => { cb.current.onToken(''); cb.current.onFail('captcha_widget'); },
+      });
+    }).catch(() => { if (!dead) cb.current.onFail('captcha_script'); });
+    return () => { dead = true; try { if (wid.current != null) window.turnstile?.remove(wid.current); } catch { /* já removido */ } wid.current = null; };
+  }, [siteKey]);
+  React.useEffect(() => { try { if (wid.current != null) window.turnstile?.reset(wid.current); } catch { /* sem widget */ } }, [resetKey]);
+  return <div ref={host} className="au-captcha" data-testid="turnstile" />;
+}
+
 // Código de 6 dígitos: um campo real (teclado numérico, autopreenchimento do SMS/e-mail) sob seis caixas visuais.
 function CodeInput({ value, onChange, onComplete, invalid, describedBy }) {
   const ref = React.useRef(null);
@@ -170,6 +195,8 @@ export default function AuthScreen({ onDone, resetToken, initialMode, onBack, si
   const [about, setAbout] = React.useState(false);
   const [sentInfo, setSentInfo] = React.useState(null);   // { sent: bool, text }
   const [cooldown, setCooldown] = React.useState(0);
+  const [captcha, setCaptcha] = React.useState('');      // token do Turnstile (vale uma vez)
+  const [captchaTick, setCaptchaTick] = React.useState(0);
   const headRef = React.useRef(null);
   const first = React.useRef(true);
 
@@ -188,25 +215,27 @@ export default function AuthScreen({ onDone, resetToken, initialMode, onBack, si
   }, [cooldown]);
 
   const set = (k) => (v) => setF((x) => ({ ...x, [k]: v }));
-  const go = (m) => { setMode(m); setMsg(null); setF((x) => ({ ...x, password: '', code: '' })); };
-  const fail = (err) => setMsg({ ok: false, text: sentence(err.message) });
+  const go = (m) => { setMode(m); setMsg(null); setCaptcha(''); setF((x) => ({ ...x, password: '', code: '' })); };
+  const fail = (err) => setMsg({ ok: false, text: captchaMessage(err.code) || sentence(err.message) });
+  const captchaFail = (code) => setMsg({ ok: false, text: captchaMessage(code) });
   const enter = () => { window.history.replaceState(null, '', '/'); onDone(); };
 
   const run = async (fn) => {
     if (busy) return;
     setBusy(true); setMsg(null);
-    try { await fn(); } catch (err) { fail(err); } finally { setBusy(false); }
+    try { await fn(); } catch (err) { fail(err); } finally { setBusy(false); if (needCaptcha) { setCaptcha(''); setCaptchaTick((t) => t + 1); } }  // o token foi usado: widget novo
   };
 
   const submit = (e) => {
     e.preventDefault();
+    if (needCaptcha && mode !== 'verify' && !captcha) return;   // o botão já fica travado; isto cobre o Enter
     run(async () => {
-      if (mode === 'login') { await auth('login', { email: f.email, password: f.password }); enter(); }
+      if (mode === 'login') { await auth('login', { email: f.email, password: f.password, captcha }); enter(); }
       else if (mode === 'signup') {
-        const r = await auth('signup', { name: f.name, email: f.email, password: f.password, invite: f.invite, consent: f.consent });
+        const r = await auth('signup', { name: f.name, email: f.email, password: f.password, invite: f.invite, consent: f.consent, captcha });
         setSentInfo({ sent: !!r.sent, text: r.message }); setCooldown(RESEND_S); go('verify');
       } else if (mode === 'forgot') {
-        const r = await auth('forgot', { email: f.email });
+        const r = await auth('forgot', { email: f.email, captcha });
         setSentInfo({ sent: !!r.sent, text: r.message }); go('sent');
       } else if (mode === 'reset') {
         await auth('reset', { token: resetToken, password: f.password });
@@ -222,12 +251,14 @@ export default function AuthScreen({ onDone, resetToken, initialMode, onBack, si
     setTimeout(enter, 650);
   };
   const resend = () => run(async () => {
-    const r = await auth('resend');
+    const r = await auth('resend', { captcha });
     setSentInfo({ sent: !!r.sent, text: r.message }); setCooldown(RESEND_S);
     setMsg({ ok: !!r.sent, text: r.sent ? 'Enviamos um novo código.' : (r.message || 'Novo código gerado.') });
   });
 
   const copy = COPY[mode];
+  const needCaptcha = captchaNeeded(cfg, mode);
+  const captchaWait = needCaptcha && !captcha;
   const pwShort = mode !== 'login' && f.password.length > 0 && f.password.length < MIN_PASSWORD;
   const pwOk = f.password.length >= MIN_PASSWORD;
   const errInvalid = msg && !msg.ok;
@@ -343,18 +374,22 @@ export default function AuthScreen({ onDone, resetToken, initialMode, onBack, si
                     onComplete={(c) => run(() => verify(c))} />
                 )}
 
+                {needCaptcha && !(mode === 'verify' && msg?.ok) && (
+                  <TurnstileBox siteKey={cfg.turnstile} resetKey={captchaTick} onToken={setCaptcha} onFail={captchaFail} />
+                )}
+
                 <Notice msg={msg} id="au-msg" />
 
                 {!(mode === 'verify' && msg?.ok) && (
                   <SubmitButton busy={busy} busyLabel={copy.busy}
-                    disabled={(mode === 'verify' && f.code.length < 6) || ((mode === 'signup' || mode === 'reset') && !pwOk) || (mode === 'signup' && !f.consent)}>
+                    disabled={(mode === 'verify' && f.code.length < 6) || ((mode === 'signup' || mode === 'reset') && !pwOk) || (mode === 'signup' && !f.consent) || (mode !== 'verify' && captchaWait)}>
                     {copy.cta}
                   </SubmitButton>
                 )}
 
                 {mode === 'verify' && !msg?.ok && (
                   <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                    <button type="button" className="au-link" onClick={resend} disabled={cooldown > 0 || busy}>
+                    <button type="button" className="au-link" onClick={resend} disabled={cooldown > 0 || busy || captchaWait}>
                       {cooldown > 0 ? `Reenviar código em ${cooldown} s` : 'Reenviar código'}
                     </button>
                     <button type="button" className="au-link au-link-quiet" onClick={enter}>Confirmar depois</button>

@@ -132,3 +132,7 @@ span.au-brand { cursor: default; }
   .au-panel, .au-notice, .au-show-img, .au-code-box[data-active]::after { animation: none; }
   .au-seg-thumb, .au-primary .au-arrow, .au-code-box { transition: none; }
 }
+
+/* Turnstile: largura flexível (300 px até a largura do cartão), tema claro; no celular não estoura a coluna */
+.au-captcha { display: block; width: 100%; min-height: 65px; max-width: 100%; overflow: hidden; border-radius: 12px; }
+.au-captcha iframe { max-width: 100%; }

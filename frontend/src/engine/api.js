@@ -40,7 +40,7 @@ export async function auth(action, body = {}) {
   const r = await fetch('/api/auth/' + action, { method: 'POST', credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json', 'X-Studio-Client': 'game' }, body: JSON.stringify(body) });
   const d = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+  if (!r.ok) throw Object.assign(new Error(d.error || `HTTP ${r.status}`), { code: d.code });   // code: erro estável (captcha_*)
   if (action === 'logout') csrf = null;
   return d;
 }
