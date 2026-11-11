@@ -255,8 +255,10 @@ function BudgetBox({ v }) {
     </>);
   if (pz.kind === 'outro') return box('Produção pausada', pz.reason || 'O estúdio pausou esta produção.',
     <button className="g-btn g-sm g-lime" onClick={v.resumeOnly} disabled={!!v.busy}>Retomar</button>);
-  return box('Limite desta produção atingido', pz.reason ? 'O estúdio pausou antes de gastar.' : 'Continuar passaria do limite desta produção.',
-    v.raiseOptions.map((n) => <button key={n} className="g-btn g-sm g-lime" onClick={() => v.raiseLimit(n)} disabled={!!v.busy}>Subir limite para {n} créditos</button>));
+  // Freio interno do Kiroo (orçamento operacional): nunca pede dinheiro nem upgrade ao cliente.
+  return box('Estamos finalizando seu vídeo',
+    'A equipe do Kiroo já foi avisada e avisaremos quando estiver pronto. Você não precisa fazer nada e nada a mais será cobrado por isso.',
+    null);
 }
 
 function TabRevisao({ v }) {
@@ -313,7 +315,15 @@ function TabRevisao({ v }) {
               <strong>Preserva:</strong> as outras cenas, aprovações, direção e identidade.<br />
               <strong>Custo estimado:</strong> {cr(cur.cost)}.
             </div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><button className="g-btn g-lime g-sm" onClick={v.sendAdjust} disabled={v.noIssue || !!v.busy}>Enviar para {cur.who}</button><button className="g-btn g-sm" onClick={v.closeAdjust}>Cancelar</button></div>
+            {v.confirmExtra && v.confirmExtra.scene === cur.n && (
+              <div role="alert" style={{ padding: 10, borderRadius: 10, background: '#fff', border: '2px solid #7A4300', fontSize: 13.5, lineHeight: 1.4 }}>
+                Os ajustes incluídos desta cena já foram usados. Este ajuste extra custa cerca de <strong>{v.confirmExtra.cost} créditos</strong>, reservados do saldo do estúdio. Autorizar?
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button className="g-btn g-lime g-sm" onClick={v.sendAdjust} disabled={v.noIssue || !!v.busy}>{v.confirmExtra && v.confirmExtra.scene === cur.n ? `Autorizar ${v.confirmExtra.cost} créditos e enviar` : `Enviar para ${cur.who}`}</button>
+              <button className="g-btn g-sm" onClick={() => { v.cancelExtra(); v.closeAdjust(); }}>Cancelar</button>
+            </div>
           </div>
         )}
         {cur.tries > 1 && <span className="g-muted" style={{ fontSize: 12.5 }}>Esta cena já teve {cur.tries} versões; as anteriores ficam guardadas no histórico.</span>}

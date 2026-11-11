@@ -31,6 +31,7 @@ class TourBoundary extends React.Component {
   render() { return this.state.failed ? null : this.props.children; }
 }
 import { deriveStage, sceneView, toCredits, creditsToUsd } from './engine/adapter.js';
+import { adjustmentGate, pauseKind } from './ui/pause.js';
 import Shell, { VIEWS } from './shell/Shell.jsx';
 import Central from './shell/Central.jsx';
 import MissionView from './shell/MissionView.jsx';
@@ -597,7 +598,8 @@ export default class App extends React.Component {
     this.act('direcao', () => post(`/api/productions/${P.id}/direction`, { creative: this.state.creative }), 'O Theo passou as cenas adiante. O roteiro está sendo montado.');
     this.setUI({ win: null });
   }
-  fits(credits) { const P = this.prodP(); return P && P.credits.spent + credits <= P.credits.budget; }
+  // O limite operacional é freio interno do servidor: o cliente não é barrado nem convidado a subir limite aqui.
+  fits() { return !!this.prodP(); }
   startImages() {
     const P = this.prodP(); if (!P) return;
     if (!this.fits(P.estimates.images.credits)) { this.setUI({ budgetHit: true }); return; }
@@ -618,18 +620,21 @@ export default class App extends React.Component {
   }
   async sendAdjust() {
     const P = this.prodP(); const kind = this.revKind(); const idx = this.state.ui.revSel; const ui = this.state.ui;
-    const est = kind === 'img' ? P.estimates.redo_image.credits : P.estimates.redo_video.credits;
-    if (!this.fits(est)) { this.setUI({ budgetHit: true }); return; }
+    const stage = kind === 'img' ? 'image' : 'video';
+    const sc = (P.scenes || []).find((x) => x.idx === idx);
+    const gate = adjustmentGate(sc && sc.adjustments, stage);
+    // Ajuste além dos incluídos: só com autorização explícita, mostrando o custo (confirmação dentro do jogo).
+    if (gate.needsAuth && !(ui.confirmExtra && ui.confirmExtra.scene === idx)) { this.setUI({ confirmExtra: { scene: idx, cost: gate.cost } }); return; }
+    const authorize = !!(gate.needsAuth && ui.confirmExtra && ui.confirmExtra.scene === idx);
+    this.setUI({ confirmExtra: null });
     const note = ui.issues.concat((ui.adjText || '').trim() ? [ui.adjText.trim()] : []).join('; ');
-    const ok = await this.act('ajuste', () => post(`/api/productions/${P.id}/reject`, { scene: idx, stage: kind === 'img' ? 'image' : 'video', note }),
+    const ok = await this.act('ajuste', () => post(`/api/productions/${P.id}/reject`, { scene: idx, stage, note, authorize_extra: authorize }),
       (kind === 'img' ? 'A Iris' : 'A Lia') + ' está refazendo só a cena ' + idx + '.');
     this.setUI({ adjust: false, issues: [], adjText: '', learn: ok ? { agent: kind === 'img' ? 'iris' : 'lia', name: kind === 'img' ? 'a Iris' : 'a Lia', decision: 'reject', note, pid: P.id } : null });
   }
   // Cena bloqueada sem material: concede +1 tentativa e o motor gera de novo (só esta cena).
   retryScene(idx) {
     const P = this.prodP(); const kind = this.revKind(); if (!P) return;
-    const est = kind === 'img' ? P.estimates.redo_image.credits : P.estimates.redo_video.credits;
-    if (!this.fits(est)) { this.setUI({ budgetHit: true }); return; }
     this.act('retry', () => post(`/api/productions/${P.id}/retry`, { scene: idx, stage: kind === 'img' ? 'image' : 'video' }),
       (kind === 'img' ? 'A Iris' : 'A Lia') + ' vai tentar a cena ' + idx + ' de novo.');
   }
@@ -637,9 +642,7 @@ export default class App extends React.Component {
   pauseInfo() {
     const P = this.prodP(), S = this.state.S, pol = this.pol();
     const reason = P && P.status === 'paused' ? (P.reason || '') : '';
-    const kind = /provedor de IA sem saldo/i.test(reason) ? 'provedor'
-      : /teto mensal/i.test(reason) ? 'mensal' : /saldo de créditos/i.test(reason) ? 'saldo'
-      : (!reason || /orçamento/i.test(reason)) ? 'producao' : 'outro';
+    const kind = pauseKind(P && P.status === 'paused' ? P.pause_code : null, reason);
     const m = /estimado US\$([\d.]+)/.exec(reason);
     const nextUsd = m ? +m[1] : 0;
     const spentUsd = S ? S.settings.month_spend_usd : 0, capUsd = S ? S.settings.monthly_cap_usd : 0;
@@ -671,14 +674,6 @@ export default class App extends React.Component {
     if (!this.state.ui.confirmCancel) { this.setUI({ confirmCancel: true }); return; }
     this.setUI({ confirmCancel: false, budgetHit: false });
     this.act('cancelar', () => post(`/api/productions/${P.id}/cancel`), 'Produção encerrada. O que já foi gerado continua no histórico.');
-  }
-  raiseLimit(credits) {
-    const P = this.prodP(); if (!P) return;
-    this.act('limite', async () => {
-      await post(`/api/productions/${P.id}/budget`, { value: creditsToUsd(credits, this.pol()) });
-      if (P.status === 'paused') await post(`/api/productions/${P.id}/resume`);
-    }, 'Limite desta produção: ' + cr(credits) + '.');
-    this.setUI({ budgetHit: false });
   }
   exportVideo() {
     const P = this.prodP(); if (!P) return;
@@ -1026,7 +1021,7 @@ export default class App extends React.Component {
       openAdjust: () => this.setUI({ adjust: true }), closeAdjust: () => this.setUI({ adjust: false, issues: [], adjText: '' }),
       approveCur: () => rev && this.approveScene(rev.n), retryCur: () => rev && this.retryScene(rev.n),sendAdjust: () => this.sendAdjust(),
       budgetHit: ui.budgetHit || (P && P.status === 'paused' && ui.budgetDismissed !== P.reason), pauseReason: P && P.status === 'paused' ? P.reason : '',
-      raiseOptions: [credits.budget + 40, credits.budget + 80], raiseLimit: (n) => this.raiseLimit(n),
+      confirmExtra: ui.confirmExtra || null, cancelExtra: () => this.setUI({ confirmExtra: null }),
       dismissBudget: () => this.setUI({ budgetHit: false, confirmCap: null, budgetDismissed: P && P.status === 'paused' ? P.reason : null }),
       confirmCap: ui.confirmCap || null, confirmCapUsd: ui.confirmCapUsd || 0, cancelCap: () => this.setUI({ confirmCap: null }),
       pause: this.pauseInfo(), raiseMonthly: (n) => this.raiseMonthly(n), resumeOnly: () => this.resumeOnly(),
