@@ -41,26 +41,37 @@ def wait_idle(app, pid, timeout=30):
 
 
 # ------------------------------------------------------------- sugestão por regras
-def test_suggestion_for_drinkware_is_contextual_and_honest():
-    out = co.ideas("Kit Garrafa Squeeze com canudo", None, presenter_available=True)
-    assert out["category"] == "bebidas"
-    assert out["suggested_environments"] == ["cozinha", "mesa_trabalho", "treino"]
-    assert out["recommended_proposal"] == "practice" and out["proposal_reason"]
-    assert "não foram analisadas" in out["basis"]
-    assert len({json.dumps(i["choices"], sort_keys=True) for i in out["ideas"]}) == 3  # "outra ideia" muda de fato
+def test_initial_direction_is_fixed_neutral_and_honest():
+    for name in ("Kit Garrafa Squeeze", "Produto qualquer", ""):
+        out = co.ideas(name, None, presenter_available=True)
+        assert out["suggested_environments"] == ["neutro"] and out["recommended_proposal"] == "details"
+        assert "não foram analisadas" in out["basis"] and len(out["ideas"]) == 1
+        c = out["ideas"][0]["choices"]
+        assert c["environment"] == "neutro" and c["tone"] == "natural" and c["details"] == []
+    low = json.dumps(out, ensure_ascii=False).lower()
+    assert "copo" not in low and "garrafa" not in low and "canudo" not in low
 
 
-def test_unknown_category_falls_back_to_safe_details():
-    out = co.ideas("Produto qualquer", "", presenter_available=False)
-    assert out["recommended_proposal"] == "details" and "não sugere usos" in out["proposal_reason"]
+def test_defaults_without_selections_have_no_empty_placeholders():
+    c = co.resolve(CreativeChoices(), "x", None)
+    assert (c.environment, c.proposal, c.tone, c.details) == ("neutro", "details", "natural", [])
+    text = co.compose_direction(c)
+    assert "None" not in text and "{}" not in text and not text.rstrip().endswith("-")
+    assert "neutro e limpo" in co.summary_pt(c) and "Tom" not in co.summary_pt(c)
 
 
 def test_incompatible_details_are_dropped_and_auto_is_resolved():
     c = co.resolve(CreativeChoices(presentation="product_only", environment="treino", proposal="auto",
                                    details=["superficie_clara", "unhas_cuidadas", "luz_natural", "luz_natural"]),
                    "copo", None)
-    assert c.proposal == "practice"
-    assert c.details == ["luz_natural"]  # sem duplicata, sem superfície clara no treino, sem unhas sem mãos
+    assert c.proposal == "details"
+    assert c.details == ["luz_natural"]  # produções antigas: sem duplicata, sem superfície clara no treino, sem unhas sem mãos
+
+
+def test_saved_legacy_choices_still_work():
+    c = co.resolve(CreativeChoices(environment="cozinha", proposal="practice", tone="leve", details=["luz_natural"]))
+    assert co.profile_ids(c)["art_direction"] == "cozinha_sp_alto_padrao"
+    assert "Tom leve" in co.summary_pt(c) and "everyday gestures" in co.compose_direction(c)
 
 
 def test_direction_never_states_product_facts():
@@ -102,10 +113,12 @@ def test_manual_direction_wins_and_auto_stays_available(app):
 def test_preview_works_with_incomplete_form(app):
     status, data = post(app, "/api/creative/preview", {"creative": {}})
     assert status == 200 and data["summary"]
+    assert data["profiles"]["art_direction"].startswith("ambiente_neutro")
+    assert any("neutral, clean environment" in sc["image_prompt"] for sc in data["scenes"])
 
 
 def test_options_endpoint(app):
-    r = app.handle("GET", "/api/creative/options?name=Copo%20com%20al%C3%A7a&category=", HOST, b"")
+    r = app.handle("GET", "/api/creative/options?name=Produto&category=", HOST, b"")
     data = json.loads(r.body)
     assert r.status == 200 and set(data["presentations"]) == {"hands_only", "product_only", "presenter"}
     assert "en" not in data["proposals"]["practice"]  # instruções técnicas não vão para a interface

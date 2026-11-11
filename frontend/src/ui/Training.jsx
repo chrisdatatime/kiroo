@@ -6,8 +6,8 @@ import { getJSON, post, readFile } from '../engine/api.js';
 // Treinar agente: configuração versionada usada nas chamadas reais. Rascunho → teste → ativação. Não retreina modelo.
 const TABS = [['jeito', 'Jeito de trabalhar'], ['refs', 'Referências'], ['exemplos', 'Exemplos e correções'], ['teste', 'Testar agente'], ['historico', 'Histórico']];
 const TASKS = {
-  nina: 'Conferir a ficha de uma garrafa térmica azul com duas fotos.', theo: 'Escrever a primeira cena de um vídeo de um copo com alça.', iris: 'Criar a imagem de abertura de um copo azul sobre a bancada.',
-  lia: 'Animar a imagem de um copo sendo levantado da bancada.', rui: 'Conferir uma imagem em que a tampa do copo parece diferente da foto oficial.', beto: 'Montar três cenas de um produto de cozinha.', _marca: 'Escrever a primeira cena de um vídeo de produto.',
+  nina: 'Conferir a ficha de um organizador azul com duas fotos.', theo: 'Escrever a primeira cena de um vídeo de um organizador de mesa.', iris: 'Criar a imagem de abertura de um organizador azul sobre a mesa.',
+  lia: 'Animar a imagem de um organizador sendo levantado da mesa.', rui: 'Conferir uma imagem em que a tampa do produto parece diferente da foto oficial.', beto: 'Montar três cenas de um produto de uso doméstico.', _marca: 'Escrever a primeira cena de um vídeo de produto.',
 };
 const money = (n) => 'US$ ' + Number(n || 0).toFixed(4).replace('.', ',');
 const when = (s) => { try { return new Date(s).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }); } catch { return s; } };

@@ -72,7 +72,7 @@ class CreativeChoices(BaseModel):
 
     presentation: Literal["hands_only", "product_only", "presenter"] = "hands_only"
     proposal: Literal["practice", "details", "routine", "auto"] = "auto"
-    environment: Literal["cozinha", "mesa_trabalho", "treino", "sala", "outro"] = "cozinha"
+    environment: Literal["neutro", "cozinha", "mesa_trabalho", "treino", "sala", "outro"] = "neutro"
     environment_custom: str = Field(default="", max_length=300)
     tone: Literal["natural", "sofisticado", "leve"] = "natural"
     details: list[str] = Field(default_factory=list, max_length=10)

@@ -36,6 +36,7 @@ import Central from './shell/Central.jsx';
 import MissionView from './shell/MissionView.jsx';
 import TeamView from './shell/TeamView.jsx';
 import { buildPipeline, attention } from './shell/pipeline.js';
+import { splitRequests, joinRequests, summaryRows } from './ui/direcao.js';
 
 // Kiroo — escritório-jogo sobre o motor REAL (servidor Python).
 // O estado da produção vem de /api/state; as ações chamam a API. O jogo (mundo, movimento, personalização)
@@ -692,7 +693,7 @@ export default class App extends React.Component {
 
   summaryText() {
     if (this.state.preview) return this.state.preview.summary;
-    return 'Mãos da Bia mostrando o produto em uma cozinha com luz natural. Três cenas, sem fala.';
+    return 'Mãos da Bia mostrando o produto em ambiente neutro e limpo. Três cenas, sem fala.';
   }
 
   dialogFor(id) {
@@ -859,28 +860,17 @@ export default class App extends React.Component {
     const dir = { ready: !!(o && c), summary: this.summaryText(), locked: idx < 1, done: idx > 1 || (P && P.creative && st !== 'direcao'), working: st === 'direcao' && P && P.creative,
       canApprove: st === 'direcao' && !(P && P.creative && P.running) && !!c };
     if (o && c) {
-      const allowed = Object.entries(o.details).filter(([, x]) => (!x.envs || x.envs.includes(c.environment)) && (!x.presentations || x.presentations.includes(c.presentation))).map(([k]) => k);
       dir.formats = [['product_only', false, false], ['hands_only', true, false], ['presenter', true, true]].map(([id, hand, person]) => ({
         id, hand, person, label: o.presentations[id].label, desc: o.presentations[id].desc, sel: c.presentation === id,
         disabled: id === 'presenter' && !o.presenter_available, pick: () => this.setCreative({ presentation: id }) }));
-      dir.envs = [...new Set([...o.suggested_environments, c.environment !== 'outro' ? c.environment : null].filter(Boolean)), 'outro'].map((id) => ({ id, label: o.environments[id].label, sel: c.environment === id, pick: () => this.setCreative({ environment: id }) }));
-      dir.envCustom = c.environment_custom || ''; dir.isCustom = c.environment === 'outro'; dir.onEnvCustom = (e) => this.setCreative({ environment_custom: e.target.value });
-      dir.proposals = ['practice', 'details', 'routine'].map((id) => ({ id, label: o.proposals[id].label, sel: c.proposal === id || (c.proposal === 'auto' && o.recommended_proposal === id), pick: () => this.setCreative({ proposal: id }) }));
-      dir.tones = Object.entries(o.tones).map(([id, t]) => ({ id, label: t.label, sel: c.tone === id, pick: () => this.setCreative({ tone: id }) }));
-      dir.tweaks = allowed.map((id) => ({ id, label: o.details[id].label, on: c.details.includes(id), pick: () => this.setCreative({ details: c.details.includes(id) ? c.details.filter((x) => x !== id) : c.details.concat(id) }) }));
-      dir.reqs = (c.details_text || '').split(';').map((x) => x.trim()).filter(Boolean).map((text, k, arr) => ({ text, remove: () => this.setCreative({ details_text: arr.filter((_, q) => q !== k).join('; ') }) }));
-      dir.basis = o.basis; dir.reasons = { proposal: o.proposal_reason, presentation: o.presentation_reason };
-      dir.restore = () => this.setCreative(Object.assign({}, o.ideas[0].choices, { details_text: '' }));
-      dir.rows = [
-        { k: 'Formato', v: o.presentations[c.presentation].label }, { k: 'Ambiente', v: c.environment === 'outro' ? (c.environment_custom || 'Outro ambiente') : o.environments[c.environment].label },
-        { k: 'Proposta', v: o.proposals[c.proposal === 'auto' ? o.recommended_proposal : c.proposal].label }, { k: 'Tom', v: o.tones[c.tone].label },
-        { k: 'Áudio', v: 'Sem fala; o vídeo final sai com trilha silenciosa' }, { k: 'Duração', v: '~15 s · 3 cenas' },
-      ];
+      dir.reqs = splitRequests(c.details_text).map((text, k, arr) => ({ text, remove: () => this.setCreative({ details_text: arr.filter((_, q) => q !== k).join('; ') }) }));
+      dir.basis = o.basis;
+      dir.rows = summaryRows(o.presentations, c);
     }
     dir.scenes = s.preview ? s.preview.scenes : [];
     dir.warnings = s.preview ? s.preview.warnings : [];
     dir.reqText = s.reqText; dir.onReq = (e) => this.setState({ reqText: e.target.value });
-    dir.addReq = () => { const v = (s.reqText || '').trim(); if (!v || !c) return; this.setCreative({ details_text: [c.details_text, v].filter(Boolean).join('; ') }); this.setState({ reqText: '' }); this.toast('Theo: anotado! Vou aplicar nas cenas.'); };
+    dir.addReq = () => { const v = (s.reqText || '').trim(); if (!v || !c) return; this.setCreative({ details_text: joinRequests(c.details_text, v) }); this.setState({ reqText: '' }); this.toast('Theo: anotado! Vou aplicar nas cenas.'); };
     dir.approve = () => this.approveDirection(); dir.load = () => this.loadOptions();
 
     // --- imagens / vídeos / revisão ---
@@ -923,7 +913,7 @@ export default class App extends React.Component {
           .map((vt) => ({ ...vt, sel: view === vt.id, pick: () => this.setUI({ revView: vt.id }) })),
       };
     }
-    const issueList = kind === 'img' ? ['Produto diferente', 'Cor incorreta', 'Falta um detalhe (ex.: canudo, tampa)', 'Mãos estranhas', 'Cenário inconsistente'] : ['Movimento artificial', 'Produto deforma', 'Mãos estranhas', 'Cenário muda', 'Objeto novo aparece'];
+    const issueList = kind === 'img' ? ['Produto diferente', 'Cor incorreta', 'Falta um detalhe (ex.: acessório, tampa)', 'Mãos estranhas', 'Cenário inconsistente'] : ['Movimento artificial', 'Produto deforma', 'Mãos estranhas', 'Cenário muda', 'Objeto novo aparece'];
     const issues = issueList.map((lb) => ({ label: lb, sel: ui.issues.indexOf(lb) >= 0, pick: () => { const arr = ui.issues.indexOf(lb) >= 0 ? ui.issues.filter((x) => x !== lb) : ui.issues.concat(lb); this.setUI({ issues: arr }); } }));
 
     // --- personalização (inalterada) ---

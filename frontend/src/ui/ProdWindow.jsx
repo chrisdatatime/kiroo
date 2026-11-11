@@ -1,6 +1,7 @@
 import React from 'react';
 import Boneco from '../Boneco.jsx';
-import { Spinner, CloseButton } from './bits.jsx';
+import { Spinner, CloseButton, FormatArt } from './bits.jsx';
+import { formatPhotoUrl } from './direcao.js';
 
 // Janela da produção: uma aba por agente/etapa, com dados REAIS do motor.
 const Locked = ({ children }) => <div className="g-card" style={{ padding: 18, font: '700 15px/1.4 Instrument Sans,sans-serif' }}>{children}</div>;
@@ -84,14 +85,14 @@ function TabProduto({ v }) {
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <label className="g-label" htmlFor="pattrs">O que aparece nas fotos <span className="g-muted">(opcional)</span></label>
-          <textarea id="pattrs" className="g-field" rows={3} value={d.attrs} onChange={p.setDraft('attrs')} placeholder={'canudo: atravessa a tampa\ninscrição: texto vertical no corpo'} />
-          <span className="g-muted" style={{ fontSize: 12 }}>Ajuda a não perder detalhes como canudo, tampa ou inscrições.</span>
+          <textarea id="pattrs" className="g-field" rows={3} value={d.attrs} onChange={p.setDraft('attrs')} placeholder={'acessório: alça removível\ninscrição: texto vertical no corpo'} />
+          <span className="g-muted" style={{ fontSize: 12 }}>Ajuda a não perder detalhes como acessórios, tampas ou inscrições.</span>
         </div>
       </div>
       <div style={{ flex: '1 1 280px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
         {!p.created && <>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}><label className="g-label" htmlFor="pname">Nome do produto</label><input id="pname" className="g-field" value={d.name} onChange={p.setDraft('name')} placeholder="Copo com alça e canudo" /></div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}><label className="g-label" htmlFor="pcat">Categoria <span className="g-muted">(opcional)</span></label><input id="pcat" className="g-field" value={d.category} onChange={p.setDraft('category')} placeholder="garrafas e copos" /></div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}><label className="g-label" htmlFor="pname">Nome do produto</label><input id="pname" className="g-field" value={d.name} onChange={p.setDraft('name')} placeholder="Ex.: Organizador de mesa com divisórias" /></div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}><label className="g-label" htmlFor="pcat">Categoria <span className="g-muted">(opcional)</span></label><input id="pcat" className="g-field" value={d.category} onChange={p.setDraft('category')} placeholder="Ex.: organização e escritório" /></div>
           <details><summary style={{ font: '800 13px/1 Instrument Sans,sans-serif', minHeight: 30, display: 'flex', alignItems: 'center' }}>Informações do anúncio (opcional)</summary>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 6 }}>
               <label className="g-label" htmlFor="pver">Comprovadas (vão para a legenda)</label><textarea id="pver" className="g-field" rows={2} value={d.verified} onChange={p.setDraft('verified')} placeholder="cor: azul-claro" />
@@ -121,44 +122,22 @@ function TabDirecao({ v }) {
       {isDir ? (
         <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', alignItems: 'flex-start' }}>
           <div style={{ flex: '999 1 420px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div className="g-card" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10, background: '#FFFFFF' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <span className="g-label" style={{ color: '#3F5200' }}>Proposta do Theo · editável</span><span style={{ flex: 1 }} />
-                <button className="g-btn g-quiet g-sm" onClick={d.restore} disabled={d.done}>Restaurar proposta</button>
-              </div>
-              <p className="fred" style={{ margin: 0, fontSize: 19, lineHeight: 1.35, fontWeight: 500 }} aria-live="polite">{d.summary}</p>
-              <span className="g-muted" style={{ fontSize: 12 }}>{d.basis}</span>
-            </div>
             <div role="group" aria-label="Formato" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,minmax(0,1fr))', gap: 10 }}>
               {d.formats.map((f) => (
                 <button key={f.id} className="g-pick" aria-pressed={f.sel} onClick={f.pick} disabled={d.done || f.disabled} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <span style={{ height: 70, borderRadius: 10, background: '#F4E3CF', display: 'grid', placeItems: 'center', border: '1px solid #E7E7E4' }}>
-                    <svg viewBox="0 0 80 60" width="80" height="60" aria-hidden="true">
-                      {f.person && <g><circle cx="54" cy="18" r="9" fill="#F1C7A5" stroke="#0E0E10" strokeWidth="2" /><path d="M42 50 C42 34 47 29 54 29 C61 29 66 34 66 50 Z" fill="#F28C6B" stroke="#0E0E10" strokeWidth="2" /></g>}
-                      <path d="M30 26 L32 50 Q32 53 36 53 L42 53 Q46 53 46 50 L48 26 Z" fill="#B9D8F2" stroke="#0E0E10" strokeWidth="2" />
-                      <rect x="28" y="21" width="22" height="6" rx="2" fill="#9CC3E6" stroke="#0E0E10" strokeWidth="2" />
-                      {f.hand && <g><ellipse cx="25" cy="44" rx="8" ry="5" fill="#F1C7A5" stroke="#0E0E10" strokeWidth="2" /><ellipse cx="53" cy="44" rx="8" ry="5" fill="#F1C7A5" stroke="#0E0E10" strokeWidth="2" /></g>}
-                      <path d="M8 54 H72" stroke="#0E0E10" strokeWidth="2" />
-                    </svg>
+                  <span style={{ height: 90, borderRadius: 10, background: '#F2F2EF', display: 'grid', placeItems: 'center', border: '1px solid #E7E7E4', overflow: 'hidden' }}>
+                    <FormatArt hand={f.hand} person={f.person} src={formatPhotoUrl(f.id, import.meta.env.BASE_URL)} />
                   </span>
                   <span style={{ font: '800 14px/1.2 Instrument Sans,sans-serif' }}>{f.label}</span>
                   <span className="g-muted" style={{ font: '600 12.5px/1.3 Instrument Sans,sans-serif' }}>{f.desc}</span>
                 </button>
               ))}
             </div>
-            {[['Onde acontece', d.envs], ['Proposta', d.proposals], ['Tom', d.tones], ['Ajustes rápidos', d.tweaks]].map(([label, list]) => (
-              <div key={label} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <span className="g-label">{label}{label === 'Proposta' && <span className="g-muted" style={{ fontWeight: 600, textTransform: 'none', letterSpacing: 0 }}> · sugerida: {d.reasons.proposal}</span>}</span>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  {list.map((t) => <button key={t.id} className="g-chip" aria-pressed={t.sel || t.on} onClick={t.pick} disabled={d.done}>{(t.sel || t.on) && <Check />}{t.label}</button>)}
-                </div>
-              </div>
-            ))}
-            {d.isCustom && <input className="g-field" value={d.envCustom} onChange={d.onEnvCustom} placeholder="Ex.: varanda com plantas e mesa de madeira" aria-label="Descreva o ambiente" disabled={d.done} />}
+            <span className="g-muted" style={{ fontSize: 12 }}>{d.basis}</span>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <label className="g-label" htmlFor="req">Quer mudar alguma coisa?</label>
               <div style={{ display: 'flex', gap: 8 }}>
-                <input id="req" className="g-field" placeholder="Quero movimentos bem delicados e o canudo sempre visível." value={d.reqText} onChange={d.onReq} disabled={d.done} />
+                <input id="req" className="g-field" placeholder="Ex.: movimentos lentos e enquadramento mais próximo do produto." value={d.reqText} onChange={d.onReq} disabled={d.done} />
                 <button className="g-btn" onClick={d.addReq} disabled={d.done}>Pedir ao Theo</button>
               </div>
               {d.reqs.map((rq, k) => (

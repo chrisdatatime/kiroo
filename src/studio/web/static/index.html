@@ -659,10 +659,10 @@ function newView() {
   if (W.step === 1) body = `
     <p class="eyebrow">Etapa 1 de 4</p><h1>Qual produto vamos mostrar?</h1>
     <p class="lead">Só o essencial. Essas informações aparecem na ficha e no link da publicação.</p>
-    ${fieldHtml("name", "Nome do produto", { ph: "Ex.: Copo com alça e canudo", hint: "Evite números do anúncio (como 900ml): só entram na legenda se estiverem nas informações comprovadas." }, errs)}
+    ${fieldHtml("name", "Nome do produto", { ph: "Ex.: Organizador de mesa com divisórias", hint: "Evite números do anúncio (como 900ml): só entram na legenda se estiverem nas informações comprovadas." }, errs)}
     ${fieldHtml("variant", "Cor ou variante", { ph: "Ex.: azul-claro", hint: "A mesma que aparece nas fotos." }, errs)}
     ${fieldHtml("affiliate_link", "Link de afiliado Shopee", { type: "url", ph: "https://s.shopee.com.br/…", hint: "Guardamos exatamente como você colar." }, errs)}
-    ${fieldHtml("category", "Categoria", { opt: true, ph: "Ex.: garrafas e copos", hint: "Ajuda a sugerir ambientes que combinam com o produto." }, errs)}
+    ${fieldHtml("category", "Categoria", { opt: true, ph: "Ex.: organização e escritório", hint: "Ajuda a sugerir ambientes que combinam com o produto." }, errs)}
     <details data-k="facts" style="margin-top:var(--s5)"><summary>Informações do anúncio <span class="opt-tag">Opcional</span></summary>
       ${fieldHtml("verified", "Informações comprovadas", { area: true, opt: true, ph: "cor: azul-claro", hint: "Uma por linha. Só estas podem aparecer na legenda." }, errs)}
       ${fieldHtml("seller_claims", "Alegações do vendedor, não verificadas", { area: true, opt: true, ph: "capacidade: 900 ml", hint: "Ficam registradas, mas não são afirmadas no vídeo nem na legenda." }, errs)}
@@ -950,7 +950,7 @@ function sceneCard(sc, p) {
   const st = sc.status === "video_approved" ? "okp" : stage ? "needs" : "";
   let actions = "";
   if (stage && !p.running) actions = `<label class="f" for="note-${key}">O que corrigir? <span class="opt-tag">obrigatório só para reprovar</span></label>
-    <textarea id="note-${key}" data-draft="${key}" placeholder="Ex.: faltou o canudo atravessando a tampa">${esc(drafts[key] || "")}</textarea>
+    <textarea id="note-${key}" data-draft="${key}" placeholder="Ex.: faltou o acessório visível na foto">${esc(drafts[key] || "")}</textarea>
     <div class="row" style="margin-top:8px"><button class="btn primary" data-act="approve" data-scene="${sc.idx}" data-stage="${stage}">Aprovar ${stage === "image" ? "imagem" : "vídeo"}</button>
       <button class="btn danger" data-act="reject" data-scene="${sc.idx}" data-stage="${stage}">Reprovar e pedir correção</button>
       ${stage === "video" ? `<label class="small muted"><input type="checkbox" data-redo="${key}"> refazer a imagem também</label>` : ""}</div>`;

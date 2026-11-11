@@ -1,21 +1,20 @@
 import React from 'react';
 
-// Ilustração do copo (placeholder — não é foto real do produto)
-export function Cup({ fill, lid, width = 96, height = 112, sw = 3, hands = false, noHandle = false }) {
+// Ilustração neutra de cada formato da Direção (objeto genérico, sombra suave, tokens da marca).
+// Se existir assets/direcao/<formato>.webp, a foto real aparece no lugar; senão, este SVG.
+export function FormatArt({ hand = false, person = false, src = null }) {
+  const [broken, setBroken] = React.useState(false);
+  if (src && !broken) return <img src={src} alt="" width="120" height="90" onError={() => setBroken(true)} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 10 }} />;
+  const ink = '#0E0E10', paper = '#FAFAF8', line = '#E7E7E4', muted = '#F2F2EF';
   return (
-    <svg viewBox="0 0 120 140" width={width} height={height} aria-hidden="true">
-      {!noHandle && <path d="M80 46 C104 46 104 98 78 100" fill="none" stroke="#17234B" strokeWidth="9" strokeLinecap="round" />}
-      {!noHandle && <path d="M80 46 C104 46 104 98 78 100" fill="none" stroke={fill} strokeWidth="4" strokeLinecap="round" />}
-      <path d="M32 32 L38 122 Q39 128 46 128 L66 128 Q73 128 74 122 L80 32 Z" fill={fill} stroke="#17234B" strokeWidth={sw} />
-      <rect x="28" y="20" width="56" height="13" rx="4" fill={lid} stroke="#17234B" strokeWidth={sw} />
-      <rect x="47" y="12" width="18" height="9" rx="2" fill="#17234B" />
-      {hands && (
-        <g>
-          <ellipse cx="30" cy="104" rx="16" ry="10" fill="#F1C7A5" stroke="#17234B" strokeWidth="3" />
-          <ellipse cx="84" cy="108" rx="15" ry="9" fill="#F1C7A5" stroke="#17234B" strokeWidth="3" />
-          <path d="M20 100 l3 -2 M26 98 l3 -2" stroke="#E7A3A3" strokeWidth="3" strokeLinecap="round" />
-        </g>
-      )}
+    <svg viewBox="0 0 120 90" width="120" height="90" aria-hidden="true" style={{ maxWidth: '100%' }}>
+      <defs><filter id="fa-soft" x="-30%" y="-100%" width="160%" height="300%"><feGaussianBlur stdDeviation="3" /></filter></defs>
+      <rect x="0" y="62" width="120" height="28" fill={line} />
+      <ellipse cx="60" cy="68" rx="26" ry="5" fill={ink} opacity="0.16" filter="url(#fa-soft)" />
+      {person && <g><circle cx="92" cy="24" r="10" fill={muted} stroke={ink} strokeWidth="2" /><path d="M76 62 C76 44 83 38 92 38 C101 38 108 44 108 62 Z" fill={paper} stroke={ink} strokeWidth="2" /></g>}
+      <rect x="44" y="30" width="32" height="36" rx="6" fill={paper} stroke={ink} strokeWidth="2.5" />
+      <rect x="44" y="30" width="32" height="9" rx="4" fill={muted} stroke={ink} strokeWidth="2.5" />
+      {hand && <g fill={muted} stroke={ink} strokeWidth="2.5"><ellipse cx="38" cy="56" rx="9" ry="6" /><ellipse cx="82" cy="56" rx="9" ry="6" /></g>}
     </svg>
   );
 }

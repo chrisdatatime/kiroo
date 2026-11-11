@@ -1,0 +1,12 @@
+{
+  "kind": "art_direction",
+  "version": "v1",
+  "created": "2026-11-11",
+  "negative_en": "No text, captions, prices, logos, watermarks, user-interface elements, notifications or third-party names in the image.",
+  "id": "ambiente_neutro",
+  "source": "Padrão fixo do servidor para a etapa Direção (sem escolha de ambiente pelo usuário).",
+  "description_pt": "Ambiente neutro e limpo: superfície clara, fundo discreto e luz suave.",
+  "environment_en": "SETTING: neutral, clean environment with a light-colored surface and an uncluttered, softly blurred background.",
+  "lighting_en": "LIGHT: soft, even natural-looking light with gentle shadows.",
+  "camera_en": "CAMERA LOOK: realistic footage from a good-quality smartphone, natural colors, focus on the product, no 3D-render plastic look."
+}
