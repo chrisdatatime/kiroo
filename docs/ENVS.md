@@ -23,7 +23,8 @@ Como ler as colunas:
 | `STUDIO_ENV` | **sim** | não | execução | `staging` | Define o prefixo no bucket de backup (`staging/`) e liga os avisos de ambiente. Só aceita `dev`, `staging` ou `production`; qualquer outra coisa impede a subida. |
 | `STUDIO_MODE` | **sim** | não | execução | `simulated` | Esteira inteira simulada: nenhum provedor pago é chamado. |
 | `STUDIO_ALLOW_PAID_CALLS` | **sim** | não | execução | `0` | Portão único de chamadas pagas (Gemini e Anthropic). Com `0` nada pago roda, mesmo se houver chave. |
-| `STUDIO_MONTHLY_CAP_USD` | não | não | execução | `0` | Teto mensal da plataforma. Com `STUDIO_ALLOW_PAID_CALLS=0` não tem efeito; deixe `0` para não haver teto a liberar por engano. |
+| `STUDIO_MONTHLY_CAP_USD` | não | não | execução | `0` | Teto mensal da plataforma e **limite máximo** do teto de qualquer conta (`studio admin set-cap --usd N` recusa N acima dele; o gasto vale o menor dos dois). Com `STUDIO_ALLOW_PAID_CALLS=0` não tem efeito; deixe `0` para não haver teto a liberar por engano. |
+| `STUDIO_DEFAULT_PRODUCTION_CAP_CREDITS` | não | não | execução | *(não definir; padrão `80`)* | Limite padrão, em créditos, de uma produção nova (a tela não pergunta mais). Aplicado no servidor e limitado pelo teto efetivo do estúdio (menor entre o da conta e `STUDIO_MONTHLY_CAP_USD`). Valor ausente, inválido ou ≤ 0 volta a 80: produção nunca fica sem limite. |
 | `STUDIO_KILL_SWITCH` | não | não | execução | *(não definir)* | `1` bloqueia qualquer chamada paga em qualquer ambiente. Trava de emergência; com `ALLOW_PAID_CALLS=0` já é redundante. |
 
 > Em staging nunca coloque `GEMINI_API_KEY` nem `ANTHROPIC_API_KEY`. Sem chave o modo simulado funciona

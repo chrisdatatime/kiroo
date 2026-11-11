@@ -60,14 +60,42 @@ Para a pessoa escolher a própria senha, crie a conta e mande um link: `studio a
 |---|---|
 | Liberar o estúdio para produções reais | `studio admin allow-real --email ana@exemplo.com` |
 | Voltar para DEMO (e bloquear o real) | `studio admin deny-real --email ana@exemplo.com` |
+| Ver modo, teto da conta e teto efetivo de cada estúdio | `studio admin list` |
+| Trocar o modo do estúdio (`real` só se estiver liberado) | `studio admin set-mode --email ana@exemplo.com --mode real` (ou `simulated`) |
+| Definir o teto mensal do estúdio em US$ | `studio admin set-cap --email ana@exemplo.com --usd 3` |
+
+- **Modo** (`simulated` = DEMO, `real`) e **teto** (`monthly_cap_usd`) são por estúdio. Conta nova nasce em `simulated` com
+  teto US$ 0. `allow-real` só *libera*; quem liga é `set-mode real` (ou a própria pessoa em Minha conta).
+- `set-mode real` recusa estúdio sem `allow-real`. `deny-real` volta o estúdio para `simulated`.
+- `set-cap --usd N` aceita N de 0 até `STUDIO_MONTHLY_CAP_USD` (teto da plataforma); acima disso, valor negativo, `nan`
+  ou `inf` são recusados e nada muda. Com a plataforma em 0, só o 0 passa.
+- **Teto efetivo = o menor entre o da conta e o da plataforma.** É o que o gasto realmente respeita (produções,
+  testes de treinamento e chat com IA). Teto efetivo 0 = nenhuma chamada paga: o estúdio opera como DEMO.
+  A tela de Minha conta também recusa teto de conta acima do da plataforma.
+- Cada `set-mode`/`set-cap` entra no extrato do estúdio como "Ajuste" de 0 crédito com a nota
+  (`admin set-mode: simulated -> real`, `admin set-cap: US$0.00 -> US$3.00 (plataforma US$5.00)`), com autor `cli`.
+  Nenhum valor de segredo é impresso.
+
+Roteiro para ligar o real na conta de teste do staging (plataforma com `STUDIO_MONTHLY_CAP_USD=5`):
+
+```bash
+studio admin allow-real --email voce@kiroo.app
+studio admin set-cap    --email voce@kiroo.app --usd 5
+studio admin set-mode   --email voce@kiroo.app --mode real
+studio admin list
+```
 
 Liberar o estúdio não basta para gastar. A chamada paga só sai quando **todos** valem:
 
 1. `STUDIO_KILL_SWITCH` diferente de `1` (o kill switch bloqueia Gemini e Anthropic em qualquer ambiente).
 2. `STUDIO_ALLOW_PAID_CALLS=1` (padrão 0 em staging/produção).
 3. `STUDIO_MONTHLY_CAP_USD` > 0 (teto do mês da plataforma inteira; obrigatório em staging/produção) e ainda com folga.
-4. Teto diário do agente (`STUDIO_AGENT_DAILY_CAP_USD`, se definido), teto mensal do estúdio (a pessoa define ao
-   desligar o DEMO), orçamento da produção e saldo de créditos (estúdios não isentos).
+4. Teto diário do agente (`STUDIO_AGENT_DAILY_CAP_USD`, se definido), teto mensal efetivo do estúdio (> 0; veja
+   `set-cap`), orçamento da produção e saldo de créditos (estúdios não isentos).
+
+Limite de cada produção: a tela "Nova produção" não pede mais o limite. O servidor aplica
+`STUDIO_DEFAULT_PRODUCTION_CAP_CREDITS` (padrão 80 créditos), nunca acima do teto efetivo do estúdio, e a produção
+pausa antes de ultrapassá-lo (o limite pode ser subido depois na própria produção).
 
 Para cortar todo gasto na hora: `STUDIO_KILL_SWITCH=1` e reinicie o serviço. As produções em andamento pausam com aviso
 amigável e retomam quando o kill switch sair. Confira com `python -m studio doctor` (linha "portão de chamadas pagas").
