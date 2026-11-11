@@ -23,9 +23,10 @@ def summary_pt(choices) -> str:
 def product_block(sheet: ProductSheet) -> str:
     p = sheet.product
     attrs = "; ".join(f"{k}: {v}" for k, v in p.visual_attributes.items())
+    variant = f"; variant: \"{p.variant.strip()}\"" if p.variant.strip() else ""
     lines = [
         f"PRODUCT: faithfully reproduce the exact product shown in the official reference photos "
-        f"(listing name: \"{p.name}\"; variant: \"{p.variant}\").",
+        f"(listing name: \"{p.name}\"{variant}).",
     ]
     if attrs:
         lines.append(f"Visible attributes to preserve exactly: {attrs}.")
@@ -124,10 +125,10 @@ def render_markdown(script: Script, sheet: ProductSheet, simulated: bool) -> str
     if simulated:
         out.append("> **MODO SIMULADO** — roteiro gerado por template, sem refinamento por IA.\n")
     out += [
-        f"# Roteiro — {p.name} ({p.variant})", "",
+        f"# Roteiro — {p.name}" + (f" ({p.variant.strip()})" if p.variant.strip() else ""), "",
         f"- Formato: `{script.format_id}` · {script.aspect_ratio} · ~{script.total_target_s:.0f}s · áudio: {script.audio}",
         f"- Planejamento: {script.planner or 'template'}",
-        f"- Link de afiliado (preservado): {p.affiliate_link}",
+        *([f"- Link de afiliado (preservado): {p.affiliate_link}"] if p.affiliate_link.strip() else []),
         f"- Contexto do vídeo (operador): {p.video_context or '—'}",
         *([f"- Ideia do vídeo: {summary_pt(p.creative)}"] if p.creative else []), "",
         "Esteira por cena: referências oficiais → imagem estática aprovada → animação dessa imagem → montagem.", "",

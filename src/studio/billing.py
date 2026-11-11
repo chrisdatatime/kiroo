@@ -27,6 +27,12 @@ class CreditPolicy:
             return 0
         return math.ceil(usd * self.fx_brl_per_usd * self.margin / self.credit_price_brl - 1e-9)
 
+    def usd(self, credits: float) -> float:
+        """Inverso de `credits`: quanto custo (US$) cabe em N créditos."""
+        if credits <= 0:
+            return 0.0
+        return credits * self.credit_price_brl / (self.fx_brl_per_usd * self.margin)
+
     def describe(self) -> str:
         tag = " (provisório)" if self.provisional else ""
         return (f"1 crédito = R$ {self.credit_price_brl:.2f}; custo × câmbio R$ {self.fx_brl_per_usd:.2f} × "
@@ -41,6 +47,28 @@ def policy() -> CreditPolicy:
         credit_price_brl=float(env("STUDIO_CREDIT_PRICE_BRL") or 1.00),
         provisional=(env("STUDIO_CREDIT_POLICY_FINAL") or "").lower() not in {"1", "true", "sim"},
     )
+
+
+DEFAULT_PRODUCTION_CAP_CREDITS = 80
+
+
+def default_production_cap_credits() -> int:
+    """STUDIO_DEFAULT_PRODUCTION_CAP_CREDITS: limite padrão de uma produção, aplicado no servidor (padrão 80).
+    Valor ausente, inválido ou <= 0 volta ao padrão: a produção nunca fica sem limite."""
+    try:
+        v = int(float(os.environ.get("STUDIO_DEFAULT_PRODUCTION_CAP_CREDITS") or DEFAULT_PRODUCTION_CAP_CREDITS))
+    except (ValueError, OverflowError):
+        return DEFAULT_PRODUCTION_CAP_CREDITS
+    return v if v > 0 else DEFAULT_PRODUCTION_CAP_CREDITS
+
+
+def default_production_budget_usd(account_cap_usd: float | None = None) -> float:
+    """Orçamento (US$) de uma produção nova sem limite informado: o padrão em créditos convertido pela política vigente,
+    limitado pelo teto efetivo do estúdio (conta/plataforma) quando houver. Teto efetivo 0 → 0 (a produção pausa)."""
+    usd = policy().usd(default_production_cap_credits())
+    if account_cap_usd is not None:
+        usd = min(usd, max(float(account_cap_usd), 0.0))
+    return usd
 
 
 def stage_estimates(settings, n_scenes: int = 3, n_refs: int = 4) -> dict:

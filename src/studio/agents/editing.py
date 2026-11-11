@@ -119,7 +119,7 @@ def validate_edit_plan(plan: EditPlan, probes: dict[int, dict], script: Script, 
 def build_caption(sheet: ProductSheet, fmt: dict) -> tuple[str, list[str]]:
     """Legenda baseada só na ficha validada. Retorna (texto, alertas)."""
     p = sheet.product
-    lines = [f"{p.name} — {p.variant}"]
+    lines = [f"{p.name} — {p.variant.strip()}" if p.variant.strip() else p.name]
     facts = [c for c in p.claims if c.kind == ClaimKind.VERIFIED and c.text]
     if facts:
         lines.append("")

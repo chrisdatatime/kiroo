@@ -52,8 +52,6 @@ def prepare_product(product: ProductInput, storage: ProductionStorage, presenter
         issues.append(Issue(code="screen_recording_context_only", blocking=False,
                             message="Gravação de tela registrada apenas como contexto; interface, notificações e "
                                     "nomes de terceiros não entram nas cenas."))
-    if not product.variant.strip():
-        issues.append(Issue(code="variant_missing", blocking=True, message="Informe a cor/variante exata."))
     if not product.visual_attributes:
         issues.append(Issue(code="visual_attributes_missing", blocking=False,
                             message="Sem atributos visuais descritos; o prompt dependerá apenas das fotos."))

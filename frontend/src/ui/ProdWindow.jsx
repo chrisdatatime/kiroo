@@ -47,8 +47,8 @@ function TabProduto({ v }) {
           </div>
           <div style={{ flex: 1, minWidth: 220, display: 'flex', flexDirection: 'column', gap: 4 }}>
             <strong className="fred" style={{ fontSize: 18, fontWeight: 600 }}>{p.name}</strong>
-            <span style={{ fontSize: 14, fontWeight: 700 }}>{p.variant}</span>
-            <span className="g-muted" style={{ fontSize: 12, wordBreak: 'break-all' }}>{p.link}</span>
+            {p.variant && <span style={{ fontSize: 14, fontWeight: 700 }}>{p.variant}</span>}
+            {p.link && <span className="g-muted" style={{ fontSize: 12, wordBreak: 'break-all' }}>{p.link}</span>}
           </div>
         </div>
         {p.issues.length > 0 && <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13.5, lineHeight: 1.5 }}>{p.issues.map((i, k) => <li key={k} style={{ color: i.blocking ? '#9A2E22' : '#5C3300' }}>{i.blocking ? 'Bloqueia: ' : 'Atenção: '}{i.message}</li>)}</ul>}
@@ -69,7 +69,7 @@ function TabProduto({ v }) {
         <span className="g-label">Fotos oficiais do produto</span>
         <label className="g-pick" style={{ padding: 16, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer', borderStyle: 'dashed' }}>
           <strong style={{ fontSize: 15 }}>Escolher fotos</strong>
-          <span className="g-muted" style={{ fontSize: 12.5 }}>JPG, PNG ou WEBP desta variante. Frente, tampa e detalhe costumam bastar.</span>
+          <span className="g-muted" style={{ fontSize: 12.5 }}>JPG, PNG ou WEBP do produto. Frente, tampa e detalhe costumam bastar.</span>
           <input type="file" multiple accept="image/jpeg,image/png,image/webp,video/mp4" onChange={p.addFiles} style={{ position: 'absolute', opacity: 0, width: 1, height: 1 }} />
         </label>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))', gap: 10 }}>
@@ -91,20 +91,13 @@ function TabProduto({ v }) {
       <div style={{ flex: '1 1 280px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
         {!p.created && <>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}><label className="g-label" htmlFor="pname">Nome do produto</label><input id="pname" className="g-field" value={d.name} onChange={p.setDraft('name')} placeholder="Copo com alça e canudo" /></div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}><label className="g-label" htmlFor="pvar">Cor ou variante</label><input id="pvar" className="g-field" value={d.variant} onChange={p.setDraft('variant')} placeholder="azul-claro" /></div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}><label className="g-label" htmlFor="plink">Link de afiliado</label><input id="plink" className="g-field" type="url" value={d.link} onChange={p.setDraft('link')} placeholder="https://s.shopee.com.br/…" /><span className="g-muted" style={{ fontSize: 12 }}>Guardado exatamente como você colar.</span></div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}><label className="g-label" htmlFor="pcat">Categoria <span className="g-muted">(opcional)</span></label><input id="pcat" className="g-field" value={d.category} onChange={p.setDraft('category')} placeholder="garrafas e copos" /></div>
           <details><summary style={{ font: '800 13px/1 Instrument Sans,sans-serif', minHeight: 30, display: 'flex', alignItems: 'center' }}>Informações do anúncio (opcional)</summary>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 6 }}>
               <label className="g-label" htmlFor="pver">Comprovadas (vão para a legenda)</label><textarea id="pver" className="g-field" rows={2} value={d.verified} onChange={p.setDraft('verified')} placeholder="cor: azul-claro" />
               <label className="g-label" htmlFor="pcl">Alegações do vendedor (não serão afirmadas)</label><textarea id="pcl" className="g-field" rows={2} value={d.claims} onChange={p.setDraft('claims')} placeholder="capacidade: 900 ml" />
             </div></details>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <label className="g-label" htmlFor="plim">Limite desta produção</label>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}><input id="plim" className="g-field" type="number" min="0" step="10" value={d.limit} onChange={p.setDraft('limit')} style={{ maxWidth: 120 }} /><strong>créditos</strong></div>
-            <span className="g-muted" style={{ fontSize: 12 }}>Uma produção de 3 cenas costuma usar ~55 créditos sem refações. O estúdio pausa antes de passar do limite.</span>
-          </div>
-          <div className="g-card" style={{ padding: 12, fontSize: 13, display: 'flex', gap: 8 }}><span aria-hidden="true">–</span><span className="g-muted">Importar fotos direto do link ainda não está disponível: por enquanto, as fotos vêm de você.</span></div>
+          <div className="g-card" style={{ padding: 12, fontSize: 13, display: 'flex', gap: 8 }}><span aria-hidden="true">–</span><span className="g-muted">Importar fotos direto de um link de marketplace ainda não está disponível: por enquanto, as fotos vêm de você.</span></div>
           <button className="g-btn g-lime" onClick={p.confirm} disabled={!!v.busy}>{v.busy === 'produto' ? 'Enviando fotos…' : 'Confirmar e entregar ao Theo'}</button>
           {p.missing.length > 0 && <span className="g-muted" style={{ fontSize: 12.5 }}>Falta: {p.missing.join(', ')}.</span>}
         </>}
@@ -438,7 +431,7 @@ function TabEntrega({ v }) {
         </div>
         <div className="g-card" style={{ padding: 12, display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: '8px 14px', fontSize: 13.5 }}>
           <div><span className="g-label">Produto</span><br /><strong>{v.P && v.P.product.name}</strong></div>
-          <div><span className="g-label">Variante</span><br /><strong>{v.P && v.P.product.variant}</strong></div>
+          {v.P && v.P.product.variant && <div><span className="g-label">Variante</span><br /><strong>{v.P.product.variant}</strong></div>}
           <div><span className="g-label">Duração</span><br /><strong>~15 s · 3 cenas</strong></div>
           <div><span className="g-label">Créditos usados</span><br /><strong>{v.credits.spent}</strong> <span className="g-muted">estimativa</span></div>
         </div>

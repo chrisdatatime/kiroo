@@ -59,7 +59,7 @@ const LS = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* armazenamento indisponível */ } },
 };
-const EMPTY_DRAFT = { name: '', variant: '', link: '', category: '', attrs: '', verified: '', claims: '', limit: 80 };
+const EMPTY_DRAFT = { name: '', category: '', attrs: '', verified: '', claims: '' };
 const ROLES = [['front', 'Frente'], ['side', 'Lateral'], ['lid', 'Tampa'], ['detail', 'Detalhe'], ['back', 'Traseira'], ['top', 'Topo'], ['interior', 'Interior'], ['other', 'Outra']];
 const DEFAULT_ROLES = ['front', 'side', 'lid', 'detail', 'interior'];
 const cr = (n) => `${n} crédito${n === 1 ? '' : 's'}`;
@@ -521,19 +521,17 @@ export default class App extends React.Component {
   draftErrors() {
     const d = this.state.draft, e = [];
     if (!d.name.trim()) e.push('o nome do produto');
-    if (!d.variant.trim()) e.push('a cor ou variante');
-    if (!/^https:\/\/([a-z0-9-]+\.)*(shopee\.com\.br|shp\.ee|shope\.ee)\//i.test(d.link.trim())) e.push('o link de afiliado da Shopee');
     if (!this.state.files.some((f) => !f.isVideo)) e.push('ao menos uma foto do produto');
     return e;
   }
   confirmProduct() {
     const errs = this.draftErrors();
     if (errs.length) { this.toast('Falta ' + errs.join(', ') + '.'); return; }
-    const d = this.state.draft, pol = this.pol();
+    const d = this.state.draft;
     this.act('produto', async () => {
       const r = await post('/api/productions', {
-        name: d.name, variant: d.variant, affiliate_link: d.link.trim(), category: d.category, visual_attributes: d.attrs,
-        verified: d.verified, seller_claims: d.claims, budget: creditsToUsd(+d.limit || 0, pol), flow: 'game', start: false, files: this.filePayload(),
+        name: d.name, category: d.category, visual_attributes: d.attrs,
+        verified: d.verified, seller_claims: d.claims, flow: 'game', start: false, files: this.filePayload(),
         autonomy: this.state.pilot,
       });
       this.setState({ pid: r.pid, draftMode: false, files: [], creative: null, preview: null, caption: null });
@@ -706,7 +704,7 @@ export default class App extends React.Component {
     const curScene = (kind) => { const k = sc.find((x) => x[kind] === 'gerando'); return k ? String(k.idx) : ''; };
     const est = P ? P.estimates : null;
     if (id === 'nina') {
-      if (!P) return { line: 'Oi! Sou a Nina, cuido da preparação. Me passa o link de afiliado, o nome, a cor e as fotos oficiais do produto. A importação automática do link ainda não existe, então as fotos vêm de você.', opts: [open('produto', 'Abrir ficha do produto', true), ok('Depois')] };
+      if (!P) return { line: 'Oi! Sou a Nina, cuido da preparação. Me passa o nome e as fotos oficiais do produto. A importação automática por link de marketplace ainda não existe, então as fotos vêm de você.', opts: [open('produto', 'Abrir ficha do produto', true), ok('Depois')] };
       if (P.status === 'awaiting_references') return { line: 'Conferi a ficha e falta material: ' + ((P.reason || '').slice(0, 160)) + ' Me manda fotos válidas?', opts: [open('produto', 'Ver o que falta', true), ok('Depois')] };
       if (st === 'exportado') return { line: 'Que vídeo bonito! Quando quiser, me traz o próximo produto.', opts: [{ label: 'Nova produção', cls: 'g-btn g-lime', act: () => this.newProduction() }, ok('Depois')] };
       return { line: 'Ficha conferida e entregue. Só uso o que está nas fotos e no que você confirmou: nada de características inventadas.', opts: [open('produto', 'Ver ficha'), ok('Valeu!')] };
@@ -839,7 +837,7 @@ export default class App extends React.Component {
     });
 
     // --- créditos ---
-    const credits = P ? P.credits : { spent: 0, budget: +s.draft.limit || 0 };
+    const credits = P ? P.credits : { spent: 0, budget: 0 };
     const est = P ? P.estimates : null;
 
     // --- produto ---
@@ -847,7 +845,7 @@ export default class App extends React.Component {
     const refs = P ? ((P.sheet && P.sheet.references) || []).filter((r) => r.url && !/\.mp4/i.test(r.url)) : [];
     const product = {
       editing: !P || P.status === 'awaiting_references', created: !!P, refs, issues: P && P.sheet ? P.sheet.issues : [], unknown: P && P.sheet ? P.sheet.unknown_fields : [],
-      name: P ? P.product.name : d.name, variant: P ? P.product.variant : d.variant, link: P ? P.product.link : d.link,
+      name: P ? P.product.name : d.name, variant: P ? P.product.variant : '', link: P ? P.product.link : '',
       draft: d, setDraft: (k) => (e) => this.setDraft({ [k]: e.target.value }), files: s.files.map((f, k) => ({ ...f, k,
         setRole: (e) => { const fs = s.files.slice(); fs[k] = Object.assign({}, fs[k], { role: e.target.value }); this.setState({ files: fs }); },
         remove: () => this.setState({ files: s.files.filter((_, q) => q !== k) }) })), roles: ROLES,

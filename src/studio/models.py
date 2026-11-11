@@ -85,8 +85,8 @@ class ProductInput(BaseModel):
     """Ficha preenchida pelo operador (entrada manual)."""
 
     name: str
-    variant: str = Field(description="Cor/modelo exato que aparece nas referências")
-    affiliate_link: str
+    variant: str = Field(default="", description="Cor/modelo exato que aparece nas referências (opcional)")
+    affiliate_link: str = Field(default="", description="Link do produto no marketplace (opcional)")
     product_url: str | None = None
     category: str | None = None
     references: list[ProductReference] = Field(default_factory=list)
@@ -104,7 +104,7 @@ class ProductInput(BaseModel):
     @field_validator("affiliate_link", "product_url")
     @classmethod
     def _shopee_link(cls, value: str | None) -> str | None:
-        if value is None:
+        if value is None or value == "":   # opcional: ausente não vira link vazio validado
             return value
         if value != value.strip():
             raise ValueError("link contém espaços nas pontas; cole o link exatamente como gerado")

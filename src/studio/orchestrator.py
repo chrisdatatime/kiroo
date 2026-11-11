@@ -989,10 +989,13 @@ class Orchestrator:
         caption, warnings = editing.build_caption(sheet, fmt)
         st.write_text("delivery/caption.txt", caption)
         p = sheet.product
-        st.write_json("delivery/product.json", {
-            "name": p.name, "variant": p.variant, "affiliate_link": p.affiliate_link, "product_url": p.product_url,
-            "note": "Link preservado exatamente como fornecido. Vincule este produto/variante na publicação.",
-        })
+        info = {"name": p.name, "product_url": p.product_url}
+        if p.variant.strip():
+            info["variant"] = p.variant
+        if p.affiliate_link.strip():
+            info["affiliate_link"] = p.affiliate_link
+            info["note"] = "Link preservado exatamente como fornecido. Vincule este produto/variante na publicação."
+        st.write_json("delivery/product.json", info)
         st.write_json("delivery/delivery_meta.json", {
             "simulated": script.simulated or self.image_gen.simulated or self.video_gen.simulated,
             "final_probe": out["final_probe"], "cover_time_s": out["cover_time_s"], "caption_warnings": warnings,

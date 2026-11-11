@@ -1031,6 +1031,16 @@ class App:
             "warnings": warnings,
         }
 
+    @staticmethod
+    def _budget_for(payload: dict, s) -> float:
+        """Limite da produção: o informado (API/CLI antigas) ou o padrão do servidor (STUDIO_DEFAULT_PRODUCTION_CAP_CREDITS),
+        que em modo real nunca passa do teto efetivo do estúdio (menor entre conta e plataforma)."""
+        raw = payload.get("budget")
+        if raw not in (None, ""):
+            return float(raw)
+        from .. import billing
+        return billing.default_production_budget_usd(s.monthly_cap_usd if s.mode == "real" else None)
+
     def _create(self, payload: dict, ctx) -> Response:
         s = ctx["s"]
         if s.mode == "real" and paid_gate.blocked_reason():   # aviso antes de receber fotos e criar a produção
@@ -1049,7 +1059,7 @@ class App:
             pid = orch.create_production(product, format_id=payload.get("format") or "maos_3cenas_15s",
                                          art_direction=payload.get("art") or "cozinha_sp_alto_padrao",
                                          presenter=payload.get("presenter") or "bia",
-                                         budget_usd=float(payload.get("budget") or 0),
+                                         budget_usd=self._budget_for(payload, s),
                                          go_ahead=("none" if autonomy == "manual" else "all") if payload.get("flow") == "game" else "all",
                                          autonomy=autonomy, workspace_id=ctx["wid"])
         finally:
