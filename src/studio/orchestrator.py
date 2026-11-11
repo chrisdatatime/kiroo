@@ -418,7 +418,8 @@ class Orchestrator:
                 log.warning("[%s] chamada paga bloqueada (%s) para %s", pid, exc.reason, what)
                 raise BudgetExceeded(str(exc)) from None
             ws = self.db.conn.execute("SELECT * FROM workspaces WHERE id=?", (wid,)).fetchone() if wid else None
-            cap = ws["monthly_cap_usd"] if ws else self.s.monthly_cap_usd  # teto e gasto são do workspace
+            # teto e gasto são do workspace; vale o menor entre o da conta e o da plataforma
+            cap = paid_gate.effective_cap(ws["monthly_cap_usd"] if ws else self.s.monthly_cap_usd)
             spent = month_real_spend(self.db, workspace_id=wid)
             if cap <= 0:
                 reason = "teto mensal de gastos não definido (desligue o DEMO pela interface ou defina STUDIO_MONTHLY_CAP_USD)"

@@ -279,9 +279,10 @@ class App:
             db.close()
         except Exception:  # noqa: BLE001
             pass
-        real = ws["mode"] == "real" and bool(ws["allow_real"]) and bool(s.gemini_api_key)
+        cap = paid_gate.effective_cap(ws["monthly_cap_usd"])   # o menor entre o teto da conta e o da plataforma
+        real = ws["mode"] == "real" and bool(ws["allow_real"]) and bool(s.gemini_api_key) and cap > 0   # teto 0 = DEMO
         return dataclasses.replace(s, mode="real" if real else "simulated", allow_paid_calls=real,
-                                   monthly_cap_usd=ws["monthly_cap_usd"],
+                                   monthly_cap_usd=cap,
                                    assets_dir=s.assets_dir if owner_admin else assets,
                                    reference_dir=s.reference_dir if owner_admin else None)
 
@@ -980,6 +981,8 @@ class App:
             cap = float(payload["monthly_cap_usd"])
             if not 0 <= cap <= 10000:
                 raise ValueError("teto mensal deve estar entre 0 e 10000 US$")
+            if paid_gate.platform_cap() > 0:   # nunca acima do teto da plataforma
+                cap = paid_gate.validate_account_cap(cap)
             fields["monthly_cap_usd"] = cap
         mode = payload.get("mode")
         if mode is not None:

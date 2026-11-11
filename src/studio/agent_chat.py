@@ -389,6 +389,10 @@ class AgentChat:
                         paid_gate.check_spend(SimpleNamespace(conn=conn), worst, workspace_id=workspace_id, agent=agent)
                     except paid_gate.PaidCallsBlocked as exc:
                         blocked = exc.reason
+                    if not blocked and workspace_id:   # teto 0 do estúdio (ou da plataforma) = nenhuma chamada paga
+                        ws_row = conn.execute("SELECT monthly_cap_usd FROM workspaces WHERE id=?", (workspace_id,)).fetchone()
+                        if ws_row is not None and paid_gate.effective_cap(ws_row[0]) <= 0:
+                            blocked = "workspace_cap"
                 if not ai_on:
                     answer, source = FALLBACK["off"], "sem_ia"
                 elif blocked:

@@ -66,6 +66,30 @@ def platform_cap() -> float:
     return _float("STUDIO_MONTHLY_CAP_USD")
 
 
+def effective_cap(account_cap: float | None) -> float:
+    """Teto mensal efetivo de um estúdio: o MENOR entre o teto da conta e o da plataforma.
+    Teto da conta <= 0 → 0 (nenhuma chamada paga). Plataforma sem teto (0, só em dev) não limita além da conta."""
+    acc = max(float(account_cap or 0), 0.0)
+    plat = platform_cap()
+    return min(acc, plat) if plat > 0 else acc
+
+
+def validate_account_cap(usd: float) -> float:
+    """Valida o teto de uma conta: número finito entre 0 e o teto da plataforma (nunca acima). Devolve o valor."""
+    import math
+    if isinstance(usd, bool) or not isinstance(usd, (int, float)) or not math.isfinite(usd):
+        raise ValueError("o teto precisa ser um número em US$")
+    if usd < 0:
+        raise ValueError("o teto não pode ser negativo")
+    plat = platform_cap()
+    if usd > plat + 1e-9:
+        if plat <= 0:
+            raise ValueError("a plataforma não tem teto mensal (STUDIO_MONTHLY_CAP_USD=0): defina-o antes de dar teto "
+                             "maior que 0 a uma conta")
+        raise ValueError(f"o teto da conta (US${usd:.2f}) não pode passar do teto da plataforma (US${plat:.2f})")
+    return round(float(usd), 4)
+
+
 def agent_daily_cap() -> float:
     return _float("STUDIO_AGENT_DAILY_CAP_USD")
 

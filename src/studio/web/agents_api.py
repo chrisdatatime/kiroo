@@ -82,7 +82,7 @@ def _execute_test(app, tr, db, agent, task, ctx, confirm_estimate):
                 paid_gate.check_spend(db, estimate, workspace_id=wid, agent=agent)
             except paid_gate.PaidCallsBlocked as exc:
                 raise TrainingError(str(exc)) from None
-            cap = ws["monthly_cap_usd"]
+            cap = paid_gate.effective_cap(ws["monthly_cap_usd"])
             spent = month_real_spend(db, workspace_id=wid)
             if cap <= 0 or spent + estimate > cap:
                 raise TrainingError("o teto mensal de gastos não permite este teste")

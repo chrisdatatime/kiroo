@@ -88,9 +88,14 @@ def _admin(settings, args) -> int:
     acc = Accounts(db)
     try:
         if args.acao == "list":
+            from . import paid_gate
             for u in db.conn.execute("SELECT u.email, u.is_platform_admin, w.name, w.mode, w.allow_real, w.monthly_cap_usd "
                                      "FROM users u JOIN workspaces w ON w.owner_id=u.id ORDER BY u.created_at"):
-                print(f"{u[0]:32} {'ADMIN ' if u[1] else '      '} {u[2]:28} modo={u[3]:9} real={'sim' if u[4] else 'não'} teto=US${u[5]:.2f}")
+                eff = paid_gate.effective_cap(u[5])
+                print(f"{u[0]:32} {'ADMIN ' if u[1] else '      '} {u[2]:28} modo={u[3]:9} real={'sim' if u[4] else 'não'} "
+                      f"teto=US${u[5]:.2f} efetivo=US${eff:.2f}")
+            print(f"teto da plataforma: US${paid_gate.platform_cap():.2f}/mês (STUDIO_MONTHLY_CAP_USD); "
+                  "efetivo = o menor entre o da conta e o da plataforma")
             return 0
         if args.acao == "create-invite":   # código de uso único: aparece só agora; no banco fica só o hash
             code, exp = acc.create_invite(days=args.days, email=args.email, note=args.note, by="cli")
@@ -131,6 +136,38 @@ def _admin(settings, args) -> int:
             acc.set_workspace(wid, allow_real=int(args.acao == "allow-real"),
                               **({} if args.acao == "allow-real" else {"mode": "simulated"}))
             print("modo real " + ("liberado" if args.acao == "allow-real" else "bloqueado (voltou para DEMO)"))
+        elif args.acao == "set-mode":
+            from .credits import Ledger
+            mode = (args.mode or "").strip().lower()
+            if mode not in ("simulated", "real"):
+                print("erro: informe --mode simulated ou --mode real", file=sys.stderr)
+                return 2
+            ws = acc.workspace(wid)
+            if mode == "real" and not ws["allow_real"]:
+                print("erro: este estúdio não tem o modo real liberado; rode antes `studio admin allow-real --email ...`",
+                      file=sys.stderr)
+                return 2
+            acc.set_workspace(wid, mode=mode)
+            Ledger(db).add(wid, 0, kind="adjust", by="cli", note=f"admin set-mode: {ws['mode']} -> {mode}")
+            print(f"modo do estúdio: {ws['mode']} -> {mode}")
+            if mode == "real":
+                from . import paid_gate
+                eff = paid_gate.effective_cap(ws["monthly_cap_usd"])
+                if eff <= 0:
+                    print("aviso: o teto efetivo é US$0.00, então nada será gasto; defina com `admin set-cap --usd N`")
+        elif args.acao == "set-cap":
+            from . import paid_gate
+            from .credits import Ledger
+            if args.usd is None:
+                print("erro: informe --usd (valor em US$, de 0 até o teto da plataforma)", file=sys.stderr)
+                return 2
+            usd = paid_gate.validate_account_cap(args.usd)
+            ws = acc.workspace(wid)
+            acc.set_workspace(wid, monthly_cap_usd=usd)
+            Ledger(db).add(wid, 0, kind="adjust", by="cli",
+                           note=f"admin set-cap: US${ws['monthly_cap_usd']:.2f} -> US${usd:.2f} (plataforma US${paid_gate.platform_cap():.2f})")
+            print(f"teto mensal do estúdio: US${ws['monthly_cap_usd']:.2f} -> US${usd:.2f} "
+                  f"(efetivo US${paid_gate.effective_cap(usd):.2f}; plataforma US${paid_gate.platform_cap():.2f})")
         elif args.acao == "delete-user":   # LGPD pelo operador (a pessoa também apaga pela interface)
             if not args.yes:
                 print("erro: apagar é definitivo; repita com --yes", file=sys.stderr)
@@ -232,10 +269,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("pid")
     p.add_argument("--set", type=float, required=True, dest="value")
 
-    p = sub.add_parser("admin", help="contas: criar usuário, liberar modo real, link de nova senha, créditos")
+    p = sub.add_parser("admin", help="contas: criar usuário, liberar modo real, modo e teto do estúdio, link de nova senha, créditos")
     p.add_argument("acao", choices=["create-user", "allow-real", "deny-real", "reset-link", "verify-email", "list",
                                     "grant-credits", "adjust-credits", "credits", "create-invite", "list-invites",
-                                    "revoke-invite", "export-user", "delete-user"])
+                                    "revoke-invite", "export-user", "delete-user", "set-mode", "set-cap"])
     p.add_argument("--email")
     p.add_argument("--name", default="")
     p.add_argument("--admin", action="store_true", help="administrador da plataforma (só com create-user)")
@@ -243,6 +280,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--note", default="", help="motivo do lançamento (extrato) ou nota do convite")
     p.add_argument("--days", type=int, default=7, help="validade do convite em dias (1 a 30; create-invite)")
     p.add_argument("--id", help="id do convite (revoke-invite)")
+    p.add_argument("--mode", help="simulated ou real (set-mode; real exige allow-real)")
+    p.add_argument("--usd", type=float, help="teto mensal do estúdio em US$, de 0 até STUDIO_MONTHLY_CAP_USD (set-cap)")
     p.add_argument("--yes", action="store_true", help="confirma ações definitivas (delete-user)")
 
     p = sub.add_parser("ui", help="serve o escritório dos agentes (padrão: só local; ver STUDIO_HOST e docs/RUNBOOK.md)")
