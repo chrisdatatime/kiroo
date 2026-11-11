@@ -116,6 +116,7 @@ def test_chat_does_not_leak_mission_of_another_workspace(world):
     seen = []
     world["app"].chat._caller = lambda req, timeout: seen.append(req) or {"text": "ok", "input_tokens": 1, "output_tokens": 1}
     world["app"].chat._use_default = False
+    assert world["a"].post("/api/runtime", {"monthly_cap_usd": 10}).status == 200   # teto 0 não chama a IA
     r = world["a"].post("/api/chat", {"agent": "theo", "text": "fala da luz da cena dois", "pid": world["pid_b"]})
     assert r.status == 200
     assert seen and "Garrafa térmica B" not in json.dumps(seen, ensure_ascii=False)

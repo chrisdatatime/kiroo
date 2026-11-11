@@ -207,6 +207,7 @@ def post(app, path, body):
 
 
 def test_chat_route(app):
+    assert post(app, "/api/runtime", {"monthly_cap_usd": 10}).status == 200   # teto 0 não chama a IA (ver test_admin_mode_cap)
     assert app.handle("POST", "/api/chat", HOST, b"{}").status == 403, "exige CSRF"
     q = json.loads(app.handle("GET", "/api/chat/quota", HOST, b"").body)
     assert q["remaining"] == 2 and q["max_chars"] == 300
