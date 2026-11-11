@@ -136,7 +136,10 @@ def test_budget_blocks_new_paid_calls(make_orch, product):
     orch.approve(pid, 1, "image")
     orch.run(pid)
     prod = orch.db.production(pid)
-    assert prod["status"] == PS.PAUSED and "orçamento" in prod["status_reason"]
+    # freio interno: código estável, cliente vê "estamos finalizando" (sem pedido de upgrade) e o admin é avisado
+    assert prod["status"] == PS.PAUSED and prod["pause_code"] == "ops_budget_reached"
+    assert "finalizando" in prod["status_reason"] and "limite" not in prod["status_reason"].lower()
+    assert any(e["type"] == "ops_alert" for e in orch.db.events(pid))
     assert orch.image_gen.submit_count == 1
     assert orch.committed_cost(pid) <= 0.07
     # retomar sem aumentar o limite pausa de novo, sem gastar

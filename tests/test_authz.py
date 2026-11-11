@@ -270,6 +270,7 @@ def test_training_reference_file_type_is_checked(world):
 
 def test_positive_control_owner_can_act_on_own_production(world):
     """Controle: as mesmas rotas funcionam para a dona (o 404 acima é a checagem de dono, não rota quebrada)."""
-    assert world["a"].post(f"/api/productions/{world['pid_a']}/budget", {"value": 7}).status == 200
+    # o limite operacional é freio interno: nem a dona sobe (403, não 404 — a checagem de dono passou)
+    assert world["a"].post(f"/api/productions/{world['pid_a']}/budget", {"value": 7}).status == 403
     assert world["a"].post(f"/api/productions/{world['pid_a']}/pause", {}).status == 200
     assert world["a"].get(f"/media/{world['pid_a']}/inputs/product_input.json").status == 200

@@ -160,7 +160,8 @@ def test_mission_budget_blocks(settings, product, tmp_path):
     orch = real_orch(settings, tmp_path)
     pid = new_production(orch, product, budget=0.07)
     run_two_images(orch, pid)
-    assert "orçamento insuficiente" in paused_reason(orch, pid) and orch.image_gen.submit_count == 1
+    assert orch.db.production(pid)["pause_code"] == "ops_budget_reached" and orch.image_gen.submit_count == 1
+    assert "orçamento operacional insuficiente" in [e for e in orch.db.events(pid) if e["type"] == "ops_alert"][-1]["message"]
 
 
 def test_workspace_monthly_cap_blocks(settings, product, tmp_path):

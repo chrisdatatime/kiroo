@@ -97,6 +97,19 @@ def _admin(settings, args) -> int:
             print(f"teto da plataforma: US${paid_gate.platform_cap():.2f}/mês (STUDIO_MONTHLY_CAP_USD); "
                   "efetivo = o menor entre o da conta e o da plataforma")
             return 0
+        if args.acao == "ops-alerts":   # pausas pelo freio interno (o cliente vê só "estamos finalizando")
+            rows = db.conn.execute("SELECT id, status, pause_code, budget_usd, updated_at FROM productions WHERE "
+                                   "pause_code IS NOT NULL AND status='paused' ORDER BY updated_at DESC").fetchall()
+            for r in rows:
+                last = db.conn.execute("SELECT message FROM events WHERE production_id=? AND type='ops_alert' "
+                                       "ORDER BY id DESC LIMIT 1", (r["id"],)).fetchone()
+                print(f"{r['id']}  {r['pause_code']:22} limite=US${r['budget_usd']:.2f}  {r['updated_at']}  "
+                      f"{(last[0] if last else '')[:160]}")
+            if not rows:
+                print("nenhuma produção pausada por freio interno")
+            else:
+                print("ajuste com `studio budget <pid> --set <US$>` e retome com `studio resume <pid>`")
+            return 0
         if args.acao == "create-invite":   # código de uso único: aparece só agora; no banco fica só o hash
             code, exp = acc.create_invite(days=args.days, email=args.email, note=args.note, by="cli")
             print(f"convite: {code}")
@@ -272,7 +285,7 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("admin", help="contas: criar usuário, liberar modo real, modo e teto do estúdio, link de nova senha, créditos")
     p.add_argument("acao", choices=["create-user", "allow-real", "deny-real", "reset-link", "verify-email", "list",
                                     "grant-credits", "adjust-credits", "credits", "create-invite", "list-invites",
-                                    "revoke-invite", "export-user", "delete-user", "set-mode", "set-cap"])
+                                    "revoke-invite", "export-user", "delete-user", "set-mode", "set-cap", "ops-alerts"])
     p.add_argument("--email")
     p.add_argument("--name", default="")
     p.add_argument("--admin", action="store_true", help="administrador da plataforma (só com create-user)")

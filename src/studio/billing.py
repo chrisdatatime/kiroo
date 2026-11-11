@@ -12,7 +12,6 @@ import os
 from dataclasses import dataclass
 
 from . import pricing
-from .orchestrator import REVIEW_COST_ESTIMATE_USD
 
 
 @dataclass(frozen=True)
@@ -74,9 +73,11 @@ def default_production_budget_usd(account_cap_usd: float | None = None) -> float
 def stage_estimates(settings, n_scenes: int = 3, n_refs: int = 4) -> dict:
     """Estimativas por etapa paga, em US$ e créditos, com a fonte dos preços."""
     pol = policy()
-    img, img_src = pricing.image_cost(settings.image_model, settings.image_size, n_refs)
-    vid, vid_src = pricing.video_cost(settings.video_model, settings.video_resolution)
-    review = REVIEW_COST_ESTIMATE_USD
+    from . import budget
+    _, img_src = pricing.image_cost(settings.image_model, settings.image_size, n_refs)
+    _, vid_src = pricing.video_cost(settings.video_model, settings.video_resolution)
+    img, vid = budget.op_cost(settings, "image", n_refs=n_refs), budget.op_cost(settings, "video")
+    review = budget.review_cost("review_image")
 
     def pack(usd: float) -> dict:
         return {"usd": round(usd, 4), "credits": pol.credits(usd)}

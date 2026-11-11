@@ -15,6 +15,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from . import budget as budget_mod
 from .agents import creative, editing, visual_review
 from .agents.product_prep import prepare_product
 from .config import Settings
@@ -39,7 +40,7 @@ log = logging.getLogger("studio")
 MAX_TRANSIENT_RETRIES = 4
 BACKOFF_BASE_S = 2.0
 BACKOFF_MAX_S = 120.0
-REVIEW_COST_ESTIMATE_USD = 0.01  # reserva por revisão real quando o uso ainda não é conhecido
+REVIEW_COST_ESTIMATE_USD = 0.01  # compatibilidade; o valor em uso vem de profiles/billing/operation_costs.json
 
 
 GO_AHEAD_ORDER = {"none": 0, "images": 1, "videos": 2, "all": 3}
@@ -93,8 +94,12 @@ class Orchestrator:
     # ================================================================ criação
     def create_production(self, product: ProductInput, *, format_id: str, art_direction: str, presenter: str,
                           budget_usd: float, go_ahead: str = "all", autonomy: str = "classico",
-                          workspace_id: str | None = None) -> str:
-        """go_ahead="none" exige liberação explícita (set_go_ahead) antes de gerar imagens e antes dos vídeos."""
+                          workspace_id: str | None = None, prebudget: bool = False) -> str:
+        """go_ahead="none" exige liberação explícita (set_go_ahead) antes de gerar imagens e antes dos vídeos.
+
+        `budget_usd` é o ORÇAMENTO OPERACIONAL (freio interno). Com `prebudget=True` (modo real, com estúdio), o custo
+        estimado do vídeo completo é RESERVADO do saldo do cliente antes de começar; sem saldo → InsufficientCredits e
+        nada é criado nem cobrado."""
         if go_ahead not in GO_AHEAD_ORDER:
             raise OrchestratorError("liberação inválida")
         if autonomy not in AUTONOMY:
@@ -111,6 +116,10 @@ class Orchestrator:
                 raise OrchestratorError("modo real exige orçamento > 0 definido pelo operador")
         profiles = snapshot(self.s.profiles_dir, {"presenter": presenter, "art_direction": art_direction,
                                                   "format": format_id})
+        estimate = None
+        if prebudget and mode == "real" and workspace_id:
+            estimate = budget_mod.estimate_production(self.s, len(profiles["format"]["data"].get("scenes") or []) or 3)
+            self.ledger().can_reserve(workspace_id, estimate["cc"])   # bloqueia ANTES de criar qualquer coisa
         pid = self.db.create_production(mode=mode, format_id=format_id, product=product.model_dump(mode="json"),
                                         profiles=profiles, budget_usd=budget_usd, go_ahead=go_ahead,
                                         autonomy=autonomy)
@@ -123,6 +132,16 @@ class Orchestrator:
             style = default_edit_style(snap)
             if style:
                 self.db.update_production(pid, edit_style=style)
+        if estimate is not None:
+            try:
+                self.ledger().reserve_pool(workspace_id, pid, estimate["cc"], ref="base", usd=estimate["usd"],
+                                           note="pré-orçamento do vídeo completo")
+            except InsufficientCredits:   # o saldo mudou entre a checagem e a reserva: nada foi gasto
+                self.db.set_production_status(pid, PS.CANCELLED, "saldo insuficiente para o pré-orçamento")
+                raise
+            self.db.update_production(pid, prebudget_cc=estimate["cc"])
+            self.db.add_event(pid, "prebudget", f"pré-orçamento reservado: {fmt_credits(estimate['cc'])} créditos",
+                              data=estimate)
         st = self._storage(pid)
         st.write_json("profiles_snapshot.json", profiles)
         st.write_json("inputs/product_input.json", product.model_dump(mode="json"))
@@ -399,37 +418,49 @@ class Orchestrator:
                 total += a["confirmed_cost_usd"]
         return round(total, 4)
 
+    def _pause(self, pid: str, reason: str, code: str) -> None:
+        """Pausa com motivo legível e código estável (a interface e o administrador decidem pelo código)."""
+        self.db.set_production_status(pid, PS.PAUSED, reason)
+        self.db.update_production(pid, pause_code=code)
+
     def _check_budget(self, pid: str, estimate: float, what: str, stage: str | None = None) -> None:
+        """Freios independentes, nesta ordem (o primeiro que bloquear pausa; nada é chamado nem cobrado):
+        1. portão de chamadas pagas e teto mensal (conta/plataforma; teto 0 nunca gasta) — só modo real;
+        2. orçamento operacional da produção (freio interno): pausa, avisa o administrador e NÃO pede nada ao cliente."""
         prod = self.db.production(pid)
-        budget = prod["budget_usd"]
-        committed = self.committed_cost(pid)
-        reason = None
-        if committed + estimate > budget + 1e-9:
-            reason = (f"orçamento insuficiente para {what}: comprometido US${committed:.4f} + estimado "
-                      f"US${estimate:.4f} > limite US${budget:.2f}")
-        elif prod["mode"] == "real" and estimate > 0:
+        if prod["mode"] == "real" and estimate > 0:
             from . import paid_gate
             from .spend import month_real_spend
             wid = prod["workspace_id"] if "workspace_id" in prod.keys() else None
             try:   # kill switch, liberação do ambiente, teto da plataforma e teto diário do agente
                 paid_gate.check_spend(self.db, estimate, workspace_id=wid, agent=paid_gate.KIND_AGENT.get(stage or ""))
             except paid_gate.PaidCallsBlocked as exc:
-                self.db.set_production_status(pid, PS.PAUSED, str(exc))
+                code = budget_mod.MONTHLY_CAP if exc.reason == "platform_cap" else f"{budget_mod.PAID_GATE}:{exc.reason}"
+                self._pause(pid, str(exc), code)
                 log.warning("[%s] chamada paga bloqueada (%s) para %s", pid, exc.reason, what)
                 raise BudgetExceeded(str(exc)) from None
             ws = self.db.conn.execute("SELECT * FROM workspaces WHERE id=?", (wid,)).fetchone() if wid else None
             # teto e gasto são do workspace; vale o menor entre o da conta e o da plataforma
             cap = paid_gate.effective_cap(ws["monthly_cap_usd"] if ws else self.s.monthly_cap_usd)
             spent = month_real_spend(self.db, workspace_id=wid)
+            reason = None
             if cap <= 0:
                 reason = "teto mensal de gastos não definido (desligue o DEMO pela interface ou defina STUDIO_MONTHLY_CAP_USD)"
             elif spent + estimate > cap + 1e-9:
                 reason = (f"teto mensal atingido para {what}: gasto do mês US${spent:.4f} + estimado "
                           f"US${estimate:.4f} > teto US${cap:.2f}")
-        if reason:
-            self.db.set_production_status(pid, PS.PAUSED, reason)
-            log.warning("[%s] %s", pid, reason)
-            raise BudgetExceeded(reason)
+            if reason:
+                self._pause(pid, reason, budget_mod.MONTHLY_CAP)
+                log.warning("[%s] %s", pid, reason)
+                raise BudgetExceeded(reason)
+        budget = prod["budget_usd"]
+        committed = self.committed_cost(pid)
+        if committed + estimate > budget + 1e-9:
+            detail = (f"orçamento operacional insuficiente para {what}: comprometido US${committed:.4f} + estimado "
+                      f"US${estimate:.4f} > limite interno US${budget:.2f}")
+            self._pause(pid, budget_mod.CLIENT_MESSAGES[budget_mod.OPS_BUDGET_REACHED], budget_mod.OPS_BUDGET_REACHED)
+            budget_mod.notify_admin(self.db, pid, budget_mod.OPS_BUDGET_REACHED, detail)
+            raise BudgetExceeded(detail)
 
     # ------------------------------------------------------- créditos (Fase C)
     def _wid(self, pid: str) -> str | None:
@@ -441,24 +472,38 @@ class Orchestrator:
             self._ledger = Ledger(self.db)
         return self._ledger
 
+    def _has_prebudget(self, pid: str) -> bool:
+        prod = self.db.production(pid)
+        return "prebudget_cc" in prod.keys() and prod["prebudget_cc"] is not None
+
     def _hold(self, pid: str, estimate: float, what: str, stage: str) -> str | None:
-        """Orçamento + teto do mês + reserva de créditos do workspace, nessa ordem. Sem saldo → pausa."""
+        """Teto do mês + orçamento operacional e, nas produções antigas, reserva de créditos por chamada.
+        Com pré-orçamento o saldo do cliente já foi reservado na criação: nenhuma chamada pede saldo de novo."""
         self._check_budget(pid, estimate, what, stage)
         wid = self._wid(pid)
         if wid is None or estimate <= 0 or self.db.production(pid)["mode"] != "real":
             return None  # DEMO e produções sem workspace (CLI antiga) não usam créditos
+        if self._has_prebudget(pid):
+            return None  # o acerto sai do pré-orçamento em settle_pool
         try:
             return self.ledger().hold(wid, pid, estimate, stage)
         except InsufficientCredits as exc:
             reason = (f"saldo de créditos insuficiente para {what}: saldo {fmt_credits(exc.balance_cc)} créditos, "
                       f"estimado {fmt_credits(exc.needed_cc)} créditos (estimado US${estimate:.4f})")
-            self.db.set_production_status(pid, PS.PAUSED, reason)
+            self._pause(pid, reason, budget_mod.CREDITS_INSUFFICIENT)
             log.warning("[%s] %s", pid, reason)
             raise BudgetExceeded(reason) from exc
 
     def _settle(self, pid: str) -> None:
-        if self._wid(pid) is not None:
+        wid = self._wid(pid)
+        if wid is None:
+            return
+        if not self._has_prebudget(pid):
             self.ledger().settle(pid)
+            return
+        self.ledger().settle_pool(pid, wid)
+        if PS(self.db.production(pid)["status"]) in TERMINAL:
+            self.ledger().close_pool(pid)
 
     def _drive(self, pid: str, idx: int, kind: str) -> str:
         row = self.db.scene(pid, idx)
@@ -565,7 +610,8 @@ class Orchestrator:
     def _pause_billing(self, pid: str, exc: Exception) -> None:
         status = PS(self.db.production(pid)["status"])
         if status not in TERMINAL and status != PS.PAUSED:
-            self.db.set_production_status(pid, PS.PAUSED, f"{PROVIDER_BILLING_REASON}: {str(exc)[:300]}")
+            self._pause(pid, f"{PROVIDER_BILLING_REASON}: {str(exc)[:300]}", budget_mod.PROVIDER_BILLING)
+            budget_mod.notify_admin(self.db, pid, budget_mod.PROVIDER_BILLING, str(exc)[:300])
 
     def _transient(self, pid: str, att, exc: Exception, stage: str) -> str:
         retries = att["transient_retries"] + 1
@@ -626,7 +672,7 @@ class Orchestrator:
     # ---------------------------------------------------------------- revisão
     def _call_text(self, kind: str, scene_idx, fn, provider, *, pid: str | None = None, prompt: str = ""):
         """Executa uma chamada de texto/visão registrando custo como tentativa auditável."""
-        estimate = 0.0 if provider.simulated else REVIEW_COST_ESTIMATE_USD
+        estimate = 0.0 if provider.simulated else budget_mod.review_cost(kind)
         hold = self._hold(pid, estimate, kind, kind) if pid is not None else None
         try:
             result, meta = fn()
@@ -639,7 +685,7 @@ class Orchestrator:
 
     def _record_text_call(self, pid: str, kind: str, scene_idx, provider, meta: dict, prompt: str,
                           hold: str | None = None) -> None:
-        estimate = 0.0 if provider.simulated else REVIEW_COST_ESTIMATE_USD
+        estimate = 0.0 if provider.simulated else budget_mod.review_cost(kind)
         est = meta.get("estimated_cost_usd", estimate)
         src = meta.get("pricing_source", "SIMULADO — sem custo" if provider.simulated else "reserva fixa por chamada")
         aid = self.db.create_attempt(production_id=pid, scene_idx=scene_idx, kind=kind, provider=provider.provider,
@@ -682,7 +728,7 @@ class Orchestrator:
             job = self._review_jobs.get(att_id)
             if job is None:
                 try:
-                    hold = self._hold(pid, 0.0 if self.reviewer.simulated else REVIEW_COST_ESTIMATE_USD,
+                    hold = self._hold(pid, 0.0 if self.reviewer.simulated else budget_mod.review_cost(f"review_{kind}"),
                                       f"revisão de {kind}", f"review_{kind}")
                 except BudgetExceeded:
                     return "paused"
@@ -758,11 +804,51 @@ class Orchestrator:
             self.db.set_scene_status(pid, idx, SS.VIDEO_APPROVED, "aprovado pelo operador",
                                      approved_video_attempt=att_id, video_correction=None)
 
-    def reject(self, pid: str, idx: int, stage: str, note: str, *, redo_image: bool = False) -> None:
+    def adjustment_info(self, pid: str, idx: int) -> dict:
+        """Ajustes pedidos pelo cliente nesta cena: incluídos no pré-orçamento, usados, autorizados e custo do extra."""
+        row = self.db.scene(pid, idx)
+        included = budget_mod.included_adjustments_per_scene()
+        used = row["adjustments_used"] if "adjustments_used" in row.keys() else 0
+        authorized = row["adjustments_authorized"] if "adjustments_authorized" in row.keys() else 0
+        from .credits import to_cc
+        return {"included": included, "used": used, "authorized": authorized,
+                "free_left": max(included + authorized - used, 0),
+                "extra_cost_cc": {st: to_cc(budget_mod.adjustment_cost_usd(self.s, st)) for st in ("image", "video")}}
+
+    def _consume_adjustment(self, pid: str, idx: int, stage: str, authorize_extra: bool) -> None:
+        """Ajuste pedido pelo cliente (só produções com pré-orçamento): os incluídos saem do que já foi reservado;
+        além deles, só com autorização explícita — e aí o custo do ajuste é reservado do saldo antes de refazer."""
+        info = self.adjustment_info(pid, idx)
+        if info["free_left"] <= 0:
+            cost = info["extra_cost_cc"][stage]
+            if not authorize_extra:
+                raise budget_mod.AdjustmentNeedsAuthorization(idx, stage, cost, info["included"], info["used"])
+            n = info["authorized"] + 1
+            wid = self._wid(pid)
+            if wid is not None and self.db.production(pid)["mode"] == "real":
+                self.ledger().reserve_pool(wid, pid, cost, ref=f"extra:{idx}:{n}",
+                                           note=f"ajuste extra autorizado: cena {idx} ({stage})")
+            self.db.update_scene(pid, idx, adjustments_authorized=n)
+            self.db.add_event(pid, "adjustment_authorized", f"ajuste extra autorizado: {fmt_credits(cost)} créditos",
+                              scene_idx=idx, data={"stage": stage, "cost_cc": cost, "n": n})
+        row = self.db.scene(pid, idx)
+        # Ajuste do cliente nunca esbarra no limite interno de tentativas (que existe contra laço automático).
+        extra = {f"extra_{stage}_attempts": row[f"extra_{stage}_attempts"] + 1}
+        if stage == "image":
+            extra["extra_video_attempts"] = row["extra_video_attempts"] + 1
+        self.db.update_scene(pid, idx, adjustments_used=info["used"] + 1, **extra)
+
+    def reject(self, pid: str, idx: int, stage: str, note: str, *, redo_image: bool = False,
+               authorize_extra: bool = False) -> None:
         if not note.strip():
             raise OrchestratorError("descreva a correção desejada (--note)")
         row = self.db.scene(pid, idx)
         stage_target = "image" if (stage == "image" or redo_image) else "video"
+        if stage_target == "video" and not row["approved_image_attempt"]:
+            raise OrchestratorError("cena sem imagem aprovada; reprove a imagem")
+        if self._has_prebudget(pid):
+            self._consume_adjustment(pid, idx, stage_target, authorize_extra)
+            row = self.db.scene(pid, idx)
         att_id = row[f"current_{stage}_attempt"]
         if att_id:
             self.db.add_review(production_id=pid, scene_idx=idx, attempt_id=att_id, stage=stage, reviewer="human",
@@ -818,6 +904,7 @@ class Orchestrator:
 
     def cancel(self, pid: str, reason: str = "cancelada pelo operador") -> None:
         self.db.set_production_status(pid, PS.CANCELLED, reason)
+        self._settle(pid)   # acerta o que terminou e devolve o resto do pré-orçamento
 
     def set_autonomy(self, pid: str, mode: str) -> None:
         """Muda o piloto. Assistido/Automático liberam as etapas pagas (dentro do limite) de uma vez."""
@@ -871,8 +958,9 @@ class Orchestrator:
         return True
 
     def set_budget(self, pid: str, budget_usd: float) -> None:
+        """Orçamento OPERACIONAL (freio interno). Só o administrador/operador muda; não mexe no saldo do cliente."""
         self.db.update_production(pid, budget_usd=budget_usd)
-        self.db.add_event(pid, "budget_changed", f"novo limite US${budget_usd:.2f}")
+        self.db.add_event(pid, "budget_changed", f"novo limite operacional US${budget_usd:.2f}")
 
     def final_decision(self, pid: str, approve: bool, note: str = "", reviewer: str = "human") -> None:
         if self.db.production(pid)["status"] != PS.AWAITING_FINAL_REVIEW:
@@ -881,6 +969,7 @@ class Orchestrator:
                            decision=ReviewDecision.APPROVED if approve else ReviewDecision.REJECTED, result={"note": note})
         if approve:
             self.db.set_production_status(pid, PS.COMPLETED, note or "aprovada na revisão final")
+            self._settle(pid)   # devolve ao saldo o que sobrou do pré-orçamento
         else:
             self.db.set_production_status(pid, PS.EDITING, note or "reprovada na revisão final: remontar")
         write_reports(self.db, pid, self._storage(pid))

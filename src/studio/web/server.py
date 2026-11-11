@@ -41,11 +41,12 @@ from ..agent_chat import AgentChat
 from ..accounts import (LOGIN_WINDOW_MIN, RESET_MINUTES, TERMS_VERSION, VERIFY_MINUTES, Accounts, AuthError, GoogleAuthError,
                         verify_password)
 from ..config import load_settings
-from ..credits import Ledger
+from ..credits import InsufficientCredits as InsufficientCreditsError, Ledger
 from ..db import Database, checkpoint
 from ..factory import build
 from ..logs import REQUEST_INFO, redact
 from ..models import ProductInput
+from ..budget import AdjustmentNeedsAuthorization
 from ..orchestrator import OrchestratorError
 from ..profiles import KINDS, available_versions, load_profile
 from ..profiles import snapshot as snapshot_profiles
@@ -922,6 +923,9 @@ class App:
                 db.close()
             if not owned:
                 return _json(404, {"error": "produção não encontrada"})
+            if m.group(2) == "budget" and not ctx["admin"]:
+                # Orçamento operacional é freio interno do Kiroo: o cliente não sobe limite nem paga para terminar.
+                return _json(403, {"error": "o limite operacional da produção é ajustado só pela equipe do Kiroo"})
             return self._action(m.group(1), m.group(2), payload, s)
         return _json(404, {"error": "não encontrado"})
 
@@ -1039,12 +1043,37 @@ class App:
         if raw not in (None, ""):
             return float(raw)
         from .. import billing
-        return billing.default_production_budget_usd(s.monthly_cap_usd if s.mode == "real" else None)
+        if s.mode != "real":
+            return billing.default_production_budget_usd(None)
+        # Orçamento OPERACIONAL (freio interno): folga sobre o pré-orçamento, nunca acima do teto efetivo do estúdio.
+        from .. import budget as budget_mod
+        ops = budget_mod.ops_budget_usd(budget_mod.estimate_production(s)["usd"], billing.policy().usd(
+            billing.default_production_cap_credits()))
+        return min(ops, max(float(s.monthly_cap_usd or 0), 0.0))
+
+    @staticmethod
+    def _no_credits(exc) -> Response:
+        """Saldo < pré-orçamento: bloqueia ANTES de começar, com a conta à vista."""
+        from ..credits import fmt
+        return _json(402, {"error": f"Este vídeo custa cerca de {fmt(exc.needed_cc)} créditos (com os ajustes incluídos) "
+                                    f"e o saldo do estúdio é {fmt(exc.balance_cc)}. Nada foi cobrado e a produção não "
+                                    "começou: adicione créditos e tente de novo.",
+                           "insufficient_credits": True, "needed_cc": exc.needed_cc, "balance_cc": exc.balance_cc})
 
     def _create(self, payload: dict, ctx) -> Response:
         s = ctx["s"]
         if s.mode == "real" and paid_gate.blocked_reason():   # aviso antes de receber fotos e criar a produção
             return _json(409, {"error": paid_gate.MESSAGES[paid_gate.blocked_reason()], "paid_calls_blocked": True})
+        prebudget = s.mode == "real"
+        if prebudget:   # pré-orçamento: sem saldo para o vídeo completo, recusa antes de receber fotos
+            from .. import budget as budget_mod
+            db = Database(s.db_path)
+            try:
+                Ledger(db).can_reserve(ctx["wid"], budget_mod.estimate_production(s)["cc"])
+            except InsufficientCreditsError as exc:
+                return self._no_credits(exc)
+            finally:
+                db.close()
         autonomy = str(payload.get("autonomy") or ("manual" if payload.get("flow") == "game" else "classico"))
         if payload.get("creative"):
             choices = creative_options.resolve(parse_creative(payload["creative"]), str(payload.get("name", "")),
@@ -1061,7 +1090,9 @@ class App:
                                          presenter=payload.get("presenter") or "bia",
                                          budget_usd=self._budget_for(payload, s),
                                          go_ahead=("none" if autonomy == "manual" else "all") if payload.get("flow") == "game" else "all",
-                                         autonomy=autonomy, workspace_id=ctx["wid"])
+                                         autonomy=autonomy, workspace_id=ctx["wid"], prebudget=prebudget)
+        except InsufficientCreditsError as exc:
+            return self._no_credits(exc)
         finally:
             orch.db.close()
         if payload.get("start", True):
@@ -1148,7 +1179,19 @@ class App:
             if action == "approve":
                 orch.approve(pid, int(payload["scene"]), payload["stage"], payload.get("note", ""))
             elif action == "reject":
-                orch.reject(pid, int(payload["scene"]), payload["stage"], payload.get("note", ""), redo_image=bool(payload.get("redo_image")))
+                try:
+                    orch.reject(pid, int(payload["scene"]), payload["stage"], payload.get("note", ""),
+                                redo_image=bool(payload.get("redo_image")), authorize_extra=payload.get("authorize_extra") is True)
+                except AdjustmentNeedsAuthorization as exc:   # nada muda até o cliente autorizar, vendo o custo
+                    from ..credits import fmt
+                    return _json(402, {"error": f"Os ajustes incluídos desta cena já foram usados. Um ajuste extra custa "
+                                                f"cerca de {fmt(exc.cost_cc)} créditos.", "needs_authorization": True,
+                                       "cost_cc": exc.cost_cc, "cost_credits": fmt(exc.cost_cc), "scene": exc.scene,
+                                       "stage": exc.stage, "included": exc.included, "used": exc.used})
+                except InsufficientCreditsError as exc:
+                    from ..credits import fmt
+                    return _json(402, {"error": f"O ajuste extra custa cerca de {fmt(exc.needed_cc)} créditos e o saldo é "
+                                                f"{fmt(exc.balance_cc)}. Nada foi cobrado.", "insufficient_credits": True})
             elif action == "retry":
                 stage = payload.get("stage")
                 if stage not in {"image", "video"}:

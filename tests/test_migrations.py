@@ -19,11 +19,11 @@ def schema_snapshot(conn):
 
 def test_empty_database_boots_at_latest(tmp_path):
     db = Database(tmp_path / "d" / "studio.sqlite3")
-    assert current_version(db.conn) == migrations.LATEST == 2
+    assert current_version(db.conn) == migrations.LATEST == 3
     tables = {r[0] for r in db.conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     assert {"productions", "scenes", "attempts", "reviews", "events", "run_state", "users", "workspaces", "memberships",
             "sessions", "login_attempts", "email_codes", "password_resets", "credit_entries", "training_state",
-            "training_versions", "training_tests", "music_tracks", "music_favorites", "chat_log", "invites"} <= tables
+            "training_versions", "training_tests", "music_tracks", "music_favorites", "chat_log", "invites", "production_charges"} <= tables
     db.close()
 
 

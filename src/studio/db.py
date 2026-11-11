@@ -176,7 +176,8 @@ class Database:
         if row["status"] != ProductionStatus.PAUSED:
             raise ValueError("produção não está pausada")
         target = ProductionStatus(row["resume_status"])
-        self.update_production(pid, status=target, resume_status=None, status_reason=None)
+        extra = {"pause_code": None} if "pause_code" in row.keys() else {}
+        self.update_production(pid, status=target, resume_status=None, status_reason=None, **extra)
         self.add_event(pid, "production_status", reason, from_state=ProductionStatus.PAUSED, to_state=target)
         return target
 

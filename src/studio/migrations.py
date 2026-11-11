@@ -333,9 +333,35 @@ def _m002_invites_consent(conn: sqlite3.Connection) -> None:
             conn.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT")
 
 
+def _m003_prebudget(conn: sqlite3.Connection) -> None:
+    """Saldo do cliente × orçamento operacional: pré-orçamento reservado (prebudget_cc), código estável do motivo de
+    pausa (pause_code), ajustes por cena e o registro de cobrança por tentativa (production_charges, idempotente).
+    Produções antigas ficam com prebudget_cc NULL e seguem o regime antigo (reserva/débito por chamada)."""
+    for table, col, decl in (("productions", "prebudget_cc", "INTEGER"), ("productions", "pause_code", "TEXT"),
+                             ("scenes", "adjustments_used", "INTEGER NOT NULL DEFAULT 0"),
+                             ("scenes", "adjustments_authorized", "INTEGER NOT NULL DEFAULT 0")):
+        if col not in _columns(conn, table):
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
+    conn.execute("""CREATE TABLE IF NOT EXISTS production_charges (
+        attempt_id TEXT PRIMARY KEY,          -- uma decisão por tentativa: repetir o acerto não cobra de novo
+        production_id TEXT NOT NULL,
+        workspace_id TEXT NOT NULL,
+        scene_idx INTEGER,
+        operation TEXT NOT NULL,              -- image | video | review_image | review_video | plan
+        provider TEXT,
+        model TEXT,
+        cost_usd REAL NOT NULL,               -- custo interno (o que o Kiroo paga ao provedor)
+        charged_cc INTEGER NOT NULL,          -- o que saiu do pré-orçamento do cliente
+        decision TEXT NOT NULL,               -- charged | technical_failure | absorbed
+        created_at TEXT NOT NULL
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_charges_prod ON production_charges(production_id)")
+
+
 MIGRATIONS: list[Migration] = [
     Migration(1, "schema completo", _m001_baseline),
     Migration(2, "convites de uso único e consentimento", _m002_invites_consent),
+    Migration(3, "pré-orçamento, código de pausa, ajustes por cena e cobrança por tentativa", _m003_prebudget),
 ]
 LATEST = MIGRATIONS[-1].version
 assert [m.version for m in MIGRATIONS] == list(range(1, LATEST + 1)), "migrações devem ser 1..N em ordem"

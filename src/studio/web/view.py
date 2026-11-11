@@ -231,9 +231,20 @@ def snapshot(settings: Settings, db: Database, pid: str | None, *, since: int = 
         return data
     p = db.production(pid)
     product = json.loads(p["product_json"])
+    has_pool = "prebudget_cc" in p.keys() and p["prebudget_cc"] is not None
+    if has_pool:
+        from .. import budget as budget_mod
+        from ..credits import Ledger, to_cc
+        included = budget_mod.included_adjustments_per_scene()
+        extra_cc = {st: to_cc(budget_mod.adjustment_cost_usd(settings, st)) for st in ("image", "video")}
     scenes = []
     for sc in db.scenes(pid):
         spec = json.loads(sc["spec_json"])
+        adj = None
+        if has_pool:   # ajustes do cliente: incluídos no pré-orçamento e custo (visível) de um extra
+            used, auth = sc["adjustments_used"], sc["adjustments_authorized"]
+            adj = {"included": included, "used": used, "authorized": auth, "free_left": max(included + auth - used, 0),
+                   "extra_cost_credits": {k: -(-v // 100) for k, v in extra_cc.items()}}
         scenes.append({
             "idx": sc["idx"], "title": spec["title"], "status": sc["status"],
             "label": SCENE_LABELS[SS(sc["status"])], "motion": spec["motion"],
@@ -243,6 +254,7 @@ def snapshot(settings: Settings, db: Database, pid: str | None, *, since: int = 
             "approved_image": sc["approved_image_attempt"], "approved_video": sc["approved_video_attempt"],
             "image_attempts": db.count_generation_attempts(pid, sc["idx"], "image"),
             "video_attempts": db.count_generation_attempts(pid, sc["idx"], "video"),
+            "adjustments": adj,
         })
     st = PS(p["status"])
     delivery = {}
@@ -275,6 +287,7 @@ def snapshot(settings: Settings, db: Database, pid: str | None, *, since: int = 
         gate = "images"
     elif st == PS.PRODUCING and go_ahead == "images" and sc_rows and all(r["approved_image_attempt"] for r in sc_rows)             and all(r["status"] in (SS.IMAGE_APPROVED, SS.PENDING) for r in sc_rows):
         gate = "videos"
+    pool = Ledger(db).pool_state(pid) if has_pool else None
     caption_file = settings.data_dir / "productions" / pid / "delivery" / "caption.txt"
     data["production"] = {
         "go_ahead": go_ahead,
@@ -286,7 +299,13 @@ def snapshot(settings: Settings, db: Database, pid: str | None, *, since: int = 
                               if "training_json" in p.keys() and p["training_json"] else None),
         "creative": product.get("creative"),
         "gate": gate,
-        "credits": {"spent": pol.credits(committed), "budget": pol.credits(p["budget_usd"]), "policy": pol.describe()},
+        # Com pré-orçamento, o que o cliente vê é o SALDO dele: reservado para este vídeo e usado até agora.
+        # O orçamento operacional (budget_usd) é interno e não aparece como "limite" para o cliente.
+        "credits": ({"spent": -(-pool["used_cc"] // 100), "budget": -(-pool["reserved_cc"] // 100), "prebudget": True,
+                     "policy": pol.describe()} if has_pool else
+                    {"spent": pol.credits(committed), "budget": pol.credits(p["budget_usd"]), "prebudget": False,
+                     "policy": pol.describe()}),
+        "pause_code": p["pause_code"] if "pause_code" in p.keys() else None,
         "estimates": billing.stage_estimates(settings, n_scenes=len(sc_rows) or 3),
         "caption": caption_file.read_text(encoding="utf-8") if caption_file.is_file() else None,
         "sheet": {
