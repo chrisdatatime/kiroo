@@ -91,11 +91,39 @@ Liberar o estúdio não basta para gastar. A chamada paga só sai quando **todos
 2. `STUDIO_ALLOW_PAID_CALLS=1` (padrão 0 em staging/produção).
 3. `STUDIO_MONTHLY_CAP_USD` > 0 (teto do mês da plataforma inteira; obrigatório em staging/produção) e ainda com folga.
 4. Teto diário do agente (`STUDIO_AGENT_DAILY_CAP_USD`, se definido), teto mensal efetivo do estúdio (> 0; veja
-   `set-cap`), orçamento da produção e saldo de créditos (estúdios não isentos).
+   `set-cap`), orçamento operacional da produção e saldo de créditos (estúdios não isentos; com pré-orçamento, o saldo
+   é reservado na criação).
 
-Limite de cada produção: a tela "Nova produção" não pede mais o limite. O servidor aplica
-`STUDIO_DEFAULT_PRODUCTION_CAP_CREDITS` (padrão 80 créditos), nunca acima do teto efetivo do estúdio, e a produção
-pausa antes de ultrapassá-lo (o limite pode ser subido depois na própria produção).
+### Saldo do cliente × orçamento operacional (dois freios diferentes)
+
+- **Saldo do cliente** (créditos concedidos/comprados). Ao criar uma produção em modo real, o servidor calcula o
+  **pré-orçamento** do vídeo completo (roteiro + imagens e takes previstos por cena, cada um com conferência, + os
+  ajustes incluídos) pela tabela `profiles/billing/operation_costs.json` e **reserva** esse valor do saldo. Saldo menor
+  que a estimativa → a produção não começa (`402`, "Nada foi cobrado"). Durante a produção, cada tentativa concluída
+  sai dessa reserva; o cliente nunca paga mais que o pré-orçamento + os ajustes extras que ele autorizou. Ao concluir
+  ou cancelar, o que sobrou volta ao saldo.
+- **Falha técnica** (erro do provedor, tempo esgotado): não sai nada do cliente (no regime antigo, a reserva é estornada).
+- **Ajustes pedidos pelo cliente**: `STUDIO_INCLUDED_ADJUSTMENTS_PER_SCENE` por cena (padrão 1) já estão no pré-orçamento.
+  Além disso, a tela mostra o custo do ajuste extra e só segue com autorização explícita (`authorize_extra`), que
+  reserva esse custo do saldo antes de refazer.
+- **Orçamento operacional da produção** (`productions.budget_usd`): freio **interno** contra laço ou estimativa ruim
+  (padrão: o maior entre `STUDIO_DEFAULT_PRODUCTION_CAP_CREDITS` e pré-orçamento × `STUDIO_OPS_BUDGET_FACTOR`, nunca
+  acima do teto efetivo). Ao atingi-lo, a produção pausa as chamadas externas com o código estável
+  `ops_budget_reached`, registra o evento `ops_alert` e manda e-mail aos administradores (se o envio estiver
+  configurado). O cliente vê só "Estamos finalizando seu vídeo… avisaremos" — **nunca** cobrança automática nem botão
+  de subir limite (a rota `/budget` responde `403` para quem não é administrador).
+- O teto mensal (plataforma/conta, `set-cap`) continua independente: vale o freio que bloquear primeiro, e teto 0 não
+  gasta em nenhum caminho.
+
+| O que | Comando |
+|---|---|
+| Ver produções pausadas por freio interno | `studio admin ops-alerts` |
+| Ajustar o orçamento operacional e retomar | `studio budget <pid> --set <US$>` e `studio resume <pid>` |
+
+Cada acerto com o cliente fica em `production_charges` (uma linha por tentativa: produção, cena, operação, provedor,
+modelo, custo interno, créditos cobrados e decisão `charged` | `technical_failure` | `absorbed`); repetir o acerto não
+cobra de novo. Produções criadas antes desta versão (sem pré-orçamento) abrem e seguem o regime antigo de reserva e
+débito por chamada.
 
 Para cortar todo gasto na hora: `STUDIO_KILL_SWITCH=1` e reinicie o serviço. As produções em andamento pausam com aviso
 amigável e retomam quando o kill switch sair. Confira com `python -m studio doctor` (linha "portão de chamadas pagas").

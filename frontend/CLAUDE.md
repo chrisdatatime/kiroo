@@ -104,7 +104,7 @@ A importação automática de fotos pelo link **não existe**: as fotos vêm do 
 - Não inventar preço, título, variante ou características do produto. Legenda só usa ficha + o que o usuário confirmou.
 - Mostrar estimativa e limite **antes** de cada etapa paga; diferenciar estimativa de custo confirmado.
 - Corrigir uma cena refaz só aquela cena e mostra o que é preservado; limite de tentativas por cena vem do servidor.
-- Ao atingir o limite: preservar tudo e oferecer subir limite, revisar o que existe ou continuar depois.
+- Orçamento operacional da produção é freio INTERNO: ao atingi-lo (`pause_code: ops_budget_reached`) a tela diz "estamos finalizando, avisaremos" — nunca oferece subir limite nem pede dinheiro (`ui/pause.js`, `tests/pause.test.mjs`). Ajuste além dos incluídos (`scene.adjustments`) só com autorização explícita e o custo à vista.
 - Conferência automática pode ser inconclusiva; nada de "100% fiel".
 - Publicação na Shopee é manual. Não mostrar modelos, filas ou parâmetros de API na experiência principal.
 - Acessibilidade: elementos interativos são `<button>`/`<a>`, foco visível, alvos ≥ 44 px, estados não dependem só de cor.
