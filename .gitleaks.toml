@@ -39,3 +39,25 @@ regexTarget = "secret"
 regexes = [
   '''^outra-senha-456$''',
 ]
+
+[[rules.allowlists]]
+description = "senha fictícia do teste do Turnstile (conta descartável)"
+condition = "AND"
+paths = [
+  '''^tests/test_turnstile\.py$''',
+]
+regexTarget = "secret"
+regexes = [
+  '''^uma\-senha\-longa\-123$''',
+]
+
+[[rules.allowlists]]
+description = "senha fictícia do teste do envio de e-mail pelo Resend (conta descartável)"
+condition = "AND"
+paths = [
+  '''^tests/test_mail_resend_api\.py$''',
+]
+regexTarget = "secret"
+regexes = [
+  '''^senha\-forte\-123$''',
+]
