@@ -31,7 +31,7 @@ class TourBoundary extends React.Component {
   componentDidCatch(e) { console.error('Tutorial falhou:', e); this.props.onFail(); }
   render() { return this.state.failed ? null : this.props.children; }
 }
-import { deriveStage, sceneView, toCredits, creditsToUsd } from './engine/adapter.js';
+import { deriveStage, sceneView, toCredits, creditsToUsd, endedOf, stoppedAt } from './engine/adapter.js';
 import { adjustmentGate, pauseKind } from './ui/pause.js';
 import { balanceLabel, needsConfirmation, usedLabel } from './ui/nextVideo.js';
 import { adjustFunds, noBalanceFromError, noBalanceNotice } from './ui/credits.js';
@@ -198,7 +198,11 @@ export default class App extends React.Component {
   }
   prodP() { const s = this.state; return s.draftMode || !s.S ? null : s.S.production; }
   stage() { return deriveStage(this.prodP()); }
-  scenes() { const P = this.prodP(); return P ? P.scenes.map((x) => sceneView(x, P.go_ahead)) : []; }
+  // Missão cancelada/falhou: 'cancelled' | 'failed' | null. Nada roda, nada pede você, nenhuma ação de avançar.
+  ended() { return endedOf(this.prodP()); }
+  // Posição no fluxo (STAGES). Encerrada: onde parou, só para mostrar o que já existe (nunca como 'gerando').
+  stageIdx() { const P = this.prodP(); return STAGES.indexOf(this.ended() ? stoppedAt(P) : this.stage()); }
+  scenes() { const P = this.prodP(); return P ? P.scenes.map((x) => sceneView(x, P.go_ahead, this.ended())) : []; }
   pol() { return this.state.S ? this.state.S.settings.credit_policy : null; }
   announce() {
     const st = this.stage();
@@ -232,6 +236,7 @@ export default class App extends React.Component {
   // ---------- status de cada agente (derivado do estado REAL) ----------
   statusOf(id) {
     const P = this.prodP(), st = this.stage(), sc = this.scenes();
+    if (this.ended()) return 'idle';
     const imgGen = sc.some((x) => x.img === 'gerando' || x.img === 'fila');
     const vidGen = sc.some((x) => x.vid === 'gerando' || x.vid === 'fila');
     if (id === 'nina') return this.state.busy === 'produto' ? 'work' : (st === 'produto' ? 'need' : 'idle');
@@ -487,9 +492,10 @@ export default class App extends React.Component {
     this.openProd(r.tab);
   }
   roomStatus(r) {
-    const P = this.prodP(), st = this.stage(), sc = this.scenes(), idx = STAGES.indexOf(st);
+    const P = this.prodP(), st = this.stage(), sc = this.scenes(), idx = this.stageIdx();
     const running = (k) => sc.find((x) => x[k] === 'gerando');
     if (!r.agent) return P ? STAGE_LABELS[st] : 'Nenhuma produção aberta';
+    if (P && this.ended()) return this.ended() === 'cancelled' ? 'Missão cancelada' : 'Missão falhou';
     if (!P && r.agent !== 'nina') return 'Sem tarefa agora';
     const status = this.statusOf(r.agent);
     switch (r.agent) {
@@ -516,7 +522,7 @@ export default class App extends React.Component {
     this.setUI({ win: 'prod', tab, adjust: false, issues: [], adjText: '', revSel: first ? first.idx : this.state.ui.revSel, revView: 'scene' });
     if (tab === 'direcao') this.loadOptions();
   }
-  revKind() { return STAGES.indexOf(this.stage()) >= 5 ? 'vid' : 'img'; }
+  revKind() { return this.stageIdx() >= 5 ? 'vid' : 'img'; }
 
   // ---------- ações da produção (API real) ----------
   async addFiles(list) {
@@ -728,13 +734,17 @@ export default class App extends React.Component {
   }
 
   dialogFor(id) {
-    const P = this.prodP(), st = this.stage(), idx = STAGES.indexOf(st);
+    const P = this.prodP(), st = this.stage(), idx = this.stageIdx();
     const status = this.statusOf(id);
     const ok = (label = 'Ok') => ({ label, cls: 'g-btn', act: () => this.closeWin() });
     const open = (tab, label, lime) => ({ label, cls: lime ? 'g-btn g-lime' : 'g-btn', act: () => this.openProd(tab) });
     const sc = this.scenes();
     const curScene = (kind) => { const k = sc.find((x) => x[kind] === 'gerando'); return k ? String(k.idx) : ''; };
     const est = P ? P.estimates : null;
+    if (P && this.ended()) return { line: this.ended() === 'cancelled'
+      ? 'Esta missão foi cancelada. Nada mais é gerado nem cobrado; o que já saiu continua no histórico.'
+      : 'Esta missão falhou: ' + (P.reason || 'veja o histórico') + '. Nada mais é gerado nem cobrado.',
+    opts: [{ label: 'Nova produção', cls: 'g-btn g-lime', act: () => this.newProduction() }, ok()] };
     if (id === 'nina') {
       if (!P) return { line: 'Oi! Sou a Nina, cuido da preparação. Me passa o nome e as fotos oficiais do produto. A importação automática por link de marketplace ainda não existe, então as fotos vêm de você.', opts: [open('produto', 'Abrir ficha do produto', true), ok('Depois')] };
       if (P.status === 'awaiting_references') return { line: 'Conferi a ficha e falta material: ' + ((P.reason || '').slice(0, 160)) + ' Me manda fotos válidas?', opts: [open('produto', 'Ver o que falta', true), ok('Depois')] };
@@ -778,7 +788,7 @@ export default class App extends React.Component {
     const s = this.state, ui = s.ui, P = this.prodP(), st = this.stage();
     const scale = this.fitZoom(), zoom = scale;
     const camX = GRID.W / 2, camY = GRID.H / 2;
-    const idx = STAGES.indexOf(st);
+    const idx = this.stageIdx(), ended = this.ended();
     const near = ui.win ? null : this.nearestTarget();
     const statuses = {}; AGENTS.forEach((a) => { statuses[a.id] = this.statusOf(a.id); });
     const sc = this.scenes();
@@ -818,7 +828,11 @@ export default class App extends React.Component {
     const workA = AGENTS.find((a) => statuses[a.id] === 'work');
     const tabOf = (aid) => (TABS.find((t) => t.agent === aid) || {}).id;
     let nextLabel = '', nextLong = '', goNext = () => {};
-    if (P && P.status === 'paused') { nextLabel = 'Ver pausa'; nextLong = 'Produção pausada: ' + (P.reason || ''); goNext = () => { this.setUI({ budgetHit: true, budgetDismissed: null }); this.openProd('revisao'); }; }
+    const endedText = !P || !ended ? '' : ended === 'cancelled' ? 'Nada mais é gerado nem cobrado; o que já foi gerado continua no histórico.'
+      : 'Motivo: ' + (P.reason || 'veja o histórico') + '. Nada mais é gerado nem cobrado.';
+    if (P && ended) { nextLabel = 'Nova missão'; goNext = () => this.newProduction();
+      nextLong = (ended === 'cancelled' ? 'Missão cancelada. ' : 'A missão falhou. ') + endedText; }
+    else if (P && P.status === 'paused') { nextLabel = 'Ver pausa'; nextLong = 'Produção pausada: ' + (P.reason || ''); goNext = () => { this.setUI({ budgetHit: true, budgetDismissed: null }); this.openProd('revisao'); }; }
     else if (needA) { nextLabel = { nina: 'Abrir ficha', theo: 'Ver proposta', iris: 'Liberar imagens', rui: 'Revisar agora', lia: 'Liberar vídeos', beto: 'Ver vídeo' }[needA.id]; nextLong = needA.name + ' precisa de você.'; goNext = () => this.openProd(tabOf(needA.id)); }
     else if (workA) { nextLabel = 'Acompanhar'; nextLong = workA.name + ' está trabalhando. Você pode circular.'; goNext = () => this.openProd(tabOf(workA.id)); }
     else if (st === 'exportado') { nextLong = 'Tudo pronto. Comece outra produção quando quiser.'; nextLabel = 'Nova produção'; goNext = () => this.newProduction(); }
@@ -876,7 +890,7 @@ export default class App extends React.Component {
     const d = s.draft;
     const refs = P ? ((P.sheet && P.sheet.references) || []).filter((r) => r.url && !/\.mp4/i.test(r.url)) : [];
     const product = {
-      editing: !P || P.status === 'awaiting_references', created: !!P, refs, issues: P && P.sheet ? P.sheet.issues : [], unknown: P && P.sheet ? P.sheet.unknown_fields : [],
+      editing: !P || (P.status === 'awaiting_references' && !ended), created: !!P, refs, issues: P && P.sheet ? P.sheet.issues : [], unknown: P && P.sheet ? P.sheet.unknown_fields : [],
       name: P ? P.product.name : d.name, variant: P ? P.product.variant : '', link: P ? P.product.link : '',
       draft: d, setDraft: (k) => (e) => this.setDraft({ [k]: e.target.value }), files: s.files.map((f, k) => ({ ...f, k,
         setRole: (e) => { const fs = s.files.slice(); fs[k] = Object.assign({}, fs[k], { role: e.target.value }); this.setState({ files: fs }); },
@@ -889,7 +903,7 @@ export default class App extends React.Component {
     // --- direção ---
     const o = s.opts, c = s.creative;
     const dir = { ready: !!(o && c), summary: this.summaryText(), locked: idx < 1, done: idx > 1 || (P && P.creative && st !== 'direcao'), working: st === 'direcao' && P && P.creative,
-      canApprove: st === 'direcao' && !(P && P.creative && P.running) && !!c };
+      canApprove: st === 'direcao' && !ended && !(P && P.creative && P.running) && !!c };
     if (o && c) {
       dir.formats = [['product_only', false, false], ['hands_only', true, false], ['presenter', true, true]].map(([id, hand, person]) => ({
         id, hand, person, label: o.presentations[id].label, desc: o.presentations[id].desc, sel: c.presentation === id,
@@ -907,7 +921,7 @@ export default class App extends React.Component {
     dir.approve = () => this.approveDirection(); dir.load = () => this.loadOptions();
 
     // --- imagens / vídeos / revisão ---
-    const stLabel = { none: ['Aguardando', '#E7E1D6'], fila: ['Na fila', '#E7E1D6'], gerando: ['Criando…', '#8ED8F8'], pronta: ['Para revisar', '#D5F45B'], aprovada: ['Aprovada', '#BDE5B0'], falhou: ['Não saiu', '#FFE1DC'] };
+    const stLabel = { parada: ['Interrompida', '#E7E1D6'], none: ['Aguardando', '#E7E1D6'], fila: ['Na fila', '#E7E1D6'], gerando: ['Criando…', '#8ED8F8'], pronta: ['Para revisar', '#D5F45B'], aprovada: ['Aprovada', '#BDE5B0'], falhou: ['Não saiu', '#FFE1DC'] };
     const slot = (key) => sc.map((x) => {
       const lb = stLabel[x[key]]; const att = key === 'img' ? x.image : x.video;
       const waitScene1 = key === 'img' && x.img === 'fila' && x.idx > 1;
@@ -931,13 +945,13 @@ export default class App extends React.Component {
       const view = ui.revView;
       rev = {
         n: sel.idx, title: (kind === 'img' ? 'Imagem' : 'Take') + ' da cena ' + sel.idx + ': ' + sel.title, sub: sel.motion,
-        canAct: sel[kind] === 'pronta' && !!(att && att.url) && !(P && P.running),
+        canAct: !ended && sel[kind] === 'pronta' && !!(att && att.url) && !(P && P.running),
         failed: sel[kind] === 'falhou', failBilling: /error code: 402|prepayment credits|credits are depleted/i.test((att && att.error) || ''), failText: (att && att.error) || 'A geração não terminou e as tentativas desta cena acabaram.',
-        canRetry: sel[kind] === 'falhou' && !(P && P.running), limitHit: tries >= maxT, nextTry: tries + 1, maxTries: maxT, tries,
+        canRetry: !ended && sel[kind] === 'falhou' && !(P && P.running), limitHit: tries >= maxT, nextTry: tries + 1, maxTries: maxT, tries,
         cost: est ? (kind === 'img' ? est.redo_image.credits : est.redo_video.credits) : 0, who: kind === 'img' ? 'a Iris' : 'a Lia', what: kind === 'img' ? 'imagem' : 'animação',
         chk, criteria: sel.criteria,
-        versions: (() => { const sb = sideBySide(sel, kind, !!(P && P.running)); return sb && { ...sb, items: sb.items.map((it) => ({ ...it, choose: () => this.chooseVersion(sel.idx, sb.stage, it.id) })) }; })(),
-        anchor: (() => { const a = anchorInfo(P, sel, kind); return a && { ...a, set: () => this.setAnchor(a.attemptId), clear: () => this.setAnchor(null) }; })(),
+        versions: (() => { const sb = sideBySide(sel, kind, !!(P && P.running) || !!ended); return sb && { ...sb, items: sb.items.map((it) => ({ ...it, choose: () => this.chooseVersion(sel.idx, sb.stage, it.id) })) }; })(),
+        anchor: (() => { const a = ended ? null : anchorInfo(P, sel, kind); return a && { ...a, set: () => this.setAnchor(a.attemptId), clear: () => this.setAnchor(null) }; })(),
         advice: formatAdvice({ production: P, presentation: P && P.creative ? P.creative.presentation : null }),
         media: { view, refUrl: ref && ref.url, imgUrl: sel.image && sel.image.url, vidUrl: sel.video && sel.video.url,
           label: view === 'ref' ? 'Referência · sua foto' : view === 'video' ? 'Conteúdo gerado · take v' + Math.max(tries, 1) : 'Conteúdo gerado · imagem',
@@ -981,10 +995,11 @@ export default class App extends React.Component {
     // --- shell: fluxo da missão e fila de decisões (derivados do mesmo estado real) ---
     const rsOf = (id) => { const r = ROOMS.find((x) => x.agent === id); return r ? this.roomStatus(r) : ''; };
     const paused = !!(P && P.status === 'paused');
-    const pipeline = buildPipeline({ idx, statuses, hasProd: !!P, paused, detail: {
-      objetivo: P ? P.product.name : '', orquestrador: paused ? 'Pausada: ' + (P.reason || '') : P ? STAGE_LABELS[st] : '',
+    const pipeline = buildPipeline({ idx, statuses, hasProd: !!P, paused, ended, detail: {
+      objetivo: P ? P.product.name : '', orquestrador: ended ? (ended === 'cancelled' ? 'Cancelada' : 'Falhou') + (P.reason ? ': ' + P.reason : '')
+        : paused ? 'Pausada: ' + (P.reason || '') : P ? STAGE_LABELS[st] : '',
       roteiro: rsOf(idx < 1 ? 'nina' : 'theo'), criativo: rsOf('iris'), video: rsOf('lia'), revisao: rsOf('rui'), entrega: rsOf('beto') } });
-    const attn = P ? attention({ paused, pauseReason: P.reason, rooms: ROOMS.filter((r) => r.agent && statuses[r.agent] === 'need').map((r) => ({ id: r.id, name: r.name, who: AGM[r.agent].name,
+    const attn = P ? attention({ paused, ended, pauseReason: P.reason, rooms: ROOMS.filter((r) => r.agent && statuses[r.agent] === 'need').map((r) => ({ id: r.id, name: r.name, who: AGM[r.agent].name,
       status: this.roomStatus(r), need: true, look: AGM[r.agent].look, work: () => this.openRoomWork(r.id) })) }) : [];
 
     return {
@@ -1069,6 +1084,11 @@ export default class App extends React.Component {
       confirmCap: ui.confirmCap || null, confirmCapUsd: ui.confirmCapUsd || 0, cancelCap: () => this.setUI({ confirmCap: null }),
       pause: this.pauseInfo(), raiseMonthly: (n) => this.raiseMonthly(n), resumeOnly: () => this.resumeOnly(),
       cancelProd: () => this.cancelProd(), confirmCancel: !!ui.confirmCancel, keepProd: () => this.setUI({ confirmCancel: false }),
+      // Missão encerrada e cancelamento pela interface (com confirmação dentro do app)
+      ended, endedText, canCancel: !!(P && !ended && P.status !== 'completed'),
+      // Apresentação e formato ATIVOS (os que o motor usa para roteiro, prompts e revisão)
+      active: P ? { presentation: P.presentation || null, label: P.presentation_label || (P.awaiting_direction ? 'A definir na Direção' : '—'),
+        format: P.format_id || '', provisional: !!P.awaiting_direction } : null,
       // entrega
       entLocked: idx < 8, entBuilding: st === 'montando', delivery: P ? P.delivery : {},
       edit: P ? P.edit : null, editOptions: s.S ? s.S.settings.edit_styles : null,

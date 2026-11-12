@@ -517,7 +517,9 @@ export default function ProdWindow({ v }) {
       <div style={{ padding: '12px 14px 0', background: '#F2F2EF', borderBottom: '1px solid #E7E7E4', display: 'flex', flexDirection: 'column', gap: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <h2 id="prod-h" className="fred" style={{ margin: 0, fontSize: 20, fontWeight: 600 }}>{v.prodName}</h2>
-          <span style={{ font: '800 12px/1 Instrument Sans,sans-serif', padding: '5px 9px', borderRadius: 999, background: '#0E0E10', color: '#fff' }}>{v.stageLabel}</span>
+          <span style={{ font: '800 12px/1 Instrument Sans,sans-serif', padding: '5px 9px', borderRadius: 999, background: v.ended ? '#E7E7E4' : '#0E0E10', color: v.ended ? '#3A3A3F' : '#fff' }}>{v.stageLabel}</span>
+          {v.active && <span title="Apresentação e formato ativos (roteiro, prompts e revisão seguem este formato)" style={{ font: '700 12px/1 Instrument Sans,sans-serif', padding: '5px 9px', borderRadius: 999, background: '#fff', border: '1px solid #E7E7E4' }}>
+            {v.active.label}{v.active.format && !v.active.provisional ? <span style={{ fontFamily: 'Geist Mono, monospace', fontWeight: 500, color: '#5B5B60' }}> · {v.active.format}</span> : null}</span>}
           {v.mode === 'simulated' && <span className="g-sim">modo DEMO</span>}
           <span style={{ flex: 1 }} />
           <span className="g-muted" style={{ font: '800 13px/1 Instrument Sans,sans-serif', fontVariantNumeric: 'tabular-nums' }}>{v.spentText}</span>
@@ -534,13 +536,19 @@ export default function ProdWindow({ v }) {
         </div>
       </div>
       <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: 18 }}>
+        {v.ended && (
+          <div role="status" style={{ marginBottom: 14, padding: 12, borderRadius: 12, background: '#F2F2EF', border: '1px solid #D9D9D4', fontSize: 13.5, lineHeight: 1.45 }}>
+            <strong>{v.ended === 'cancelled' ? 'Missão cancelada.' : 'Missão falhou.'}</strong> {v.endedText}
+            <div style={{ marginTop: 8 }}><button className="g-btn g-sm g-lime" onClick={v.newProd}>Nova missão</button></div>
+          </div>
+        )}
         {v.tab === 'produto' && <TabProduto v={v} />}
         {v.tab === 'direcao' && <TabDirecao v={v} />}
         {v.tab === 'imagens' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             {v.imgLocked && <Locked>A Iris entra quando você aprovar a direção e as cenas com o Theo.</Locked>}
             {v.imgGate && v.est && <Gate v={v} title="Criar 3 imagens, uma por cena" credits={v.est.images.credits} onGo={v.startImages} label="Gerar imagens" note="A cena 1 vem primeiro e define o visual das outras." />}
-            {!v.imgLocked && !v.imgGate && <><Slots list={v.imgSlots} /><p className="g-muted" style={{ margin: 0, fontSize: 13 }}>Cada imagem leva cerca de 30 s. Você pode sair desta janela: o estúdio avisa quando terminar.</p></>}
+            {!v.imgLocked && !v.imgGate && <><Slots list={v.imgSlots} />{!v.ended && <p className="g-muted" style={{ margin: 0, fontSize: 13 }}>Cada imagem leva cerca de 30 s. Você pode sair desta janela: o estúdio avisa quando terminar.</p>}</>}
           </div>
         )}
         {v.tab === 'revisao' && <TabRevisao v={v} />}

@@ -166,7 +166,8 @@ function Panel({ v, onCollapse, newMission }) {
           <DropdownMenuLabel>Missões</DropdownMenuLabel>
           {v.productions.length === 0 && <DropdownMenuItem disabled>Nenhuma missão ainda</DropdownMenuItem>}
           {v.productions.slice(0, 8).map((p) => (
-            <DropdownMenuItem key={p.id} onSelect={p.open}>{p.current ? <CheckCheck /> : <span className="w-4" />}<span className="truncate">{p.name || p.id}</span></DropdownMenuItem>
+            <DropdownMenuItem key={p.id} onSelect={p.open}>{p.current ? <CheckCheck /> : <span className="w-4" />}<span className="truncate">{p.name || p.id}</span>
+              {p.status === 'cancelled' && <span className="ml-auto text-xs text-muted-foreground">Cancelada</span>}</DropdownMenuItem>
           ))}
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={newMission}><Plus />Nova missão</DropdownMenuItem>
@@ -239,6 +240,13 @@ export default function Shell({ v, rootRef, stageRef, onKeyDown, onKeyUp, onBlur
             <h1>{cur.title}{v.view !== 'central' && v.prodName ? <span> · {v.prodName}</span> : null}</h1>
             {v.conn === 'erro' && <span role="alert" className="pv-status pv-status-error">Sem conexão</span>}
             {v.mode === 'simulated' && <span className="pv-status pv-status-demo" title="Nada é cobrado; imagens e vídeos são de exemplo">DEMO</span>}
+            {v.ended && <span className="pv-status pv-status-ended" role="status">{v.ended === 'cancelled' ? 'Cancelada' : 'Falhou'}</span>}
+            {v.active && v.view !== 'central' && (
+              <span className="pv-status pv-status-format pv-hide-sm" data-testid="active-format"
+                title={'Apresentação e formato ativos: ' + v.active.label + ' · ' + v.active.format + (v.active.provisional ? ' (formato provisório até a Direção)' : '')}>
+                {v.active.label}{v.active.format && !v.active.provisional ? <code>{v.active.format}</code> : null}
+              </span>
+            )}
             <span className="pv-rail-fill" />
             <span className="pv-top-modes" data-tour="top-modes">
               {bal && <button type="button" className="pv-top-btn pv-hide-sm" onClick={() => v.openPrefs('credits')}><CircleDollarSign size={15} aria-hidden="true" />{bal}</button>}

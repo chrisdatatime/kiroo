@@ -96,6 +96,17 @@
 .pv-status { display: inline-flex; height: 22px; align-items: center; border-radius: 999px; padding: 0 8px; font-size: 10px; font-weight: 700; letter-spacing: .05em; }
 .pv-status-error { background: #FEE2E2; color: #991B1B; }
 .pv-status-demo { background: #FFF1CC; color: #835500; }
+/* Apresentação e formato ATIVOS da missão aberta (o que o motor usa) e o selo de missão encerrada */
+.pv-status-format { background: #F2F2EF; color: var(--ink); border: 1px solid var(--line); font-weight: 600; letter-spacing: 0; font-size: 11.5px; gap: 6px; max-width: 46vw; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.pv-status-format code { font: 500 11px/1 'Geist Mono', ui-monospace, monospace; color: var(--ink-3); }
+.pv-status-ended { background: #E7E7E4; color: #3A3A3F; letter-spacing: .02em; font-size: 11px; }
+/* confirmação dentro do app (cancelar missão) */
+.pv-confirm { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 12px; border: 1px solid var(--line-2); background: #fff; font-size: 13px; line-height: 1.45; }
+.pv-confirm-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.pv-btn.pv-btn-danger { background: #9A2E22; border-color: #9A2E22; color: #fff; } .pv-btn.pv-btn-danger:hover { background: #7A2218; }
+.pv-filters { display: flex; gap: 6px; flex-wrap: wrap; }
+.pv-filter { min-height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); background: #fff; color: var(--ink); font: 500 13px/1 'Instrument Sans', sans-serif; cursor: pointer; }
+.pv-filter[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: #fff; }
 .pv-body { position: relative; flex: 1; min-height: 0; }
 
 /* menu do estúdio (escuro) e atividade */

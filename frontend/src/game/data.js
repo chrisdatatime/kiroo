@@ -37,12 +37,5 @@ export const TABS = [
   { id: 'entrega', label: 'Entrega', agent: 'beto' },
 ];
 
-// Máquina de estados da produção
-export const STAGES = ['produto', 'direcao', 'gerar_img', 'img_gerando', 'img_revisao', 'gerar_vid', 'vid_gerando', 'vid_revisao', 'montando', 'entrega', 'exportado'];
-
-export const STAGE_LABELS = {
-  produto: 'Preparando o produto', direcao: 'Definindo a direção', gerar_img: 'Aguardando você liberar as imagens',
-  img_gerando: 'Criando imagens', img_revisao: 'Revisão das imagens', gerar_vid: 'Pronto para animar',
-  vid_gerando: 'Animando as cenas', vid_revisao: 'Revisão dos takes', montando: 'Montando o vídeo',
-  entrega: 'Vídeo pronto para revisar', exportado: 'Exportado',
-};
+// Máquina de estados da produção (definida em stages.js, sem dependências, para os testes em Node)
+export { STAGES, STAGE_LABELS } from './stages.js';

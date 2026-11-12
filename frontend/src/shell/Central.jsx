@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  Activity, AlertCircle, ArrowRight, CheckCircle2, Clock3, Coins,
+  Activity, AlertCircle, ArrowRight, Ban, CheckCircle2, Clock3, Coins,
   Gauge, Play, Plus, Sparkles,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -9,6 +9,8 @@ import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle }
 import { Progress } from '@/components/ui/progress';
 import Boneco from '../Boneco.jsx';
 import { AgentStatus } from './AgentHead.jsx';
+import CancelMission from './CancelMission.jsx';
+import { MISSION_FILTERS, filterMissions } from './pipeline.js';
 
 export const PROD_LABEL = { received: 'Preparando o produto', awaiting_references: 'Faltam fotos', validated: 'Direção', scripted: 'Direção', producing: 'Em produção',
   editing: 'Montando', awaiting_final_review: 'Pronto para revisar', completed: 'Exportada', paused: 'Pausada', failed: 'Falhou', cancelled: 'Cancelada' };
@@ -23,10 +25,11 @@ const STATUS_STYLE = {
   work: 'border-sky-200 bg-sky-50 text-sky-700',
   need: 'border-[#FF5B2E] bg-white text-[#0E0E10]',
   wait: 'border-slate-200 bg-slate-50 text-slate-600',
+  ended: 'border-slate-300 bg-slate-100 text-slate-700',   // cancelada/falhou/interrompido: sem animação
 };
 
 export const Pill = ({ s, children }) => {
-  const StatusIcon = s === 'done' ? CheckCircle2 : s === 'need' ? AlertCircle : s === 'work' ? Activity : Clock3;
+  const StatusIcon = s === 'done' ? CheckCircle2 : s === 'need' ? AlertCircle : s === 'work' ? Activity : s === 'ended' ? Ban : Clock3;
   return <Badge variant="outline" className={`h-6 gap-1 rounded-full px-2 font-medium ${STATUS_STYLE[s] || STATUS_STYLE.wait}`}><StatusIcon className={s === 'work' ? 'animate-pulse' : ''} />{children}</Badge>;
 };
 
@@ -46,6 +49,8 @@ function SectionHeading({ eyebrow, title, description, action }) {
 }
 
 export default function Central({ v }) {
+  const [filter, setFilter] = React.useState('todas');
+  const missions = filterMissions(v.productions, filter);
   const name = v.account ? v.account.user.name.split(' ')[0] : '';
   const n = v.attn.length;
   const pl = v.pipeline;
@@ -61,7 +66,9 @@ export default function Central({ v }) {
             </div>
             <h2 className="m-0 text-[clamp(1.65rem,3vw,2.25rem)] font-semibold leading-tight tracking-[-.035em] text-foreground">{greet()}{name ? `, ${name}` : ''}.</h2>
             <p className="mt-2 max-w-2xl text-[15px] leading-relaxed text-muted-foreground">
-              {n ? (n === 1 ? 'Há uma decisão aguardando sua análise.' : `Há ${n} decisões aguardando sua análise.`) : v.hasProd ? 'Nada precisa de você agora. A equipe segue trabalhando.' : 'Sua equipe está pronta para transformar um produto em uma nova missão.'}
+              {n ? (n === 1 ? 'Há uma decisão aguardando sua análise.' : `Há ${n} decisões aguardando sua análise.`)
+                : v.ended ? (v.ended === 'cancelled' ? 'A missão aberta foi cancelada. Comece outra quando quiser.' : 'A missão aberta falhou. Comece outra quando quiser.')
+                : v.hasProd ? 'Nada precisa de você agora. A equipe segue trabalhando.' : 'Sua equipe está pronta para transformar um produto em uma nova missão.'}
             </p>
           </div>
           {!v.hasProd && <Button className="h-10 bg-[var(--kiroo-ink)] px-4 text-white hover:bg-[#2A2A2E]" onClick={() => { v.setView('missao'); v.newProd(); }}><Plus />Criar primeira missão</Button>}
@@ -88,7 +95,7 @@ export default function Central({ v }) {
             {n === 0 && (
               <div className="flex min-h-32 items-center gap-4 px-5 py-6">
                 <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-700"><CheckCircle2 className="size-5" /></span>
-                <div className="min-w-0 flex-1"><div className="font-semibold">{v.hasProd ? 'Tudo em dia' : 'Pronto para começar'}</div><p className="mt-1 text-sm text-muted-foreground">{v.hasProd ? 'Avisaremos quando uma decisão realmente precisar de você.' : 'Crie uma missão e deixe a equipe organizar o fluxo de produção.'}</p></div>
+                <div className="min-w-0 flex-1"><div className="font-semibold">{v.hasProd && !v.ended ? 'Tudo em dia' : 'Pronto para começar'}</div><p className="mt-1 text-sm text-muted-foreground">{v.hasProd && !v.ended ? 'Avisaremos quando uma decisão realmente precisar de você.' : 'Crie uma missão e deixe a equipe organizar o fluxo de produção.'}</p></div>
                 {!v.hasProd && <Button variant="outline" onClick={() => { v.setView('missao'); v.newProd(); }}><Plus />Nova missão</Button>}
               </div>
             )}
@@ -104,18 +111,18 @@ export default function Central({ v }) {
 
         <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.45fr)_minmax(300px,.85fr)]">
           <section aria-labelledby="central-mission" className="space-y-3">
-            <SectionHeading eyebrow="Produção" title="Missão em curso" description="Progresso, próxima ação e orçamento em um só lugar." />
+            <SectionHeading eyebrow="Produção" title={v.ended ? 'Missão aberta' : 'Missão em curso'} description="Progresso, próxima ação e orçamento em um só lugar." />
             <Card className="min-h-[248px]">
               {v.hasProd ? (<>
                 <CardHeader className="border-b">
                   <CardTitle id="central-mission" className="text-lg font-semibold">{v.prodName}</CardTitle>
-                  <CardDescription>{v.stageLabel}{v.balanceText ? ' · ' + v.balanceText : ''}</CardDescription>
+                  <CardDescription>{v.stageLabel}{v.active ? ' · ' + v.active.label + (v.active.format && !v.active.provisional ? ' (' + v.active.format + ')' : '') : ''}{v.balanceText ? ' · ' + v.balanceText : ''}</CardDescription>
                   <CardAction><Pill s={pl.orchestrator.state}>{pl.orchestrator.label}</Pill></CardAction>
                 </CardHeader>
                 <CardContent className="flex flex-1 flex-col justify-between gap-6">
                   <div><div className="mb-2 flex items-center justify-between text-xs font-medium text-muted-foreground"><span>Progresso da missão</span><span>{pl.progress}%</span></div><Progress value={pl.progress} className="h-2" /></div>
                   <div className="rounded-xl border border-border bg-muted/45 p-4"><div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-[.08em] text-muted-foreground"><Sparkles className="size-3.5" />Próxima ação</div><div className="font-medium">{v.nextLong || 'A equipe está trabalhando sem depender de você.'}</div></div>
-                  <div className="flex flex-wrap gap-2">{v.nextLabel && <Button className="bg-[var(--kiroo-attn)] text-[var(--kiroo-ink)] hover:bg-[var(--kiroo-attn-strong)]" onClick={v.goNext}>{v.nextLabel}<ArrowRight /></Button>}<Button variant="outline" onClick={() => v.setView('missao')}><Play />Ver fluxo</Button></div>
+                  <div className="flex flex-wrap gap-2">{v.nextLabel && <Button className="bg-[var(--kiroo-attn)] text-[var(--kiroo-ink)] hover:bg-[var(--kiroo-attn-strong)]" onClick={v.goNext}>{v.nextLabel}<ArrowRight /></Button>}<Button variant="outline" onClick={() => v.setView('missao')}><Play />Ver fluxo</Button><CancelMission v={v} /></div>
                 </CardContent>
               </>) : (
                 <CardContent className="flex flex-1 flex-col items-center justify-center py-12 text-center"><span className="mb-3 grid size-11 place-items-center rounded-xl bg-muted text-muted-foreground"><Sparkles className="size-5" /></span><div className="font-semibold">Sem missão aberta</div><p className="mt-1 max-w-sm text-sm text-muted-foreground">Comece com o produto; o Kiroo organiza direção, geração, revisão e entrega.</p><Button className="mt-5" onClick={() => { v.setView('missao'); v.newProd(); }}><Plus />Começar missão</Button></CardContent>
@@ -135,13 +142,19 @@ export default function Central({ v }) {
         </div>
 
         <section aria-labelledby="central-recent" className="space-y-3">
-          <SectionHeading eyebrow="Histórico" title="Missões recentes" description="Retome produções anteriores sem perder contexto." />
+          <SectionHeading eyebrow="Histórico" title="Missões recentes" description="Retome produções anteriores sem perder contexto."
+            action={v.productions.length > 0 ? (
+              <div className="pv-filters" role="group" aria-label="Filtrar missões">
+                {MISSION_FILTERS.map((f) => <button key={f.id} type="button" className="pv-filter" aria-pressed={filter === f.id} onClick={() => setFilter(f.id)}>{f.label}</button>)}
+              </div>) : null} />
           <Card className="gap-0 py-0">
             {v.productions.length === 0 && <div className="px-5 py-10 text-center text-sm text-muted-foreground">Suas missões aparecerão aqui.</div>}
-            {v.productions.slice(0, 6).map((p, index) => (
+            {v.productions.length > 0 && missions.length === 0 && <div className="px-5 py-10 text-center text-sm text-muted-foreground">Nenhuma missão neste filtro.</div>}
+            {missions.slice(0, filter === 'todas' ? 6 : 20).map((p, index) => (
               <div key={p.id} className={`flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center ${index ? 'border-t border-border' : ''}`}>
-                <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground"><Activity className="size-4" /></span>
+                <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">{p.status === 'cancelled' ? <Ban className="size-4" /> : <Activity className="size-4" />}</span>
                 <div className="min-w-0 flex-1"><div className="truncate text-sm font-semibold">{p.name || p.id}</div><div className="mt-0.5 text-xs text-muted-foreground">{PROD_LABEL[p.status] || p.label}{p.mode === 'simulated' ? ' · DEMO' : ''} · {new Date(p.created_at).toLocaleDateString('pt-BR')}</div></div>
+                {p.status === 'cancelled' && <Pill s="ended">Cancelada</Pill>}
                 {p.current ? <Pill s="done">Aberta</Pill> : <Button variant="outline" size="sm" onClick={() => { p.open(); v.setView('missao'); }}>Abrir</Button>}
               </div>
             ))}

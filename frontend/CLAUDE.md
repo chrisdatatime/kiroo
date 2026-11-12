@@ -81,6 +81,13 @@ src/
   do workspace (`S.credits`). Uma pausa com "saldo de créditos" vira o aviso `kind: 'saldo'` no BudgetBox.
 - `refresh()` consulta `/api/state` a cada 1,5 s; `deriveStage()` traduz status de produção/cenas para
   `produto → direcao → gerar_img → img_gerando → img_revisao → gerar_vid → vid_gerando → vid_revisao → montando → entrega → exportado`.
+- Missão **cancelada/falhou**: `endedOf(P)` (usa `P.ended` do servidor ou o status) faz `deriveStage` devolver
+  `cancelada`/`falhou` antes de olhar as cenas (que podem ter ficado em "gerando"); `stoppedAt(P)` dá a posição onde parou
+  (`App.stageIdx()`), cenas paradas viram "Interrompida", agentes ficam livres, o fluxo mostra "Cancelada" e a Central não
+  pede decisão (`tests/ended.test.mjs`). "Cancelar missão" (`shell/CancelMission.jsx`) confirma dentro do app; a Central
+  filtra missões (Todas, Em andamento, Concluídas, Canceladas). STAGES/STAGE_LABELS ficam em `game/stages.js`.
+- Cabeçalho, Central, Missão e janela da produção mostram a apresentação e o `format_id` ativos (`v.active`, de
+  `P.presentation`/`P.format_id`); sem Direção ainda: "A definir na Direção" (formato provisório).
 - Etapas pagas exigem **liberação explícita** (`/go_ahead`) depois de mostrar a estimativa em créditos.
 - A cena 1 é gerada primeiro e, aprovada, vira referência das cenas 2 e 3.
 - Look e setup do jogador ficam no `localStorage`; produção, fotos, versões e gastos ficam no servidor.

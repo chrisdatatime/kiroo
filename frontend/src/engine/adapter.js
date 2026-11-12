@@ -7,17 +7,35 @@ const IMG = {
 };
 const VID = { generating_video: 'gerando', awaiting_video_approval: 'pronta', video_approved: 'aprovada' };
 
-export function sceneView(sc, goAhead) {
+// Missão encerrada sem entrega (cancelada ou falhou): nada roda, nada espera por você. null nas outras.
+// Usa o `ended` do servidor e, se faltar (resposta antiga), o próprio status.
+export function endedOf(P) {
+  if (!P) return null;
+  if (P.ended) return P.ended;
+  return P.status === 'cancelled' || P.status === 'failed' ? P.status : null;
+}
+
+// Onde a missão parou (para mostrar o que já existe), sem nunca dizer que algo está "gerando".
+export function stoppedAt(P) {
+  if (!P || !P.scenes || !P.scenes.length) return P && P.creative ? 'direcao' : 'produto';
+  return deriveStage({ ...P, status: 'producing', ended: null, gate: null, awaiting_direction: false });
+}
+
+export function sceneView(sc, goAhead, ended = null) {
   let img = IMG[sc.status] || 'none';
   let vid = VID[sc.status] || 'none';
+  if (ended) {   // cena parada no meio: "Interrompida", nunca "Criando…" nem "Na fila"
+    if (img === 'gerando') img = 'parada';
+    if (vid === 'gerando') vid = 'parada';
+  }
   // Bloqueada só é "pronta" se a tentativa atual saiu; sem material (falhou/esgotou) não há o que aprovar.
   const ok = (a) => !!(a && a.status === 'succeeded' && a.url);
   if (sc.status === 'blocked') {
     if (sc.approved_image) { img = 'aprovada'; vid = ok(sc.video) ? 'pronta' : 'falhou'; }
     else img = ok(sc.image) ? 'pronta' : 'falhou';
   }
-  if (img === 'none' && (goAhead === 'images' || goAhead === 'videos' || goAhead === 'all')) img = 'fila';
-  if (vid === 'none' && img === 'aprovada' && (goAhead === 'videos' || goAhead === 'all')) vid = 'fila';
+  if (!ended && img === 'none' && (goAhead === 'images' || goAhead === 'videos' || goAhead === 'all')) img = 'fila';
+  if (!ended && vid === 'none' && img === 'aprovada' && (goAhead === 'videos' || goAhead === 'all')) vid = 'fila';
   return {
     idx: sc.idx, title: sc.title, motion: sc.motion, seconds: sc.target_duration_s, criteria: sc.criteria || [],
     img, vid, blocked: sc.status === 'blocked', iv: Math.max(sc.image_attempts, 1), vv: Math.max(sc.video_attempts, 1),
@@ -29,7 +47,11 @@ export function sceneView(sc, goAhead) {
 export function deriveStage(P) {
   if (!P) return 'produto';
   const st = P.status;
+  const ended = endedOf(P);
+  if (ended === 'cancelled') return 'cancelada';   // antes do resto: as cenas podem ter ficado em "gerando"
+  if (ended === 'failed') return 'falhou';
   if (st === 'completed') return 'exportado';
+  if (P.awaiting_direction) return 'direcao';
   if (st === 'awaiting_final_review') return 'entrega';
   if (st === 'editing') return 'montando';
   if (st === 'received' || st === 'awaiting_references') return 'produto';

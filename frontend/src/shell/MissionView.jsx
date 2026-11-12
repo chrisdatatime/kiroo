@@ -1,6 +1,7 @@
 import React from 'react';
 import Icon from './icons.jsx';
 import { Avatar, Pill, PROD_LABEL } from './Central.jsx';
+import CancelMission from './CancelMission.jsx';
 
 const ICON = { objetivo: 'chat', orquestrador: 'brain', roteiro: 'edit', criativo: 'image', video: 'video', revisao: 'shield', entrega: 'box' };
 const SUB = { objetivo: 'Defina o produto', orquestrador: 'Interpreta, planeja, delega e acompanha', revisao: 'Valida qualidade e solicita decisões necessárias', entrega: 'Arquivos, histórico, custos e resultado' };
@@ -68,6 +69,8 @@ export default function MissionView({ v }) {
             {v.nextLabel ? <button className="pv-btn pv-btn-lime" onClick={v.goNext}>{v.nextLabel}<Icon name="arrow" size={15} /></button> : <span className="pv-meta">Nada pendente agora.</span>}
             <div className="pv-bar" role="img" aria-label={'Progresso: ' + p.progress + '%'}><i style={{ width: p.progress + '%' }} /></div>
             <div className="pv-meta">{v.stageLabel} · {p.progress}% do fluxo</div>
+            {v.active && <div className="pv-meta" data-testid="mission-format">Apresentação: <strong>{v.active.label}</strong>{v.active.format && !v.active.provisional ? <> · formato <code>{v.active.format}</code></> : null}</div>}
+            <CancelMission v={v} />
           </section>
           <section className="pv-card" style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 8 }} aria-label="Custo">
             <div className="pv-h2" style={{ margin: 0 }}>Usado neste vídeo</div>
@@ -80,6 +83,7 @@ export default function MissionView({ v }) {
               {v.productions.map((x) => (
                 <div key={x.id} className="pv-row" style={{ padding: '10px 14px' }}>
                   <div className="pv-grow"><div className="pv-title" style={{ fontSize: 14 }}>{x.name || x.id}</div><div className="pv-meta" style={{ marginTop: 0 }}>{PROD_LABEL[x.status] || x.label}</div></div>
+                  {x.status === 'cancelled' && <Pill s="ended">Cancelada</Pill>}
                   {x.current ? <Pill s="done">Aberta</Pill> : <button className="pv-btn" onClick={x.open}>Abrir</button>}
                 </div>
               ))}
