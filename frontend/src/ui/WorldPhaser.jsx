@@ -3,7 +3,7 @@ import { lazyChunk } from '../lib/lazyChunk.jsx';
 import { GRID, TMJ } from '../game/data.js';
 import { createOffice } from '../game/phaser/OfficeScene.js';
 import { CHARACTER_SHEETS, STAND_DY, characterSheetSpec } from '../game/phaser/sprites.js';
-import { stepLevel, wheelAccumulator, wheelPx, loadLevel, saveLevel } from '../game/phaser/zoom.js';
+import { stepLevel, wheelAccumulator, wheelPx, saveLevel } from '../game/phaser/zoom.js';
 import ZoomControls from './world/ZoomControls.jsx';
 import InfoCard from './world/InfoCard.jsx';
 import { PW } from '../game/phaser/theme.js';
@@ -40,23 +40,25 @@ export default function WorldPhaser({ v }) {
   const latest = React.useRef(v);
   latest.current = v;
   // estado do zoom vem da cena só quando muda (onView); nada por frame
-  const [view, setView] = React.useState(() => { const l = loadLevel(); return { level: l || 1, auto: l == null, free: false }; });
+  // Sempre abre no ajuste à tela (sede inteira); o zoom manual vale só enquanto a página está aberta
+  const [view, setView] = React.useState({ level: 1, auto: true, free: false });
   const viewRef = React.useRef(view); viewRef.current = view;
   const [dlg, setDlg] = React.useState({ id: null, open: false });
 
   const zoomStep = React.useCallback((dir, anchor) => {
     const cur = viewRef.current, next = stepLevel(cur.level, dir);
-    if (next === cur.level) return;
-    saveLevel(next);
+    // sem nível nessa direção (ex.: ajuste 75% e "afastar") stepLevel devolve o próprio valor
+    if (next === cur.level || !Number.isInteger(next)) return;
     if (office.current) office.current.zoomTo(next, anchor);
   }, []);
-  const zoomAuto = React.useCallback(() => { saveLevel(null); if (office.current) office.current.zoomTo(null); }, []);
+  const zoomAuto = React.useCallback(() => { if (office.current) office.current.zoomTo(null); }, []);
   const center = React.useCallback(() => { if (office.current) office.current.center(); }, []);
 
   React.useEffect(() => {
+    saveLevel(null); // apaga a preferência antiga (bc.zoom): ela impedia o ajuste automático
     const o = createOffice({
       parent: host.current, tmj: TMJ, urls: URLS, chars: CH_URLS, width: latest.current.vw, height: latest.current.vh,
-      level: loadLevel(), onView: setView,
+      level: null, onView: setView,
       // cursor do mundo sem React: só um atributo no overlay (CSS troca o cursor)
       onHover: (kind) => { if (overlay.current) overlay.current.dataset.hover = kind || ''; },
       onFrame: (cam, dpr) => {

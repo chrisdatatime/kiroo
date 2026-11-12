@@ -3,14 +3,15 @@
 //   furniture_sorted: um sprite por tile, depth = y do pé do móvel. Depois: furniture_above, sempre na frente.
 // - Personagens: agentes Kiroo em folhas 6x6 de quadros 32x32 e jogador LimeZu em quadros 32x64;
 //   sem a folha (arte fora do git), cai no sprite de characters.js. Depth = y do pé.
-// - Câmera segue o jogador com lerp, presa aos limites do mapa, zoom inteiro em pixels do dispositivo (sem blur).
-//   A sede não encolhe para caber na tela; se o mapa for menor que a tela, ele fica centralizado.
+// - Câmera segue o jogador com lerp, presa aos limites do mapa. Zoom automático = ajuste à tela (fitZoom): a sede inteira
+//   aparece, centralizada, ao carregar e a cada redimensionamento; sem blur (múltiplos de 1/32 abaixo de 1x, de 0,5 acima).
+//   Zoom manual (+/−) = níveis inteiros 1x–4x.
 // - O estado (posição em tiles, poses, destaques) vem do viewModel do App, como no renderizador antigo.
 // Nada de tile, móvel ou parede é desenhado aqui: só o destaque de interação e o destino do clique (interface).
 import Phaser from 'phaser';
 import { charSprite, CW, CH } from '../pixel/characters.js';
 import { usedTilesets } from '../world/tmjWorld.js';
-import { pickZoom, pickLevel, deviceZoom, clampLevel, anchorScroll, snapScroll, tagScale, tagPos, tagPosTop } from './zoom.js';
+import { pickZoom, fitZoom, deviceZoom, clampLevel, anchorScroll, snapScroll, tagScale, tagPos, tagPosTop } from './zoom.js';
 import { PW } from './theme.js';
 import { CHARACTER_SHEETS, FW, FH, HEAD, KIROO_HEAD, KIROO_FOOT, KIROO_SCALE, STAND_DY, SIT_DY, characterSheetSpec, kirooFrame, idleFrame, walkFrame, sitFrame, sitSide, phoneFrame, walkPhase, SEAT, seatMode } from './sprites.js';
 
@@ -99,10 +100,12 @@ class OfficeScene extends Phaser.Scene {
     if (this.opts.onReady) this.opts.onReady(this);
   }
 
-  // Zoom inteiro em pixels do dispositivo e limites do mapa (centralizado quando o mapa é menor que a tela)
+  // Zoom em pixels do dispositivo e limites do mapa (centralizado quando o mapa é menor que a tela).
+  // Automático (level null) = ajuste à tela: a sede inteira cabe na largura E na altura (fitZoom, sem blur).
+  // Escolha manual = nível inteiro 1x–4x.
   targetZoom() {
     const dpr = window.devicePixelRatio || 1;
-    return this.level == null ? pickZoom(this.scale.width, dpr) : deviceZoom(this.level, dpr);
+    return this.level == null ? fitZoom(this.scale.width, this.scale.height, this.mapW, this.mapH, dpr) : deviceZoom(this.level, dpr);
   }
   boundsFor(z) {
     const { width, height } = this.scale;
@@ -111,7 +114,8 @@ class OfficeScene extends Phaser.Scene {
     this.cameras.main.setBounds(-(bw - this.mapW) / 2, -(bh - this.mapH) / 2, bw, bh);
   }
   applyView() {
-    if (this.zoomTween) return; // o tween termina no zoom certo
+    // Redimensionar no meio da animação: o alvo do tween era do tamanho antigo, então ele é cancelado e o ajuste é refeito.
+    if (this.zoomTween) { this.zoomTween.stop(); this.zoomTween = null; }
     const z = this.targetZoom();
     this.cameras.main.setZoom(z);
     this.boundsFor(z);
@@ -120,7 +124,7 @@ class OfficeScene extends Phaser.Scene {
   // Estado do zoom para o React, só quando muda (nada por frame)
   emitView() {
     const dpr = window.devicePixelRatio || 1;
-    const level = this.level ?? pickLevel(this.scale.width / dpr);
+    const level = this.level ?? this.targetZoom() / dpr; // em px CSS: pode ser fracionário no ajuste à tela
     const key = level + '|' + (this.level == null) + '|' + this.free;
     if (key === this.viewKey) return;
     this.viewKey = key;
@@ -164,6 +168,11 @@ class OfficeScene extends Phaser.Scene {
     const cam = this.cameras.main, dpr = window.devicePixelRatio || 1;
     this.release();
     cam.scrollX -= dx * dpr / cam.zoom; cam.scrollY -= dy * dpr / cam.zoom;
+  }
+  // Recentralizar = voltar ao ajuste total: zoom automático (sede inteira) e câmera de volta ao jogador
+  fitAll() {
+    this.zoomTo(null);
+    this.centerOnPlayer();
   }
   // Volta a seguir o jogador
   centerOnPlayer() {
@@ -459,7 +468,7 @@ export function createOffice({ parent, tmj, urls, chars, width, height, onFrame,
     },
     zoomTo(level, anchor) { if (scene) scene.zoomTo(level, anchor); },
     panBy(dx, dy) { if (scene) scene.panBy(dx, dy); },
-    center() { if (scene) scene.centerOnPlayer(); },
+    center() { if (scene) scene.fitAll(); },
     pointer(p) { if (scene) scene.setPointer(p); },
     destroy() { game.destroy(true); },
   };

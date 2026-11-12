@@ -1,13 +1,31 @@
-// Zoom da câmera (2b-2 + Fase 4). Pixel art: o zoom FINAL é sempre inteiro em pixels do dispositivo (sem blur).
-// O usuário escolhe um nível 1x–4x (em px CSS); o Phaser usa floor(nível x DPR). Entre dois níveis a câmera anima
-// (~150 ms) com zoom fracionário e, no fim, trava no inteiro e arredonda a posição.
-// Automático (sem escolha salva): 1 em telas com 1280 px CSS ou mais (mapa quase inteiro), 2 nas menores.
+// Zoom da câmera (2b-2 + Fase 4). Pixel art, sem blur: o zoom manual é um nível 1x–4x (em px CSS) e o Phaser usa
+// floor(nível x DPR), sempre inteiro em pixels do dispositivo. Entre dois níveis a câmera anima (~150 ms) e trava no fim.
+// Automático = ajuste à tela (fitZoom): a sede inteira cabe na largura e na altura da área útil, recalculado ao carregar e ao
+// redimensionar. pickLevel/pickZoom (1 em ≥ 1280 px, senão 2) são o critério antigo, que ignorava a altura; ficam só como legado.
 const WIDE_PX = 1280;
 export const LEVELS = [1, 2, 3, 4];
 export const MIN_LEVEL = LEVELS[0], MAX_LEVEL = LEVELS[LEVELS.length - 1];
 
 export function clampLevel(l) { return Math.min(MAX_LEVEL, Math.max(MIN_LEVEL, Math.round(Number(l) || MIN_LEVEL))); }
-export function stepLevel(l, dir) { return clampLevel(clampLevel(l) + Math.sign(dir)); }
+// Um passo entre os níveis inteiros. `l` pode ser fracionário (zoom de ajuste à tela): vai ao próximo nível acima/abaixo;
+// sem nível nessa direção, devolve `l` como está (ex.: ajuste 0,75 não "sobe" ao tentar afastar).
+export function stepLevel(l, dir) {
+  const n = Number(l) || MIN_LEVEL, d = Math.sign(dir), eps = 1e-6;
+  if (d > 0) { const up = LEVELS.find((x) => x > n + eps); return up == null ? Math.min(n, MAX_LEVEL) : up; }
+  if (d < 0) { const down = [...LEVELS].reverse().find((x) => x < n - eps); return down == null ? Math.max(n, 0) : down; }
+  return n;
+}
+// Rótulo do nível: inteiro "2x"; fracionário (ajuste à tela abaixo de 1x) "75%".
+export function fmtLevel(l) { return Number.isInteger(l) ? `${l}x` : `${Math.round(l * 100)}%`; }
+// Zoom de ajuste à tela ("fit"): a sede inteira (mapW x mapH, px do mundo) dentro da área (wDev x hDev, px do dispositivo).
+// Pixel art sem blur: a menos de 1x o zoom é múltiplo de 1/32 (tile de 32 px cai em px inteiros do dispositivo);
+// de 1x para cima é múltiplo de 0,5 (cada pixel de arte, 2 px do mundo, ocupa px inteiros). Nunca passa de MAX_LEVEL x dpr.
+export function fitZoom(wDev, hDev, mapW, mapH, dpr = 1) {
+  const zf = Math.min(wDev / mapW, hDev / mapH);
+  if (!(zf > 0) || !Number.isFinite(zf)) return 1;
+  const z = zf >= 1 ? Math.floor(zf * 2) / 2 : Math.max(1 / 32, Math.floor(zf * 32) / 32);
+  return Math.min(z, MAX_LEVEL * dpr);
+}
 export function pickLevel(wCss) { return wCss >= WIDE_PX ? 1 : 2; }
 export function deviceZoom(level, dpr = 1) { return Math.max(1, Math.floor(clampLevel(level) * dpr)); }
 export function pickZoom(wDev, dpr = 1) { return deviceZoom(pickLevel(wDev / dpr), dpr); }

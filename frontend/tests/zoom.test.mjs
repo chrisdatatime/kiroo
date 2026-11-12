@@ -1,6 +1,6 @@
 // Zoom do mundo Phaser (game/phaser/zoom.js): níveis inteiros, clamp, âncora no cursor, roda acumulada e preferência salva.
 import assert from 'node:assert/strict';
-import { LEVELS, clampLevel, stepLevel, pickLevel, deviceZoom, pickZoom, anchorScroll, snapScroll, wheelAccumulator, wheelPx, loadLevel, saveLevel } from '../src/game/phaser/zoom.js';
+import { LEVELS, clampLevel, stepLevel, fitZoom, fmtLevel, pickLevel, deviceZoom, pickZoom, anchorScroll, snapScroll, wheelAccumulator, wheelPx, loadLevel, saveLevel } from '../src/game/phaser/zoom.js';
 
 // níveis e clamp
 assert.deepEqual(LEVELS, [1, 2, 3, 4]);
@@ -8,6 +8,28 @@ assert.equal(clampLevel(0), 1); assert.equal(clampLevel(9), 4); assert.equal(cla
 assert.equal(stepLevel(1, -1), 1, 'não passa do mínimo');
 assert.equal(stepLevel(4, 1), 4, 'não passa do máximo');
 assert.equal(stepLevel(2, 1), 3); assert.equal(stepLevel(2, -5), 1, 'um passo por vez, sem pular níveis');
+
+// passo a partir de um zoom de ajuste fracionário: sobe ao próximo nível inteiro, não pula e não "sobe" ao afastar
+assert.equal(stepLevel(0.75, 1), 1, 'ajuste 75% + aproximar = 1x');
+assert.equal(stepLevel(0.75, -1), 0.75, 'ajuste 75% + afastar = fica');
+assert.equal(stepLevel(1.5, 1), 2); assert.equal(stepLevel(1.5, -1), 1);
+assert.equal(fmtLevel(2), '2x'); assert.equal(fmtLevel(0.75), '75%'); assert.equal(fmtLevel(1.5), '150%');
+
+// ajuste à tela: a sede inteira (1216x1024) sempre cabe, centralizada, sem blur
+const MW = 1216, MH = 1024;
+for (const [w, h, dpr] of [[1920, 1080, 1], [1366, 768, 1], [1280, 650, 1], [2560, 1440, 1], [390, 700, 3], [1920, 1080, 1.5], [800, 1280, 2], [3840, 2160, 2], [300, 300, 1]]) {
+  const wd = w * dpr, hd = h * dpr, z = fitZoom(wd, hd, MW, MH, dpr);
+  assert.ok(MW * z <= wd + 1e-9 && MH * z <= hd + 1e-9, `cabe em ${w}x${h}@${dpr}: z=${z}`);
+  if (z < 1) assert.ok(Number.isInteger(32 * z), `tile em px inteiros (z=${z})`);
+  else assert.ok(Number.isInteger(z * 2), `múltiplo de 0,5 (z=${z})`);
+  // altura decide quando a tela é larga e baixa: nunca fica maior que o necessário (perde no máximo um degrau)
+  assert.ok(z >= Math.min(wd / MW, hd / MH) - (z < 1 ? 1 / 32 : 0.5) - 1e-9, `não encolhe demais (z=${z})`);
+}
+assert.equal(fitZoom(1920, 1080, MW, MH), 1, '1080p: altura limita, 1,05 → 1x');
+assert.equal(fitZoom(1366, 650, MW, MH), 0.625, 'baixa e larga: pela altura, 20/32');
+assert.equal(fitZoom(3840, 2160, MW, MH), 2, '4K: 2,1 → 2x');
+assert.ok(fitZoom(1e9, 1e9, MW, MH, 1) <= 4, 'não passa de 4x');
+assert.equal(fitZoom(0, 0, MW, MH), 1, 'área vazia não quebra');
 
 // zoom final sempre inteiro em px do dispositivo e crescente com o nível, em 100%/125%/150%/200% do Windows
 for (const dpr of [1, 1.25, 1.5, 2]) {

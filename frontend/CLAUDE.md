@@ -119,7 +119,7 @@ pequeno laranja sobre claro). Fontes Instrument Sans e Geist Mono auto-hospedada
 ## Sede em pixel art
 > **Migração em andamento (SPEC-VIS-001):** com `?world=phaser` (ou Minha conta → Sobre e créditos) o mundo vem de
 > `../assets/maps/office.tmj` no Phaser 3 (`game/world/tmjWorld.js`, `game/phaser/OfficeScene.js`, `ui/WorldPhaser.jsx`), tile de 32 px
-> e câmera seguindo o jogador; a estrutura da sede inteira (38×32, salas ~10×8, pisos coloridos, câmera zoom 1 em ≥ 1280 px, todas as salas mobiliadas; Interiors via `assets/tilesets/interiors_atlas.png`, gerado pelo build) vem de `../tools/layout.yaml`. O padrão continua o renderizador abaixo. Veja `../docs/HANDOFF.md`.
+> e câmera seguindo o jogador; a estrutura da sede inteira (38×32, salas ~10×8, pisos coloridos, zoom automático = ajuste à tela com a sede inteira visível (`fitZoom`), todas as salas mobiliadas; Interiors via `assets/tilesets/interiors_atlas.png`, gerado pelo build) vem de `../tools/layout.yaml`. O padrão continua o renderizador abaixo. Veja `../docs/HANDOFF.md`.
 > `node tests/tmj.test.mjs` confere o mapa novo. Crédito do tileset: `../CREDITS.md` e `ui/About.jsx`.
 
 - Mapa ortogonal 52x30 tiles em 16:9 (`game/map.js`), para a sede inteira caber na tela com tiles grandes (referência: Gather).

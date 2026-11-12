@@ -28,7 +28,6 @@ export default function Hud({ v }) {
           {!v.shell && <button className="g-btn g-sm" onClick={v.openPilot} style={{ minHeight: 44 }} aria-label={'Piloto: ' + v.pilot.label + '. Mudar autonomia'}>Piloto: {v.pilot.label}</button>}
           <button className="g-btn g-sm" onClick={v.openGames} style={{ minHeight: 44 }}>Jogos</button>
           {!v.shell && <button className="g-btn g-sm" onClick={v.openBoard} style={{ minHeight: 44 }}>Produções</button>}
-          <button className="g-btn g-sm" onClick={v.openCustom} style={{ minHeight: 44 }}>Meu setup</button>
           <button className="g-btn g-sm g-icon" onClick={v.toggleHelp} aria-label="Como jogar" style={{ minHeight: 44, width: 44 }}>?</button>
           {!v.shell && <button className="g-btn g-sm" onClick={v.openAccount} style={{ minHeight: 44 }} aria-label={'Minha conta: ' + (v.account ? v.account.user.name : '')}>{v.account ? v.account.user.name.split(' ')[0] : 'Conta'}</button>}
         </div>
@@ -46,12 +45,6 @@ export default function Hud({ v }) {
             </li>
           ))}
         </ul>
-      </div>
-
-      <div className="g-hud" style={{ position: 'absolute', right: 14, bottom: 14, zIndex: 10, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8, font: '700 12px/1.2 Instrument Sans,sans-serif', flexWrap: 'wrap', maxWidth: 'min(420px,calc(100vw - 28px))' }}>
-        <span className="kbd">W</span><span className="kbd">A</span><span className="kbd">S</span><span className="kbd">D</span><span>/ setas ou clique para andar</span>
-        <span className="kbd">E</span><span>interagir</span>
-        <span className="kbd">Esc</span><span>fechar</span>
       </div>
 
       {v.near && (

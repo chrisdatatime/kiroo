@@ -127,7 +127,7 @@ Mapa **38×32** (era 53×33), salas menores, pisos coloridos, paredes com face d
 Corredores de 3 tiles em madeira bege clara (GID 2818, `floors.madeira`); trilha amarela viva (2210) no anel ao redor do pátio.
 **Paredes:** horizontais (norte e sul) agora têm a face de 2 tiles (`F` topo+face, `B` face baixa), com vão de porta de 2 tiles
 (as pontas viram batentes sozinhas); laterais continuam as peças finas `L`/`R`. O retângulo da célula é o externo (parede incluída).
-**Câmera:** `game/phaser/zoom.js` — zoom 1 com ≥ 1280 px CSS de largura, 2 abaixo; inteiro em pixels do dispositivo (× DPR, arredondado para baixo).
+**Câmera:** `game/phaser/zoom.js` — o automático é o **ajuste à tela** (`fitZoom`): a sede inteira (largura e altura) aparece centralizada ao carregar e ao redimensionar; abaixo de 1x o zoom é múltiplo de 1/32 e acima múltiplo de 0,5 (pixel art sem blur). O manual (+/−, roda) usa níveis inteiros 1x–4x (× DPR, arredondado para baixo) e vale só até recarregar; o botão de recentralizar volta ao ajuste total. As dicas de teclado e o "Meu setup" saíram do HUD (atalhos seguem valendo; a lista está no "?"; o setup abre pela mesa na sala "Meu escritório").
 
 **Desvios do pedido (decisões a confirmar):**
 1. Salas de agente **10×8**, não 10×7: com 2 tiles de face em cima e embaixo, 10×7 deixaria só 3 fileiras de piso. As de baixo e

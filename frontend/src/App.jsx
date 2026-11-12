@@ -1022,8 +1022,7 @@ export default class App extends React.Component {
       // Cabeçalho: só um indicador discreto do saldo; o destaque é o produto e as cenas. Nunca "X de Y créditos".
       spentText: balanceLabel(s.S ? s.S.credits : null) || usedLabel(credits), usedText: usedLabel(credits),
       balanceText: balanceLabel(s.S ? s.S.credits : null), credits, confirmation: P ? P.confirmation : null,
-      openBoard: () => { this.dismissTut(); this.setUI({ win: 'board' }); }, openCustom: () => { this.dismissTut(); this.setUI({ win: 'custom' }); },
-      toggleHelp: () => this.setUI({ tut: !ui.tut }), roster,
+      openBoard: () => { this.dismissTut(); this.setUI({ win: 'board' }); },      toggleHelp: () => this.setUI({ tut: !ui.tut }), roster,
       near, promptLabel: this.labelFor(near), useNear: () => { if (near) this.doAction(near); },
       toast: ui.toast ? ui.toast.text : '',
       // janelas
