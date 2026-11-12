@@ -183,6 +183,10 @@ class Accounts:
             return None
         return row
 
+    def mark_reauth(self, token: str) -> None:
+        """Reautenticação recente (senha confirmada de novo) nesta sessão: ações sensíveis do administrador."""
+        self.db.conn.execute("UPDATE sessions SET reauth_at=? WHERE token_hash=?", (now(), _sha(token or "")))
+
     def logout(self, token: str | None) -> None:
         if token:
             self.db.conn.execute("DELETE FROM sessions WHERE token_hash=?", (_sha(token),))

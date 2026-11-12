@@ -12,6 +12,7 @@ Configuração ("N/S" = N requisições a cada S segundos; 0 desliga aquela regr
   STUDIO_RATE_CHAT=12/60       conversa com os agentes, por usuário
   STUDIO_RATE_UPLOAD=10/60     envio de arquivos (referências, trilhas, referência de treino), por usuário
   STUDIO_RATE_CREATE=6/300     criação de produção (inclui demo), por usuário
+  STUDIO_RATE_ADMIN=60/60      aba Administrador (/api/admin/*, leitura e escrita), por usuário
 """
 
 from __future__ import annotations
@@ -51,6 +52,7 @@ class RateLimitConfig:
     chat: Rule = Rule(12, 60)
     upload: Rule = Rule(10, 60)
     create: Rule = Rule(6, 300)
+    admin: Rule = Rule(60, 60)
 
     @classmethod
     def from_env(cls, env=None) -> "RateLimitConfig":
@@ -106,6 +108,8 @@ class RateLimiter:
 
 def classify(method: str, path: str, payload_has_file: bool = False) -> str | None:
     """Regra específica da rota autenticada (além do limite geral de /api/*)."""
+    if path == "/api/admin" or path.startswith("/api/admin/"):
+        return "admin"
     if method != "POST":
         return None
     if path == "/api/chat":

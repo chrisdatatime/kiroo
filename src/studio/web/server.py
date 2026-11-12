@@ -658,6 +658,9 @@ class App:
             info = REQUEST_INFO.get()
             if info is not None and ws is not None:
                 info["workspace_id"] = ws["id"]
+            from . import admin_api
+            if admin_api.is_admin_path(path) and not (sess and sess["is_platform_admin"]):
+                return admin_api.not_found()   # aba Administrador: para quem não é admin (ou não entrou), não existe
             if not sess:
                 if method == "GET" and path in ("/painel", "/painel/", "/"):
                     return Response(302, "text/plain", b"", headers={"Location": "/"}) if path != "/" else _json(401, {"error": "entre na sua conta"})
@@ -675,6 +678,8 @@ class App:
             ctx = {"sess": sess, "ws": ws, "wid": ws["id"], "admin": bool(sess["is_platform_admin"]),
                    "s": self.ws_settings(s, ws), "workspaces": workspaces}
 
+            if admin_api.is_admin_path(path):   # CSRF + Origin, reautenticação e no-store ficam em admin_api
+                return admin_api.handle(self, method, path, url, headers, payload, ctx, token)
             if method == "GET":
                 return self._get(path, url, ctx)
             if method == "POST":
