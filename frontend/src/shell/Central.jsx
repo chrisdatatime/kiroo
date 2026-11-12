@@ -77,8 +77,8 @@ export default function Central({ v }) {
             <CardContent><div className="text-2xl font-semibold tracking-[-.03em]">{progress}%</div><Progress value={progress} className="mt-2 h-1.5" /><p className="mt-2 truncate text-xs text-muted-foreground">{v.hasProd ? v.stageLabel : 'Nenhuma missão aberta'}</p></CardContent>
           </Card>
           <Card size="sm" className="pv-metric-card">
-            <CardHeader><CardDescription>Consumo atual</CardDescription><CardAction><span className="pv-metric-icon"><Coins /></span></CardAction></CardHeader>
-            <CardContent><div className="text-2xl font-semibold tracking-[-.03em]">{v.credits.spent}</div><p className="mt-1 text-xs text-muted-foreground">de {v.credits.budget} créditos previstos</p></CardContent>
+            <CardHeader><CardDescription>Usado neste vídeo</CardDescription><CardAction><span className="pv-metric-icon"><Coins /></span></CardAction></CardHeader>
+            <CardContent><div className="text-2xl font-semibold tracking-[-.03em]">{v.credits.spent}</div><p className="mt-1 text-xs text-muted-foreground">{v.balanceText || 'créditos'}</p></CardContent>
           </Card>
         </section>
 
@@ -109,7 +109,7 @@ export default function Central({ v }) {
               {v.hasProd ? (<>
                 <CardHeader className="border-b">
                   <CardTitle id="central-mission" className="text-lg font-semibold">{v.prodName}</CardTitle>
-                  <CardDescription>{v.stageLabel} · {v.spentText}</CardDescription>
+                  <CardDescription>{v.stageLabel}{v.balanceText ? ' · ' + v.balanceText : ''}</CardDescription>
                   <CardAction><Pill s={pl.orchestrator.state}>{pl.orchestrator.label}</Pill></CardAction>
                 </CardHeader>
                 <CardContent className="flex flex-1 flex-col justify-between gap-6">

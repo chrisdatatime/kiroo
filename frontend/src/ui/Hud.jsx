@@ -19,7 +19,7 @@ export default function Hud({ v }) {
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', pointerEvents: 'auto', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           {v.conn === 'erro' && <div className="g-hud" role="alert" style={{ padding: '0 12px', minHeight: 44, display: 'flex', alignItems: 'center', font: '800 13px/1.2 Instrument Sans,sans-serif', color: '#9A2E22' }}>Sem conexão com o estúdio</div>}
-          {!v.shell && <div className="g-hud" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', minHeight: 44 }} title="Créditos usados nesta produção (estimativa até a confirmação)">
+          {!v.shell && <div className="g-hud" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', minHeight: 44 }} title="Saldo de créditos do estúdio">
             <svg width="18" height="18" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8" fill="#F5C542" stroke="#0E0E10" strokeWidth="2" /><path d="M10 6v8M7.5 8.2h4a1.6 1.6 0 010 3.2h-3a1.6 1.6 0 000 3.2h4" fill="none" stroke="#0E0E10" strokeWidth="1.6" strokeLinecap="round" /></svg>
             <span style={{ font: '800 13px/1 Instrument Sans,sans-serif', fontVariantNumeric: 'tabular-nums' }}>{v.spentText}</span>
             {v.mode === 'simulated' && <span className="g-sim">DEMO</span>}

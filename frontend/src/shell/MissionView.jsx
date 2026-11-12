@@ -3,7 +3,7 @@ import Icon from './icons.jsx';
 import { Avatar, Pill, PROD_LABEL } from './Central.jsx';
 
 const ICON = { objetivo: 'chat', orquestrador: 'brain', roteiro: 'edit', criativo: 'image', video: 'video', revisao: 'shield', entrega: 'box' };
-const SUB = { objetivo: 'Defina o produto e o limite de créditos', orquestrador: 'Interpreta, planeja, delega e acompanha', revisao: 'Valida qualidade e solicita decisões necessárias', entrega: 'Arquivos, histórico, custos e resultado' };
+const SUB = { objetivo: 'Defina o produto', orquestrador: 'Interpreta, planeja, delega e acompanha', revisao: 'Valida qualidade e solicita decisões necessárias', entrega: 'Arquivos, histórico, custos e resultado' };
 
 function Node({ n, v, children }) {
   const body = (<>
@@ -70,10 +70,9 @@ export default function MissionView({ v }) {
             <div className="pv-meta">{v.stageLabel} · {p.progress}% do fluxo</div>
           </section>
           <section className="pv-card" style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 8 }} aria-label="Custo">
-            <div className="pv-h2" style={{ margin: 0 }}>Custo da missão</div>
-            <div className="pv-title" style={{ fontSize: 22 }}>{v.credits.spent} <span className="pv-meta" style={{ fontSize: 14 }}>de {v.credits.budget} créditos</span></div>
-            <div className="pv-bar"><i style={{ width: Math.min(100, v.credits.budget ? (v.credits.spent / v.credits.budget) * 100 : 0) + '%' }} /></div>
-            <div className="pv-meta">Estimativa até a confirmação. Antes de cada etapa paga você vê o valor.</div>
+            <div className="pv-h2" style={{ margin: 0 }}>Usado neste vídeo</div>
+            <div className="pv-title" style={{ fontSize: 22 }}>{v.credits.spent} <span className="pv-meta" style={{ fontSize: 14 }}>créditos</span></div>
+            <div className="pv-meta">{v.balanceText ? v.balanceText + ' · ' : ''}Estimativa até a confirmação. Nenhum custo adicional é aplicado sem sua autorização.</div>
             <button className="pv-btn" onClick={v.openPilot} style={{ alignSelf: 'flex-start' }}><Icon name="pilot" size={15} />Piloto: {v.pilot.label}</button>
           </section>
           {v.productions.length > 1 && (

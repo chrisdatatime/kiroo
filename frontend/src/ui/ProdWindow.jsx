@@ -2,6 +2,7 @@ import React from 'react';
 import Boneco from '../Boneco.jsx';
 import { Spinner, CloseButton, FormatArt } from './bits.jsx';
 import { formatPhotoUrl } from './direcao.js';
+import { CONFIRM_LABEL, needsConfirmation, summaryRows } from './nextVideo.js';
 
 // Janela da produção: uma aba por agente/etapa, com dados REAIS do motor.
 const Locked = ({ children }) => <div className="g-card" style={{ padding: 18, font: '700 15px/1.4 Instrument Sans,sans-serif' }}>{children}</div>;
@@ -17,7 +18,7 @@ function Gate({ title, credits, v, onGo, label, note }) {
       <div style={{ flex: 1, minWidth: 240, display: 'flex', flexDirection: 'column', gap: 6 }}>
         <span className="g-label" style={{ color: '#3F5200' }}>Etapa paga</span>
         <strong className="fred" style={{ fontSize: 20, fontWeight: 600 }}>{title}</strong>
-        <span style={{ fontSize: 14 }}>Estimativa: <strong>{cr(credits)}</strong> · Limite desta produção: {cr(c.budget)} · Já usados: {c.spent}</span>
+        <span style={{ fontSize: 14 }}>Estimativa: <strong>{cr(credits)}</strong> · Usado neste vídeo: {c.spent}{v.balanceText ? ' · ' + v.balanceText : ''}</span>
         <span className="g-muted" style={{ fontSize: 12.5 }}>Estimativa, não valor confirmado. {note}</span>
         {v.mode === 'simulated' && <span className="g-sim" style={{ alignSelf: 'flex-start' }}>modo DEMO: nada é cobrado</span>}
       </div>
@@ -108,6 +109,23 @@ function TabProduto({ v }) {
   );
 }
 
+// "Seu próximo vídeo": o que será criado e quanto custa, ANTES de qualquer gasto.
+function NextVideo({ v }) {
+  if (!needsConfirmation(v.P)) return null;
+  const sm = v.P.confirmation.summary;
+  return (
+    <section className="g-card" aria-labelledby="nv-title" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10, background: '#FFFFFF', border: '2px solid #0E0E10' }}>
+      <span className="g-label" style={{ color: '#3F5200' }}>Antes de começar</span>
+      <strong id="nv-title" className="fred" style={{ fontSize: 20, fontWeight: 600 }}>Seu próximo vídeo</strong>
+      <dl style={{ margin: 0, display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: '8px 16px', fontSize: 13.5 }}>
+        {summaryRows(sm).map(([k, val]) => <div key={k}><dt className="g-label">{k}</dt><dd style={{ margin: 0, fontWeight: 800 }}>{val}</dd></div>)}
+      </dl>
+      <span style={{ font: '800 13.5px/1.4 Instrument Sans,sans-serif', color: '#205C2E' }}>{sm.no_extra_cost}</span>
+      <span className="g-muted" style={{ fontSize: 12.5 }}>Sem confirmação, nada é gasto. Se uma geração falhar por erro técnico, ela não é cobrada.</span>
+    </section>
+  );
+}
+
 function TabDirecao({ v }) {
   const d = v.dir;
   if (d.locked) return <Locked>A direção abre depois que a Nina confirmar o produto.</Locked>;
@@ -180,9 +198,10 @@ function TabDirecao({ v }) {
           <span style={{ font: '800 14px/1 Instrument Sans,sans-serif' }}>Total planejado: ~15 s · Nada foi gasto até aqui.</span>
         </>
       )}
+      <NextVideo v={v} />
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, borderTop: '2px dashed #D8CDB9', paddingTop: 12, flexWrap: 'wrap' }}>
         {isDir && <button className="g-btn" onClick={v.toCenas}>Ver plano de cenas</button>}
-        {d.canApprove && <button className="g-btn g-lime" onClick={d.approve} disabled={!!v.busy}>Aprovar e mandar para a Iris</button>}
+        {d.canApprove && <button className="g-btn g-lime" onClick={d.approve} disabled={!!v.busy}>{needsConfirmation(v.P) ? CONFIRM_LABEL : 'Aprovar e mandar para a Iris'}</button>}
         {d.working && <span className="g-muted" style={{ font: '700 13px/42px Instrument Sans,sans-serif', display: 'flex', gap: 8, alignItems: 'center' }}><Spinner size={18} />Escrevendo o roteiro…</span>}
         {d.done && !d.working && <span style={{ font: '800 13px/42px Instrument Sans,sans-serif', color: '#205C2E' }}>Direção e cenas aprovadas.</span>}
       </div>
@@ -226,7 +245,7 @@ function BudgetBox({ v }) {
     </div>
   );
   if (pz.kind === 'mensal') return box('Teto de gastos do mês atingido',
-    `Neste mês já foram usados ${pz.monthSpent} de ${pz.monthCap} créditos e o próximo passo custaria cerca de ${pz.next} créditos. Subir o limite desta produção não resolve: o teto vale para todas as produções.`,
+    `Neste mês já foram usados ${pz.monthSpent} de ${pz.monthCap} créditos e o próximo passo custaria cerca de ${pz.next} créditos. O teto vale para todas as produções do estúdio.`,
     v.confirmCap ? (
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', width: '100%', padding: 10, borderRadius: 10, background: '#fff', border: '1px solid #E7E7E4' }}>
         <span style={{ fontSize: 13.5, flex: '1 1 220px' }}>Confirmar teto de <strong>{v.confirmCap} créditos</strong> no mês (≈ US$ {v.confirmCapUsd.toFixed(2)} de custo real na sua conta Google, para todas as produções)?</span>
@@ -422,7 +441,7 @@ function TabEntrega({ v }) {
           <div><span className="g-label">Produto</span><br /><strong>{v.P && v.P.product.name}</strong></div>
           {v.P && v.P.product.variant && <div><span className="g-label">Variante</span><br /><strong>{v.P.product.variant}</strong></div>}
           <div><span className="g-label">Duração</span><br /><strong>~15 s · 3 cenas</strong></div>
-          <div><span className="g-label">Créditos usados</span><br /><strong>{v.credits.spent}</strong> <span className="g-muted">estimativa</span></div>
+          <div><span className="g-label">Usado neste vídeo</span><br /><strong>{v.credits.spent}</strong> <span className="g-muted">estimativa</span></div>
         </div>
         {!v.exported && <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><button className="g-btn g-lime" onClick={v.exportVideo} disabled={!!v.busy}>Exportar vídeo</button></div>}
         {v.exported && (

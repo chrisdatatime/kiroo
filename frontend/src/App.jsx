@@ -32,6 +32,7 @@ class TourBoundary extends React.Component {
 }
 import { deriveStage, sceneView, toCredits, creditsToUsd } from './engine/adapter.js';
 import { adjustmentGate, pauseKind } from './ui/pause.js';
+import { balanceLabel, needsConfirmation, usedLabel } from './ui/nextVideo.js';
 import Shell, { VIEWS } from './shell/Shell.jsx';
 import Central from './shell/Central.jsx';
 import MissionView from './shell/MissionView.jsx';
@@ -540,7 +541,7 @@ export default class App extends React.Component {
       const val = await post(`/api/productions/${r.pid}/validate`);
       this.setState({ draft: Object.assign({}, EMPTY_DRAFT) });
       if (val.ok && this.state.pilot === 'automatico') await this.autoDirection(r.pid);
-    }, this.state.pilot === 'automatico' ? 'Piloto automático: o Theo seguiu a proposta e o estúdio está produzindo.' : 'A Nina recebeu o produto e está conferindo as fotos.');
+    }, this.state.pilot === 'automatico' ? 'Piloto automático: o Theo seguiu a proposta. Em produção real, o estúdio começa depois que você confirma o seu próximo vídeo.' : 'A Nina recebeu o produto e está conferindo as fotos.');
   }
   resendRefs() {
     const P = this.prodP(); if (!P) return;
@@ -593,12 +594,18 @@ export default class App extends React.Component {
     try { const pv = await post('/api/creative/preview', { name: P.product.name, variant: P.product.variant, creative: this.state.creative }); this.setState({ preview: pv }); }
     catch (e) { /* prévia é auxiliar; a aprovação valida no servidor */ }
   }
+  // "Confirmar e criar vídeo": com o resumo "Seu próximo vídeo" à vista, autoriza o custo (nada é gasto antes) e só então
+  // manda a direção. Produção sem confirmação (DEMO, antiga) segue o caminho de sempre.
   approveDirection() {
     const P = this.prodP(); if (!P || !this.state.creative) return;
-    this.act('direcao', () => post(`/api/productions/${P.id}/direction`, { creative: this.state.creative }), 'O Theo passou as cenas adiante. O roteiro está sendo montado.');
+    const confirm = needsConfirmation(P) ? P.confirmation.summary.total_cc : null;
+    this.act('direcao', async () => {
+      if (confirm !== null) await post(`/api/productions/${P.id}/confirm`, { total_cc: confirm });
+      await post(`/api/productions/${P.id}/direction`, { creative: this.state.creative });
+    }, confirm !== null ? 'Custo autorizado. O Theo passou as cenas adiante e o roteiro está sendo montado.' : 'O Theo passou as cenas adiante. O roteiro está sendo montado.');
     this.setUI({ win: null });
   }
-  // O limite operacional é freio interno do servidor: o cliente não é barrado nem convidado a subir limite aqui.
+  // O limite operacional é freio interno do servidor: o cliente não é barrado nem convidado a aumentar nada aqui.
   fits() { return !!this.prodP(); }
   startImages() {
     const P = this.prodP(); if (!P) return;
@@ -714,7 +721,7 @@ export default class App extends React.Component {
     }
     if (id === 'iris') {
       if (idx < 2) return { line: 'Eu crio as imagens de cada cena. Entro depois que o Theo fechar o plano. Enquanto isso, café!', opts: [ok('Bom café')] };
-      if (st === 'gerar_img') return { line: 'Plano recebido! Criar as 3 imagens custa cerca de ' + cr(est.images.credits) + ' (estimativa). Já usados: ' + P.credits.spent + ' de ' + P.credits.budget + '. Começo pela cena 1, que define o visual das outras. Posso?', opts: [{ label: 'Gerar imagens', cls: 'g-btn g-lime', act: () => this.startImages() }, open('imagens', 'Ver detalhes')] };
+      if (st === 'gerar_img') return { line: 'Plano recebido! Criar as 3 imagens custa cerca de ' + cr(est.images.credits) + ' (estimativa). Usado neste vídeo: ' + P.credits.spent + '. Começo pela cena 1, que define o visual das outras. Posso?', opts: [{ label: 'Gerar imagens', cls: 'g-btn g-lime', act: () => this.startImages() }, open('imagens', 'Ver detalhes')] };
       if (status === 'work') return { line: 'Criando a imagem da cena ' + curScene('img') + '… Pode circular, eu aviso o Rui quando terminar.', opts: [open('imagens', 'Ver andamento'), ok()] };
       return { line: 'Imagens entregues para o Rui revisar. Se precisar refazer alguma, é só pedir por lá.', opts: [open('imagens', 'Ver imagens'), ok()] };
     }
@@ -727,7 +734,7 @@ export default class App extends React.Component {
     }
     if (id === 'lia') {
       if (idx < 5) return { line: 'Eu dou movimento às imagens aprovadas. Ainda é cedo pra mim, então tô ajustando meus fones.', opts: [ok()] };
-      if (st === 'gerar_vid') return { line: 'Imagens aprovadas! Animar as 3 cenas custa cerca de ' + cr(est.videos.credits) + ' (estimativa). Já usados: ' + P.credits.spent + ' de ' + P.credits.budget + '. Posso animar?', opts: [{ label: 'Gerar movimentos', cls: 'g-btn g-lime', act: () => this.startVideos() }, open('videos', 'Ver detalhes')] };
+      if (st === 'gerar_vid') return { line: 'Imagens aprovadas! Animar as 3 cenas custa cerca de ' + cr(est.videos.credits) + ' (estimativa). Usado neste vídeo: ' + P.credits.spent + '. Posso animar?', opts: [{ label: 'Gerar movimentos', cls: 'g-btn g-lime', act: () => this.startVideos() }, open('videos', 'Ver detalhes')] };
       if (status === 'work') return { line: 'Animando a cena ' + curScene('vid') + '… cada take leva cerca de um minuto.', opts: [open('videos', 'Ver andamento'), ok()] };
       return { line: 'Takes entregues para o Rui.', opts: [open('videos', 'Ver takes'), ok()] };
     }
@@ -998,7 +1005,9 @@ export default class App extends React.Component {
       mode, conn: s.conn, connErr: s.err, busy: s.busy,
       prodName: P ? P.product.name : (s.draft.name || 'Nova produção'), stageLabel: P && P.status === 'paused' ? 'Pausada' : STAGE_LABELS[st],
       nextLabel, nextLong: nextLong || 'Nada pendente agora.', goNext,
-      spentText: credits.spent + ' de ' + cr(credits.budget), credits,
+      // Cabeçalho: só um indicador discreto do saldo; o destaque é o produto e as cenas. Nunca "X de Y créditos".
+      spentText: balanceLabel(s.S ? s.S.credits : null) || usedLabel(credits), usedText: usedLabel(credits),
+      balanceText: balanceLabel(s.S ? s.S.credits : null), credits, confirmation: P ? P.confirmation : null,
       openBoard: () => { this.dismissTut(); this.setUI({ win: 'board' }); }, openCustom: () => { this.dismissTut(); this.setUI({ win: 'custom' }); },
       toggleHelp: () => this.setUI({ tut: !ui.tut }), roster,
       near, promptLabel: this.labelFor(near), useNear: () => { if (near) this.doAction(near); },

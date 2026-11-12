@@ -2,7 +2,7 @@
 // produções antigas, que pausaram antes de existir o código.
 //
 // Regra do produto: o orçamento operacional da produção é um freio INTERNO do Kiroo. Quando ele pausa, o cliente
-// vê "estamos finalizando" — nunca um botão para subir limite ou pagar mais para terminar o que foi prometido.
+// vê "estamos finalizando" — nunca um botão para pagar mais para terminar o que foi prometido.
 
 export const OPS_BUDGET_REACHED = 'ops_budget_reached';
 

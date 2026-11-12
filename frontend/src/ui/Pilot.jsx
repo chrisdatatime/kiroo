@@ -5,9 +5,9 @@ export const PILOT = {
   manual: { label: 'Manual', short: 'Você aprova cada passo',
     desc: 'Você aprova a direção, libera cada etapa paga depois de ver a estimativa e aprova cada imagem e take. Se o Rui encontrar um problema, ele avisa você em vez de refazer sozinho.' },
   assistido: { label: 'Assistido', short: 'Você decide a direção e as dúvidas',
-    desc: 'Você aprova a direção. Depois, dentro do limite de créditos, o estúdio gera tudo, refaz o que o Rui reprovar e aprova o que ele aprovar. Quando a conferência fica inconclusiva, a cena espera você.' },
+    desc: 'Você aprova a direção. Depois, dentro do valor que você autorizou, o estúdio gera tudo, refaz o que o Rui reprovar e aprova o que ele aprovar. Quando a conferência fica inconclusiva, a cena espera você.' },
   automatico: { label: 'Automático', short: 'Do produto ao vídeo montado sem parar',
-    desc: 'Depois da ficha, o estúdio usa a direção sugerida, gera, refaz e aprova sozinho dentro do limite de créditos (inclusive o que ficar inconclusivo). Você só revisa o vídeo final antes de exportar.' },
+    desc: 'Depois da ficha, o estúdio usa a direção sugerida, gera, refaz e aprova sozinho dentro do valor que você autorizou (inclusive o que ficar inconclusivo). Você só revisa o vídeo final antes de exportar.' },
 };
 
 export function PilotContent({ v }) {
@@ -25,7 +25,7 @@ export function PilotContent({ v }) {
         ))}
       </div>
       <div className="g-card" style={{ padding: 12, fontSize: 13, lineHeight: 1.45 }}>
-        Em qualquer modo: o estúdio <strong>nunca passa do limite de créditos</strong> da produção nem do teto do mês (pausa antes), respeita o máximo de tentativas por cena e <strong>não exporta sem a sua revisão final</strong>. A conferência do Rui pode errar.
+        Em qualquer modo: o estúdio <strong>nunca cobra além do valor que você autorizou</strong> nem passa do teto do mês (pausa antes), respeita o máximo de tentativas por cena e <strong>não exporta sem a sua revisão final</strong>. A conferência do Rui pode errar.
       </div>
     </div>
   );
