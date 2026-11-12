@@ -9,6 +9,7 @@ import MusicWindow from './ui/Music.jsx';
 // Phaser (~1 MB) só carrega com a flag ligada e depois do login: chunk separado (SPEC-VIS-001, Fase 2)
 const WorldPhaser = lazyChunk(() => import('./ui/WorldPhaser.jsx'));
 import Hud from './ui/Hud.jsx';
+import { normalizeTheme, DEFAULT_THEME, THEME_KEY } from './game/scenery/scenery.js';
 import { Tutorial, DialogWindow, BoardWindow, CustomWindow } from './ui/Windows.jsx';
 import ProdWindow from './ui/ProdWindow.jsx';
 import GamesWindow from './ui/Games.jsx';
@@ -107,6 +108,7 @@ export default class App extends React.Component {
       draft: Object.assign({}, EMPTY_DRAFT, LS.get('bc.draft', {})), files: [],
       opts: null, creative: null, preview: null, reqText: '', caption: null, pilot: LS.get('bc.autonomy', 'assistido'),
       ui: { win: null, who: null, tab: 'produto', dirSub: 'dir', ctab: 'personagem', revSel: 1, revView: 'scene', adjust: false, issues: [], adjText: '', toast: null, tut: !LS.get('bc.tutDone', false), playing: false, budgetHit: false },
+      cenario: normalizeTheme(LS.get(THEME_KEY, DEFAULT_THEME)),
       look: LS.get('bc.look', { shirt: '#D5F45B', acc: 'broto' }),
       setup: LS.get('bc.setup', { desk: 'madeira', chair: 'classica', pc: 'notebook', planta: true, gato: true, luminaria: true, caneca: false, tapete: false }),
     };
@@ -127,6 +129,7 @@ export default class App extends React.Component {
   }
   componentWillUnmount() { clearInterval(this.iv); clearInterval(this.poll); this.timers.forEach(clearTimeout); window.removeEventListener('resize', this.measure); }
   componentDidUpdate(_, prev) {
+    if (prev.cenario !== this.state.cenario) LS.set(THEME_KEY, this.state.cenario);
     if (prev.look !== this.state.look) LS.set('bc.look', this.state.look);
     if (prev.setup !== this.state.setup) LS.set('bc.setup', this.state.setup);
     if (prev.draft !== this.state.draft) LS.set('bc.draft', this.state.draft);
@@ -978,6 +981,7 @@ export default class App extends React.Component {
       scale, zoom, camX, camY, vw: s.vw, vh: s.vh, setup: su, desks, highlight, dest,
       openTour: () => this.openTour(), tourOpen: !!s.onb,
       openAbout: () => { this.dismissTut(); this.setUI({ win: 'about' }); },
+      cenario: s.cenario, setCenario: (t) => this.setState({ cenario: normalizeTheme(t) }),
       openPrefs: (tab) => { this.dismissTut(); this.setUI({ win: tab || 'prefs' }); },
       nearAlt: ch && near && near.type !== 'stand' ? { label: 'Levantar', go: () => this.standUp() } : null,
       openSectors: () => { this.dismissTut(); this.setUI({ win: 'sectors' }); },

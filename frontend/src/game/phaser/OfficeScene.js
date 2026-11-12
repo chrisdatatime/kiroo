@@ -91,7 +91,7 @@ class OfficeScene extends Phaser.Scene {
 
     const cam = this.cameras.main;
     cam.setRoundPixels(true);
-    cam.setBackgroundColor(PW.bg);
+    // fundo transparente: o cenário (game/scenery) e a cor de .pw-root aparecem atrás do mapa
     this.level = this.opts.level ?? null; // nível escolhido (null = automático, pickLevel)
     this.free = false;                    // câmera solta (arrastada ou zoom no cursor) até "centralizar"
     this.applyView();
@@ -451,7 +451,7 @@ export function createOffice({ parent, tmj, urls, chars, width, height, onFrame,
   let scene = null;
   const game = new Phaser.Game({
     type: Phaser.AUTO, parent, banner: false, pixelArt: true, roundPixels: true, antialias: false,
-    backgroundColor: PW.bg, audio: { noAudio: true },
+    transparent: true, audio: { noAudio: true },
     input: { keyboard: false, mouse: false, touch: false, gamepad: false },
     scale: { mode: Phaser.Scale.NONE, width: Math.round(width * dpr), height: Math.round(height * dpr), zoom: 1 / dpr },
     scene: new OfficeScene({ tmj, urls, chars, onView, onHover, level, onReady: (s) => { scene = s; if (pending) s.setState(pending); } }),

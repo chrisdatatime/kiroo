@@ -1,4 +1,5 @@
 import React from 'react';
+import { SCENERY_CREDIT } from '../game/scenery/scenery.js';
 import wordmark from '../assets/brand/wordmark-preto-laranja.svg';
 
 // Sobre e créditos da arte (o crédito do tileset LimeZu é exigido pela licença).
@@ -13,6 +14,13 @@ export function AboutContent({ v } = {}) {
         <span>
           Tileset: Modern Interiors e Modern Office por LimeZu,{' '}
           <a href="https://limezu.itch.io/moderninteriors" target="_blank" rel="noopener noreferrer">https://limezu.itch.io/moderninteriors</a>
+        </span>
+      </div>
+      <div className="g-card" style={{ padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <span className="g-label">Cenário de fundo</span>
+        <span>
+          {SCENERY_CREDIT.text}
+          {SCENERY_CREDIT.url && <>{', '}<a href={SCENERY_CREDIT.url} target="_blank" rel="noopener noreferrer">{SCENERY_CREDIT.url}</a></>}
         </span>
       </div>
       {v && v.openTour && (

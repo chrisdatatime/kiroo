@@ -41,7 +41,7 @@ MAX_FILE_BYTES = 32 * 1024 * 1024
 MAX_ZIP_BYTES = 128 * 1024 * 1024
 
 # Caminhos tratados explicitamente (relativos à raiz do repositório). Qualquer outra coisa é recusada.
-ALLOWED_DIRS = ("assets/characters/", "assets/tilesets/", "frontend/src/assets/home/", "licenses/")
+ALLOWED_DIRS = ("assets/cenarios/", "assets/characters/", "assets/tilesets/", "frontend/src/assets/home/", "licenses/")
 ALLOWED_ROOT_FILES = ("README.txt", "MANIFEST.txt")
 UNLISTED_OK = ("README.txt", "MANIFEST.txt")  # não constam no MANIFEST (que não lista a si mesmo)
 

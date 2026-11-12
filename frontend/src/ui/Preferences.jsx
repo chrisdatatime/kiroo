@@ -6,6 +6,7 @@ import { PilotContent } from './Pilot.jsx';
 import { CreditsContent } from './Credits.jsx';
 import { AboutContent } from './About.jsx';
 import { adminTabVisible } from './admin.js';
+import { SCENERY_THEMES, THEME_LABELS } from '../game/scenery/scenery.js';
 import { lazyChunk } from '../lib/lazyChunk.jsx';
 
 // Aba Administrador: carregada só quando aberta (e só existe no menu para administrador da plataforma).
@@ -51,6 +52,14 @@ function General({ v }) {
         <h3 className="pref-sec-h">Aparência</h3>
         <Row title="Modo de cor" desc="O Kiroo usa o tema claro. O modo escuro vem depois.">
           <span className="pref-static">Claro</span>
+        </Row>
+        <Row title="Cenário do escritório" desc="O fundo atrás do mapa. Floresta usa a arte de Forest of Illusion; sem os arquivos, vira o cenário gerado.">
+          <div role="group" aria-label="Cenário do escritório" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            {SCENERY_THEMES.map((t) => (
+              <button key={t} type="button" className="pw-btn" aria-pressed={v.cenario === t} onClick={() => v.setCenario(t)}
+                style={v.cenario === t ? { background: '#0E0E10', color: '#FAFAF8', borderColor: '#0E0E10' } : undefined}>{THEME_LABELS[t]}</button>
+            ))}
+          </div>
         </Row>
       </section>
       <section className="pref-sec">

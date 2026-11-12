@@ -7,6 +7,7 @@ import { stepLevel, wheelAccumulator, wheelPx, saveLevel } from '../game/phaser/
 import ZoomControls from './world/ZoomControls.jsx';
 import InfoCard from './world/InfoCard.jsx';
 import { PW } from '../game/phaser/theme.js';
+import Backdrop from '../game/scenery/Backdrop.jsx';
 
 // Detalhe da sala só carrega no primeiro clique numa placa
 const RoomDialog = lazyChunk(() => import('./world/RoomDialog.jsx'));
@@ -43,6 +44,7 @@ export default function WorldPhaser({ v }) {
   // Sempre abre no ajuste à tela (sede inteira); o zoom manual vale só enquanto a página está aberta
   const [view, setView] = React.useState({ level: 1, auto: true, free: false });
   const viewRef = React.useRef(view); viewRef.current = view;
+  const backdrop = React.useRef(null);
   const [dlg, setDlg] = React.useState({ id: null, open: false });
 
   const zoomStep = React.useCallback((dir, anchor) => {
@@ -66,6 +68,7 @@ export default function WorldPhaser({ v }) {
         const z = cam.zoom / dpr, wv = cam.worldView;
         el.style.transform = `translate(${-Math.round(wv.x * cam.zoom) / dpr}px, ${-Math.round(wv.y * cam.zoom) / dpr}px) scale(${z})`;
         el.style.setProperty('--inv', String(1 / z));
+        if (backdrop.current) backdrop.current.setCam(Math.round(wv.x * cam.zoom) / dpr); // parallax do cenário
       },
     });
     o.update(latest.current);
@@ -142,6 +145,7 @@ export default function WorldPhaser({ v }) {
 
   return (
     <div ref={root} className="pw-root" style={{ '--pw-bg': PW.bg }}>
+      <Backdrop theme={v.cenario} width={v.vw} height={v.vh} api={backdrop} />
       <div ref={host} aria-hidden="true" style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none' }} />
       <div ref={overlay} className="px-world" onClick={v.onWorldClick} style={{ width: GRID.W, height: GRID.H }}>
         {v.hots.map((h) => (

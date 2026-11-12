@@ -21,6 +21,7 @@ data/
 tools/out/
 
 # Personagens LimeZu: arte licenciada, não versionar
+/assets/cenarios/
 /assets/characters/
 
 # Imagens da home geradas da arte LimeZu (tools/render_home.py)
