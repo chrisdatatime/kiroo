@@ -79,6 +79,11 @@ class Ledger:
                 raise
             self.db.conn.execute("COMMIT")
 
+    def transaction(self):
+        """Transação de escrita do livro (BEGIN IMMEDIATE) para quem precisa juntar checagens e lançamentos
+        (ex.: limite diário do administrador + concessão + auditoria, tudo ou nada)."""
+        return self._txn()
+
     # ------------------------------------------------------------- leitura
     def balance(self, wid: str) -> int:
         return self.db.conn.execute("SELECT COALESCE(SUM(amount_cc),0) FROM credit_entries WHERE workspace_id=?",

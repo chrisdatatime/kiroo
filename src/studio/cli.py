@@ -79,23 +79,41 @@ def _demo(orch, settings, args) -> str:
 
 
 def _admin(settings, args) -> int:
+    """`studio admin <ação>`: as regras vivem em admin_ops.AdminOps (a mesma camada da aba Administrador do site).
+    Aqui só se lê argumento e imprime. Toda ação grava em admin_audit com ator `cli`."""
     import getpass
 
-    from .accounts import Accounts, AuthError
+    from . import paid_gate
+    from .accounts import AuthError
+    from .admin_ops import CLI, AdminOps
     from .db import Database
 
     db = Database(settings.db_path)
-    acc = Accounts(db)
+    ops = AdminOps(db, CLI, data_dir=settings.data_dir)
+    acc = ops.acc
+    days = getattr(args, "days", None)
     try:
         if args.acao == "list":
-            from . import paid_gate
-            for u in db.conn.execute("SELECT u.email, u.is_platform_admin, w.name, w.mode, w.allow_real, w.monthly_cap_usd "
-                                     "FROM users u JOIN workspaces w ON w.owner_id=u.id ORDER BY u.created_at"):
-                eff = paid_gate.effective_cap(u[5])
-                print(f"{u[0]:32} {'ADMIN ' if u[1] else '      '} {u[2]:28} modo={u[3]:9} real={'sim' if u[4] else 'não'} "
-                      f"teto=US${u[5]:.2f} efetivo=US${eff:.2f}")
+            for a in ops.accounts():
+                print(f"{a['email']:32} {'ADMIN ' if a['admin'] else '      '} {a['workspace']['name']:28} modo={a['mode']:9} "
+                      f"real={'sim' if a['allow_real'] else 'não'} teto=US${a['monthly_cap_usd']:.2f} "
+                      f"efetivo=US${a['effective_cap_usd']:.2f} saldo={'isento' if a['exempt'] else a['balance']} "
+                      f"reservado={a['held']} e-mail={'ok' if a['email_verified'] else 'pendente'}")
             print(f"teto da plataforma: US${paid_gate.platform_cap():.2f}/mês (STUDIO_MONTHLY_CAP_USD); "
                   "efetivo = o menor entre o da conta e o da plataforma")
+            return 0
+        if args.acao == "metrics":   # Parte A: só agregados, sem dados pessoais
+            from .metrics import format_text
+            m = ops.metrics(30 if days is None else days)
+            print(json.dumps(m, ensure_ascii=False, indent=2) if getattr(args, "json", False) else format_text(m))
+            return 0
+        if args.acao == "audit":     # trilha de auditoria (somente leitura)
+            for r in reversed(ops.audit_log(limit=getattr(args, "limit", 50) or 50)):
+                who = r["actor_email"] or r["actor_kind"]
+                amount = f" {'+' if (r['amount_cc'] or 0) > 0 else ''}{r['amount']} créditos" if r["amount"] else ""
+                flag = "  [PRÓPRIA CONTA]" if r["self_action"] else ""
+                print(f"#{r['id']} {r['at']} {who:24} {r['action']:14} {r['result']:9} {r['target_email'] or '-'}{amount}"
+                      f"{'  motivo: ' + r['reason'] if r['reason'] else ''}{'  erro: ' + r['error'] if r['error'] else ''}{flag}")
             return 0
         if args.acao == "ops-alerts":   # pausas pelo freio interno (o cliente vê só "estamos finalizando")
             rows = db.conn.execute("SELECT id, status, pause_code, budget_usd, updated_at FROM productions WHERE "
@@ -111,26 +129,28 @@ def _admin(settings, args) -> int:
                 print("ajuste com `studio budget <pid> --set <US$>` e retome com `studio resume <pid>`")
             return 0
         if args.acao == "create-invite":   # código de uso único: aparece só agora; no banco fica só o hash
-            code, exp = acc.create_invite(days=args.days, email=args.email, note=args.note, by="cli")
-            print(f"convite: {code}")
-            print(f"vale até {exp} (UTC), uma única vez" + (f", só para {args.email.strip().lower()}" if args.email else ""))
+            inv = ops.create_invite(days=7 if days is None else days, email=args.email, note=args.note)
+            print(f"convite: {inv['code']}")
+            print(f"vale até {inv['expires_at']} (UTC), uma única vez" + (f", só para {inv['email']}" if inv["email"] else ""))
             return 0
         if args.acao == "list-invites":
-            from .db import now
-            for r in acc.invites():
-                state = "usado" if r["used_at"] else ("expirado" if r["expires_at"] < now() else "válido")
-                print(f"{r['id']}  {state:8}  expira={r['expires_at']}  e-mail={r['email'] or '-'}  nota={r['note'] or '-'}")
+            for r in ops.invites():
+                print(f"{r['id']}  {r['state']:8}  expira={r['expires_at']}  e-mail={r['email'] or '-'}  nota={r['note'] or '-'}")
             return 0
         if args.acao == "revoke-invite":
             if not args.id:
                 print("erro: informe --id (veja list-invites)", file=sys.stderr)
                 return 2
-            print("convite revogado" if acc.revoke_invite(args.id) else "erro: convite não encontrado ou já usado")
+            try:
+                ops.revoke_invite(args.id, reason=args.note)
+                print("convite revogado")
+            except ValueError:
+                print("erro: convite não encontrado ou já usado")
             return 0
         if not args.email:
             print("erro: informe --email", file=sys.stderr)
             return 2
-        if args.acao == "create-user":
+        if args.acao == "create-user":   # criar administrador: SÓ por aqui (o site não promove ninguém)
             pw = getpass.getpass("Senha (mín. 10 caracteres, não aparece na tela): ")
             uid, wid = acc.create_user(args.email, pw, args.name, admin=args.admin)
             if args.admin:
@@ -139,82 +159,53 @@ def _admin(settings, args) -> int:
                 print(f"administrador criado; {moved} produção(ões) antigas atribuídas a ele")
             else:
                 print("usuário criado (em DEMO até liberar o modo real)")
+            ops.record("create-user", target_email=args.email, after={"admin": bool(args.admin)})
             return 0
-        u = acc.user_by_email(args.email)
-        if not u:
-            print("erro: usuário não encontrado", file=sys.stderr)
-            return 2
-        wid = acc.workspaces_of(u["id"])[0]["id"]
+        uid = ops.uid_by_email(args.email)
         if args.acao in ("allow-real", "deny-real"):
-            acc.set_workspace(wid, allow_real=int(args.acao == "allow-real"),
-                              **({} if args.acao == "allow-real" else {"mode": "simulated"}))
+            (ops.allow_real if args.acao == "allow-real" else ops.deny_real)(uid, reason=args.note)
             print("modo real " + ("liberado" if args.acao == "allow-real" else "bloqueado (voltou para DEMO)"))
         elif args.acao == "set-mode":
-            from .credits import Ledger
-            mode = (args.mode or "").strip().lower()
-            if mode not in ("simulated", "real"):
-                print("erro: informe --mode simulated ou --mode real", file=sys.stderr)
-                return 2
-            ws = acc.workspace(wid)
-            if mode == "real" and not ws["allow_real"]:
-                print("erro: este estúdio não tem o modo real liberado; rode antes `studio admin allow-real --email ...`",
-                      file=sys.stderr)
-                return 2
-            acc.set_workspace(wid, mode=mode)
-            Ledger(db).add(wid, 0, kind="adjust", by="cli", note=f"admin set-mode: {ws['mode']} -> {mode}")
-            print(f"modo do estúdio: {ws['mode']} -> {mode}")
-            if mode == "real":
-                from . import paid_gate
-                eff = paid_gate.effective_cap(ws["monthly_cap_usd"])
-                if eff <= 0:
-                    print("aviso: o teto efetivo é US$0.00, então nada será gasto; defina com `admin set-cap --usd N`")
+            r = ops.set_mode(uid, args.mode or "", reason=args.note)
+            print(f"modo do estúdio: {r['previous_mode']} -> {r['mode']}")
+            if r["warning"]:
+                print("aviso: o teto efetivo é US$0.00, então nada será gasto; defina com `admin set-cap --usd N`")
         elif args.acao == "set-cap":
-            from . import paid_gate
-            from .credits import Ledger
             if args.usd is None:
                 print("erro: informe --usd (valor em US$, de 0 até o teto da plataforma)", file=sys.stderr)
                 return 2
-            usd = paid_gate.validate_account_cap(args.usd)
-            ws = acc.workspace(wid)
-            acc.set_workspace(wid, monthly_cap_usd=usd)
-            Ledger(db).add(wid, 0, kind="adjust", by="cli",
-                           note=f"admin set-cap: US${ws['monthly_cap_usd']:.2f} -> US${usd:.2f} (plataforma US${paid_gate.platform_cap():.2f})")
-            print(f"teto mensal do estúdio: US${ws['monthly_cap_usd']:.2f} -> US${usd:.2f} "
-                  f"(efetivo US${paid_gate.effective_cap(usd):.2f}; plataforma US${paid_gate.platform_cap():.2f})")
-        elif args.acao == "delete-user":   # LGPD pelo operador (a pessoa também apaga pela interface)
+            r = ops.set_cap(uid, args.usd, reason=args.note)
+            print(f"teto mensal do estúdio: US${r['previous_cap_usd']:.2f} -> US${r['monthly_cap_usd']:.2f} "
+                  f"(efetivo US${r['effective_cap_usd']:.2f}; plataforma US${r['platform_cap_usd']:.2f})")
+        elif args.acao == "delete-user":   # LGPD pelo operador; pelo site NÃO existe
             if not args.yes:
                 print("erro: apagar é definitivo; repita com --yes", file=sys.stderr)
                 return 2
-            from .privacy import delete_account
-            done = delete_account(db, settings.data_dir, u["id"], allow_admin=True)
+            done = ops.delete_user(uid, reason=args.note)
             print(f"conta apagada ({done['productions']} produção(ões), {done['workspaces']} estúdio(s))")
         elif args.acao == "export-user":
-            from .privacy import export_account
-            print(json.dumps(export_account(db, settings.data_dir, u["id"]), ensure_ascii=False, indent=2, default=str))
+            print(json.dumps(ops.export_user(uid, reason=args.note), ensure_ascii=False, indent=2, default=str))
         elif args.acao == "verify-email":   # sem SMTP: o operador confirma o e-mail depois de conferir com a pessoa
-            from .db import now
-            db.conn.execute("UPDATE users SET email_verified_at=COALESCE(email_verified_at, ?) WHERE id=?", (now(), u["id"]))
-            db.conn.execute("DELETE FROM email_codes WHERE user_id=?", (u["id"],))
+            ops.verify_email(uid, reason=args.note)
             print("e-mail marcado como confirmado")
         elif args.acao == "reset-link":
             from .runtime import ServerConfig
             cfg = ServerConfig.from_env()
             base = f"https://{cfg.public_host}" if cfg.public_host else f"http://127.0.0.1:{cfg.port}"
-            print(f"link (válido 30 min): {base}/?reset={acc.start_reset(args.email)}")
+            print(f"link (válido 30 min): {ops.reset_link(uid, base, reason=args.note)['link']}")
         elif args.acao in ("grant-credits", "adjust-credits", "credits"):
-            from .credits import Ledger, fmt
-            led = Ledger(db)
-            if args.acao != "credits":
+            if args.acao != "credits":   # sem limite por lançamento/dia na CLI: é o caminho para valores grandes
                 if args.credits is None:
                     print("erro: informe --credits", file=sys.stderr)
                     return 2
-                kind = "grant" if args.acao == "grant-credits" else "adjust"
-                led.add(wid, round(args.credits * 100), kind=kind, note=args.note or ("liberado pelo administrador"
-                        if kind == "grant" else "ajuste do administrador"), by="cli")
-            sm = led.summary(wid)
+                if args.acao == "grant-credits":
+                    ops.grant(uid, args.credits, args.note or "liberado pelo administrador")
+                else:
+                    ops.adjust(uid, args.credits, args.note or "ajuste do administrador")
+            sm = ops.statement(uid, limit=1)
             print(f"saldo: {sm['balance']} créditos (reservado agora: {sm['held']})" + ("  [isento]" if sm["exempt"] else ""))
         return 0
-    except ValueError as exc:
+    except ValueError as exc:   # AdminError, AuthError e validações
         print(f"erro: {exc}", file=sys.stderr)
         return 2
     except AuthError as exc:
@@ -282,20 +273,25 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("pid")
     p.add_argument("--set", type=float, required=True, dest="value")
 
-    p = sub.add_parser("admin", help="contas: criar usuário, liberar modo real, modo e teto do estúdio, link de nova senha, créditos")
+    p = sub.add_parser("admin", help="contas: criar usuário, liberar modo real, modo e teto do estúdio, link de nova senha, créditos, "
+                                          "métricas internas e auditoria")
     p.add_argument("acao", choices=["create-user", "allow-real", "deny-real", "reset-link", "verify-email", "list",
                                     "grant-credits", "adjust-credits", "credits", "create-invite", "list-invites",
-                                    "revoke-invite", "export-user", "delete-user", "set-mode", "set-cap", "ops-alerts"])
+                                    "revoke-invite", "export-user", "delete-user", "set-mode", "set-cap", "ops-alerts",
+                                    "metrics", "audit"])
     p.add_argument("--email")
     p.add_argument("--name", default="")
     p.add_argument("--admin", action="store_true", help="administrador da plataforma (só com create-user)")
     p.add_argument("--credits", type=float, help="quantidade de créditos (grant-credits/adjust-credits; ajuste aceita negativo)")
     p.add_argument("--note", default="", help="motivo do lançamento (extrato) ou nota do convite")
-    p.add_argument("--days", type=int, default=7, help="validade do convite em dias (1 a 30; create-invite)")
+    p.add_argument("--days", type=int, default=None,
+                   help="create-invite: validade em dias (1 a 30, padrão 7); metrics: período em dias (padrão 30; 0 = tudo)")
     p.add_argument("--id", help="id do convite (revoke-invite)")
     p.add_argument("--mode", help="simulated ou real (set-mode; real exige allow-real)")
     p.add_argument("--usd", type=float, help="teto mensal do estúdio em US$, de 0 até STUDIO_MONTHLY_CAP_USD (set-cap)")
     p.add_argument("--yes", action="store_true", help="confirma ações definitivas (delete-user)")
+    p.add_argument("--json", action="store_true", help="metrics: saída em JSON")
+    p.add_argument("--limit", type=int, default=50, help="audit: quantas linhas (mais recentes)")
 
     p = sub.add_parser("ui", help="serve o escritório dos agentes (padrão: só local; ver STUDIO_HOST e docs/RUNBOOK.md)")
     p.add_argument("--port", type=int, default=None, help="padrão: STUDIO_PORT, PORT ou 8765")

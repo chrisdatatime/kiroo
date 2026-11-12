@@ -369,11 +369,45 @@ def _m004_cost_confirmation(conn: sqlite3.Connection) -> None:
                  "('received','awaiting_references','validated')")
 
 
+def _m005_admin_audit(conn: sqlite3.Connection) -> None:
+    """Auditoria das ações de administrador (CLI e aba Administrador) e reautenticação recente na sessão.
+    `admin_audit` é somente inclusão: gatilhos recusam UPDATE e DELETE (nem o próprio app consegue editar ou apagar).
+    Nunca guarda segredo, senha, token, link de senha nem código de convite (só o id do convite)."""
+    conn.execute("""CREATE TABLE IF NOT EXISTS admin_audit (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        at TEXT NOT NULL,
+        actor_kind TEXT NOT NULL,             -- web | cli
+        actor_user_id TEXT,
+        actor_email TEXT,
+        ip TEXT,
+        action TEXT NOT NULL,
+        target_user_id TEXT,
+        target_email TEXT,
+        target_workspace_id TEXT,
+        before_json TEXT,
+        after_json TEXT,
+        amount_cc INTEGER,                    -- créditos (centésimos) concedidos/ajustados; NULL nas outras ações
+        reason TEXT,
+        self_action INTEGER NOT NULL DEFAULT 0,  -- o administrador mexeu na própria conta (destaque na tela)
+        idempotency_key TEXT,
+        result TEXT NOT NULL,                 -- ok | refused | duplicate
+        error TEXT
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_admin_audit_actor ON admin_audit(actor_user_id, at)")
+    conn.execute("CREATE TRIGGER IF NOT EXISTS admin_audit_no_update BEFORE UPDATE ON admin_audit "
+                 "BEGIN SELECT RAISE(ABORT, 'admin_audit: somente inclusão'); END")
+    conn.execute("CREATE TRIGGER IF NOT EXISTS admin_audit_no_delete BEFORE DELETE ON admin_audit "
+                 "BEGIN SELECT RAISE(ABORT, 'admin_audit: somente inclusão'); END")
+    if "reauth_at" not in _columns(conn, "sessions"):
+        conn.execute("ALTER TABLE sessions ADD COLUMN reauth_at TEXT")
+
+
 MIGRATIONS: list[Migration] = [
     Migration(1, "schema completo", _m001_baseline),
     Migration(2, "convites de uso único e consentimento", _m002_invites_consent),
     Migration(3, "pré-orçamento, código de pausa, ajustes por cena e cobrança por tentativa", _m003_prebudget),
     Migration(4, "confirmação do custo pelo cliente antes de gastar", _m004_cost_confirmation),
+    Migration(5, "auditoria append-only do administrador e reautenticação recente", _m005_admin_audit),
 ]
 LATEST = MIGRATIONS[-1].version
 assert [m.version for m in MIGRATIONS] == list(range(1, LATEST + 1)), "migrações devem ser 1..N em ordem"
