@@ -136,8 +136,13 @@ class Database:
             (pid, ProductionStatus.RECEIVED, mode, format_id, json.dumps(product, ensure_ascii=False),
              json.dumps(profiles, ensure_ascii=False), budget_usd, go_ahead, autonomy, ts, ts),
         )
-        self.add_event(pid, "production_created", f"modo={mode} formato={format_id} orçamento=US${budget_usd:.2f}",
-                       to_state=ProductionStatus.RECEIVED)
+        from .buildinfo import commit
+        presentation = ((product.get("creative") or {}).get("presentation")) or None
+        self.add_event(pid, "production_created", f"modo={mode} formato={format_id}"
+                       + (f" apresentação={presentation}" if presentation else " apresentação=(a definir na Direção)")
+                       + f" orçamento=US${budget_usd:.2f} código={commit()[:12]}",
+                       to_state=ProductionStatus.RECEIVED,
+                       data={"format_id": format_id, "presentation": presentation, "build": commit()})
         return pid
 
     def production(self, pid: str) -> sqlite3.Row:

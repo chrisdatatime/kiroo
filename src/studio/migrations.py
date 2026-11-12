@@ -420,6 +420,13 @@ def _m007_product_fidelity(conn: sqlite3.Connection) -> None:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
 
 
+def _m008_direction_required(conn: sqlite3.Connection) -> None:
+    """Produções criadas pelo app sem a Direção: o formato de criação é provisório e nada é roteirizado nem gerado
+    antes de o operador escolher a apresentação. Produções antigas ficam com 0 (comportamento de antes)."""
+    if "direction_required" not in _columns(conn, "productions"):
+        conn.execute("ALTER TABLE productions ADD COLUMN direction_required INTEGER NOT NULL DEFAULT 0")
+
+
 MIGRATIONS: list[Migration] = [
     Migration(1, "schema completo", _m001_baseline),
     Migration(2, "convites de uso único e consentimento", _m002_invites_consent),
@@ -428,6 +435,7 @@ MIGRATIONS: list[Migration] = [
     Migration(5, "auditoria append-only do administrador e reautenticação recente", _m005_admin_audit),
     Migration(6, "provedor de IA em chat_log", _m006_chat_provider),
     Migration(7, "ficha técnica, âncora e correções acumulativas", _m007_product_fidelity),
+    Migration(8, "Direção obrigatória antes do roteiro nas produções do app", _m008_direction_required),
 ]
 LATEST = MIGRATIONS[-1].version
 assert [m.version for m in MIGRATIONS] == list(range(1, LATEST + 1)), "migrações devem ser 1..N em ordem"

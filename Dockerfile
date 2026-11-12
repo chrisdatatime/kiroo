@@ -115,4 +115,6 @@ CMD ["python", "-m", "studio", "ui", "--no-browser"]
 # Commit de origem, por último: mudar o commit não invalida o cache das camadas acima.
 ARG GIT_COMMIT=desconhecido
 LABEL org.opencontainers.image.revision=$GIT_COMMIT
+# O app grava o commit em cada produção (evento production_created): prova de qual código atendeu cada vídeo.
+ENV STUDIO_BUILD_COMMIT=$GIT_COMMIT
 

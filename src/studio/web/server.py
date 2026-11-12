@@ -1121,7 +1121,8 @@ class App:
                                          presenter=payload.get("presenter") or "bia",
                                          budget_usd=self._budget_for(payload, s),
                                          go_ahead=("none" if autonomy == "manual" else "all") if payload.get("flow") == "game" else "all",
-                                         autonomy=autonomy, workspace_id=ctx["wid"], prebudget=prebudget)
+                                         autonomy=autonomy, workspace_id=ctx["wid"], prebudget=prebudget,
+                                         direction_required=payload.get("flow") == "game")
         except InsufficientCreditsError as exc:
             return self._no_credits(exc)
         finally:
@@ -1167,6 +1168,12 @@ class App:
             finally:
                 orch.db.close()
             return _json(200, {"ok": True})
+        if action == "direction":
+            # Sem apresentação explícita, parse_creative cairia no padrão (Somente mãos) e trocaria o formato em silêncio.
+            raw = payload.get("creative")
+            if not isinstance(raw, dict) or raw.get("presentation") not in creative_options.PRESENTATIONS:
+                return _json(400, {"error": "Escolha como apresentar o produto (Somente mãos, Produto em destaque ou "
+                                            "Com apresentadora) antes de aprovar a direção."})
         if action in {"validate", "direction", "go_ahead", "autonomy", "edit", "music"}:
             if self.is_running(pid):
                 return _json(409, {"error": "a produção está em execução; aguarde"})

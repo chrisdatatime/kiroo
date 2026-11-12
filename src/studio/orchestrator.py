@@ -94,7 +94,8 @@ class Orchestrator:
     # ================================================================ criação
     def create_production(self, product: ProductInput, *, format_id: str, art_direction: str, presenter: str,
                           budget_usd: float, go_ahead: str = "all", autonomy: str = "classico",
-                          workspace_id: str | None = None, prebudget: bool = False) -> str:
+                          workspace_id: str | None = None, prebudget: bool = False,
+                          direction_required: bool = False) -> str:
         """go_ahead="none" exige liberação explícita (set_go_ahead) antes de gerar imagens e antes dos vídeos.
 
         `budget_usd` é o ORÇAMENTO OPERACIONAL (freio interno). Com `prebudget=True` (modo real, com estúdio), o custo
@@ -105,9 +106,10 @@ class Orchestrator:
         if autonomy not in AUTONOMY:
             raise OrchestratorError("autonomia inválida")
         mode = self.s.mode
-        if product.creative is not None:   # a apresentação escolhida manda no formato
+        if product.creative is not None:   # a apresentação/ambiente escolhidos mandam no formato e na direção de arte
             from . import creative_options
-            format_id = creative_options.format_for(product.creative.presentation)
+            ids = creative_options.profile_ids(product.creative)
+            format_id, art_direction = ids["format"], ids["art_direction"]
         if budget_usd < 0:
             raise OrchestratorError("orçamento não pode ser negativo")
         if mode == "real":
@@ -126,6 +128,8 @@ class Orchestrator:
         pid = self.db.create_production(mode=mode, format_id=format_id, product=product.model_dump(mode="json"),
                                         profiles=profiles, budget_usd=budget_usd, go_ahead=go_ahead,
                                         autonomy=autonomy)
+        if direction_required and product.creative is None:
+            self.db.update_production(pid, direction_required=1)
         if workspace_id:
             self.db.update_production(pid, workspace_id=workspace_id)
             # A produção congela as versões de treinamento em vigor agora; versões novas valem só para as próximas.
@@ -165,24 +169,102 @@ class Orchestrator:
         elif changed or PS(row["status"]) not in {PS.RECEIVED, PS.PAUSED}:
             self.db.set_production_status(pid, PS.AWAITING_REFERENCES, "ficha atualizada: revalidar")
 
-    def _sync_format(self, pid: str, product: ProductInput) -> bool:
-        """Apresentação → formato. O format_id e o perfil congelado SEMPRE seguem a apresentação atual da ficha
-        (criação, substituição da ficha e Direção). Retorna True se o formato mudou."""
+    def _sync_format(self, pid: str, product: ProductInput, *, source: str = "ficha") -> bool:
+        """Apresentação → formato e ambiente → direção de arte. format_id e perfis congelados SEMPRE seguem a escolha
+        gravada na ficha, por qualquer caminho (criação, substituição da ficha, Direção, invariante antes de gerar).
+        Mudou o formato: a imagem-âncora (feita no formato antigo) e o aviso de formato deixam de valer.
+        Retorna True se algo mudou."""
         from . import creative_options
         if product.creative is None:
             return False
-        want = creative_options.format_for(product.creative.presentation)
+        ids = creative_options.profile_ids(product.creative)
+        want, art = ids["format"], ids["art_direction"]
         row = self.db.production(pid)
         profiles = self._profiles(pid)
-        if row["format_id"] == want and profiles["format"]["id"] == want:
+        fmt_changed = row["format_id"] != want or profiles["format"]["id"] != want
+        art_changed = profiles["art_direction"]["id"] != art
+        if not (fmt_changed or art_changed):
             return False
-        old = row["format_id"]
-        profiles.update(snapshot(self.s.profiles_dir, {"format": want}, only=("format",)))
-        self.db.update_production(pid, format_id=want, profiles_json=json.dumps(profiles, ensure_ascii=False))
+        old, old_art = row["format_id"], profiles["art_direction"]["id"]
+        sel = {**({"format": want} if fmt_changed else {}), **({"art_direction": art} if art_changed else {})}
+        profiles.update(snapshot(self.s.profiles_dir, sel, only=tuple(sel)))
+        fields = {"format_id": want, "profiles_json": json.dumps(profiles, ensure_ascii=False)}
+        if fmt_changed:
+            fields["format_advice"] = None
+            if self._anchor(pid):
+                fields["anchor_json"] = None
+                self.db.add_event(pid, "anchor", "imagem-âncora removida: era do formato anterior")
+        self.db.update_production(pid, **fields)
         self._storage(pid).write_json("profiles_snapshot.json", profiles)
-        self.db.add_event(pid, "format_changed", f"apresentação {product.creative.presentation}: formato {old} → {want}",
-                          data={"presentation": product.creative.presentation, "from": old, "to": want})
+        pres = product.creative.presentation
+        if fmt_changed:
+            self.db.add_event(pid, "format_changed", f"apresentação {pres}: formato {old} → {want} ({source})",
+                              data={"presentation": pres, "from": old, "to": want, "source": source})
+        if art_changed:
+            self.db.add_event(pid, "art_direction_changed", f"ambiente {product.creative.environment}: direção de arte "
+                              f"{old_art} → {art} ({source})", data={"from": old_art, "to": art, "source": source})
         return True
+
+    def format_problems(self, pid: str, *, with_script: bool = True) -> list[str]:
+        """Invariante: format_id, perfis congelados, ficha validada, roteiro e cenas derivam da apresentação GRAVADA.
+        Lista vazia = consistente. `with_script=False` ignora roteiro/cenas (logo após a validação eles ainda vão ser
+        refeitos)."""
+        from . import creative_options
+        row = self.db.production(pid)
+        product = ProductInput.model_validate_json(row["product_json"])
+        profiles = self._profiles(pid)
+        probs: list[str] = []
+        if profiles["format"]["id"] != row["format_id"]:
+            probs.append(f"perfil congelado {profiles['format']['id']} ≠ format_id {row['format_id']}")
+        if product.creative is not None:
+            ids = creative_options.profile_ids(product.creative)
+            pres = product.creative.presentation
+            # Direção de arte fica fora da invariante dura de propósito: é sincronizada em toda mudança da ficha/Direção,
+            # mas uma produção antiga em andamento não perde cenas já aprovadas (e pagas) só por causa do cenário.
+            if row["format_id"] != ids["format"]:
+                probs.append(f"apresentação {pres} exige {ids['format']}, mas format_id={row['format_id']}")
+            if row["sheet_json"]:
+                sheet_pres = ((json.loads(row["sheet_json"]).get("product") or {}).get("creative") or {}).get("presentation")
+                if sheet_pres != pres:
+                    probs.append(f"ficha validada com apresentação {sheet_pres}, gravada {pres}")
+        if with_script and row["script_json"]:
+            mode = profiles["format"]["data"]["presenter_mode"]
+            if json.loads(row["script_json"]).get("format_id") != row["format_id"]:
+                probs.append(f"roteiro feito para {json.loads(row['script_json']).get('format_id')}, "
+                             f"formato atual {row['format_id']}")
+            for sc in self.db.scenes(pid):
+                if str(self._spec(sc).presenter_mode) != mode:
+                    probs.append(f"cena {sc['idx']} com modo {self._spec(sc).presenter_mode}, formato exige {mode}")
+        return probs
+
+    MAX_FORMAT_REPAIRS = 2
+
+    def _enforce_format(self, pid: str, status: PS) -> bool:
+        """Antes de roteirizar ou gerar: se a invariante falhar, recalcula a partir da apresentação gravada, registra e
+        volta para a validação (sem custo). Se nem assim fechar, bloqueia com erro claro. True = pode seguir."""
+        probs = self.format_problems(pid, with_script=status != PS.VALIDATED)
+        if not probs:
+            return True
+        self._format_repairs = getattr(self, "_format_repairs", 0) + 1
+        self.db.add_event(pid, "format_invariant", "formato inconsistente antes de gerar: " + "; ".join(probs)[:600],
+                          data={"problems": probs, "status": str(status)})
+        if self._format_repairs > self.MAX_FORMAT_REPAIRS:
+            self.db.set_production_status(pid, PS.FAILED, "formato inconsistente e não foi possível corrigir: "
+                                          + "; ".join(probs)[:400])
+            return False
+        product = ProductInput.model_validate_json(self.db.production(pid)["product_json"])
+        self._sync_format(pid, product, source="invariante")
+        self.db.set_production_status(pid, PS.AWAITING_REFERENCES, "formato recalculado a partir da apresentação: "
+                                      "revalidar e refazer o roteiro")
+        return False
+
+    def awaiting_direction(self, pid: str) -> bool:
+        """Produção do app criada sem Direção (direction_required): o formato de criação é provisório e nada é
+        roteirizado nem gerado até o operador escolher a apresentação. CLI/painel e produções antigas seguem."""
+        row = self.db.production(pid)
+        if not ("direction_required" in row.keys() and row["direction_required"]):
+            return False
+        return ProductInput.model_validate_json(row["product_json"]).creative is None
 
     # =============================================================== execução
     def run(self, pid: str, *, wait: bool = True, max_wait_s: float | None = None) -> str:
@@ -190,6 +272,7 @@ class Orchestrator:
         if row["mode"] != self.s.mode:
             raise OrchestratorError(f"produção em modo {row['mode']}, mas o ambiente está em modo {self.s.mode}")
         deadline = time.monotonic() + max_wait_s if max_wait_s else None
+        self._format_repairs = 0
         try:
             self._loop(pid, wait, deadline)
         except FFmpegError as exc:
@@ -212,11 +295,15 @@ class Orchestrator:
             status = PS(self.db.production(pid)["status"])
             if status in TERMINAL or status in {PS.PAUSED, PS.AWAITING_FINAL_REVIEW}:
                 break
+            if status in {PS.VALIDATED, PS.SCRIPTED, PS.PRODUCING, PS.EDITING} and not self._enforce_format(pid, status):
+                continue   # formato recalculado (volta à validação) ou bloqueado com erro claro
             if status in {PS.RECEIVED, PS.AWAITING_REFERENCES}:
                 if not self._prepare(pid):
                     break
             elif status in {PS.VALIDATED, PS.SCRIPTED, PS.PRODUCING} and self.needs_confirmation(pid):
                 break   # "Seu próximo vídeo": sem a confirmação do cliente nada é gasto (nem roteiro por IA)
+            elif status == PS.VALIDATED and self.awaiting_direction(pid):
+                break   # fluxo do app: a Direção (apresentação) vem antes do roteiro e de qualquer geração
             elif status == PS.VALIDATED:
                 if not self._script(pid):
                     break
@@ -233,6 +320,8 @@ class Orchestrator:
                     self.sleep(self.s.poll_interval_s)
                 elif outcome == "progress":
                     continue
+                elif PS(self.db.production(pid)["status"]) == PS.AWAITING_REFERENCES:
+                    continue   # a barreira de formato mandou revalidar: refaz ficha e roteiro (sem custo) na mesma execução
                 else:  # idle (aguardando humano) ou paused
                     break
             elif status == PS.EDITING:
@@ -674,6 +763,8 @@ class Orchestrator:
         if used >= limit:
             self.db.set_scene_status(pid, idx, SS.BLOCKED, f"limite de {limit} tentativas de {kind} atingido")
             return "idle"
+        if not self._generation_allowed(pid):
+            return "paused"
 
         gen = self._gen(kind)
         req, refs = self._build_request(pid, idx, kind)
@@ -706,8 +797,26 @@ class Orchestrator:
         self.db.set_scene_status(pid, idx, gen_status, "", **{f"current_{kind}_attempt": att_id})
         return self._submit(pid, att_id)
 
+    def _generation_allowed(self, pid: str) -> bool:
+        """Última barreira antes de qualquer chamada paga de imagem/vídeo: produção em PRODUCING e formato coerente com
+        a apresentação gravada. Se não, recalcula (volta à validação) e não gasta nada."""
+        status = PS(self.db.production(pid)["status"])
+        if status != PS.PRODUCING:
+            return False
+        return self._enforce_format(pid, status)
+
+    def _abort_unsent(self, pid: str, att, reason: str) -> None:
+        """Tentativa criada mas ainda não enviada: falha técnica sem custo (nada sai do saldo) e fora da contagem."""
+        self.db.update_attempt(att["id"], status="failed", error=reason[:1000], error_permanent=0, superseded=1,
+                               finished_at=now(), estimated_cost_usd=0.0)
+        self.db.add_event(pid, "attempt_aborted", f"{att['kind']} #{att['attempt_no']} não enviado: {reason}",
+                          scene_idx=att["scene_idx"])
+
     def _submit(self, pid: str, att_id: str) -> str:
         att = self.db.attempt(att_id)
+        if not self._generation_allowed(pid):
+            self._abort_unsent(pid, att, "produção não está gerando ou o formato mudou")
+            return "paused"
         gen = self._gen(att["kind"])
         req = self._request_from_attempt(pid, att)
         try:

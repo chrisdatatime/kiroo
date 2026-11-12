@@ -52,6 +52,34 @@ Cena: `pending → generating_image → awaiting_image_approval → image_approv
   (heurística gratuita na prévia da Direção; confirmado pela ficha técnica no roteiro). Não troca nem pausa sozinho.
 - Cada reprovação/aviso grava o evento `retry_reason` com categorias fixas (métricas do administrador).
 
+## Apresentação → formato (invariante)
+
+- A apresentação gravada na ficha (`product.creative.presentation`) é a ÚNICA fonte do formato:
+  `creative_options.profile_ids` dá `format_id` (Somente mãos → `maos_3cenas_15s`, Produto em destaque →
+  `produto_3cenas_15s`, Com apresentadora → `bia_3cenas_15s`) e a direção de arte (ambiente). Criação, substituição da
+  ficha e Direção passam por `Orchestrator._sync_format` (evento `format_changed`/`art_direction_changed`; troca de
+  formato remove a imagem-âncora e o aviso de formato).
+- **Barreira antes de gastar** (`format_problems` + `_enforce_format`): em `validated/scripted/producing/editing` e
+  antes de criar ou enviar qualquer tentativa de imagem/vídeo, confere `format_id`, perfil congelado, ficha validada,
+  roteiro e modo de cada cena. Inconsistente → evento `format_invariant`, recalcula e volta à validação (sem custo); se
+  não fechar em 2 tentativas, `failed` com o motivo. A direção de arte é sincronizada, mas não entra nessa barreira (uma
+  produção antiga em andamento não perde cenas aprovadas por causa do cenário).
+- Produção do app criada sem Direção (`direction_required`, migração 8): formato provisório, nada é roteirizado nem
+  gerado até a Direção. `POST .../direction` sem `creative.presentation` explícita é recusado (antes virava "Somente
+  mãos" em silêncio).
+- **Produto em destaque**: negativo próprio (`PRODUCT_ONLY_NEGATIVE_EN`, sem falar de dedos) e a trava final
+  `PRODUCT_ONLY_LOCK_EN` no fim de todo prompt de imagem e vídeo (depois de treino e correções); planejador instruído sem
+  "ação das mãos"; roteiro que perca o bloqueio de pessoas é recusado (`validate_script`); revisor reprova qualquer
+  mão/pessoa (`fidelity.enforce_product_only`, motivo `pessoa_proibida`), então a cena não chega ao vídeo.
+- `production_created` guarda o commit do código que criou a produção (`buildinfo.commit`; Docker: `STUDIO_BUILD_COMMIT`).
+
+## Cancelamento
+
+`cancel` é definitivo: tentativas ainda não enviadas viram falha sem custo; as que já estavam no provedor são
+abandonadas sem cobrança do cliente (`cancel_inflight`); `_hold`, `_submit` e `_poll` recusam/descartam qualquer chamada
+depois disso; o pré-orçamento não usado volta. O servidor recusa (409) toda ação de avançar numa missão cancelada ou
+que falhou, e o `/api/state` marca `ended`, `running: false`, cenas paradas como "Interrompida" e agentes parados.
+
 ## Orçamento
 
 Antes de cada chamada paga: `comprometido + estimativa ≤ limite`, senão a produção pausa com motivo. Comprometido = custo confirmado quando houver, senão estimado (no simulado, sempre o estimado equivalente). Concorrência limitada por `STUDIO_MAX_INFLIGHT_OPS`.

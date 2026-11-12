@@ -46,7 +46,8 @@ def event_agent(e) -> str:
         return "review"
     if t in ("sheet_issue", "product_updated"):
         return "prep"
-    if t in ("planner_failed", "script_rejected", "prompt_edited"):
+    if t in ("planner_failed", "script_rejected", "prompt_edited", "format_changed", "format_invariant",
+             "art_direction_changed"):
         return "creative"
     if t == "delivery_warning":
         return "editor"
@@ -244,6 +245,9 @@ def snapshot(settings: Settings, db: Database, pid: str | None, *, since: int = 
         return data
     p = db.production(pid)
     product = json.loads(p["product_json"])
+    ended = p["status"] if p["status"] in (PS.CANCELLED, PS.FAILED) else None
+    awaiting_direction = bool("direction_required" in p.keys() and p["direction_required"] and not product.get("creative"))
+    pres = None if awaiting_direction else _presentation(product, p["format_id"])
     has_pool = "prebudget_cc" in p.keys() and p["prebudget_cc"] is not None
     if has_pool:
         from .. import budget as budget_mod
@@ -353,10 +357,13 @@ def snapshot(settings: Settings, db: Database, pid: str | None, *, since: int = 
         "visual_attributes": product.get("visual_attributes", {}),
         "id": pid, "mode": p["mode"], "status": p["status"], "label": PRODUCTION_LABELS[st],
         "reason": p["status_reason"], "format_id": p["format_id"],
-        "presentation": _presentation(product, p["format_id"]),
-        "presentation_label": _presentation_label(_presentation(product, p["format_id"])), "product": {
+        # Apresentação ATIVA (a gravada na ficha, que manda no formato). Sem Direção ainda: None ("a definir").
+        "presentation": pres, "presentation_label": _presentation_label(pres) if pres else "A definir na Direção",
+        "awaiting_direction": awaiting_direction,
+        # Encerrada (cancelada/falhou): nada roda, nada é gerado e nenhuma ação de avançar vale.
+        "ended": ended, "product": {
             "name": product.get("name"), "variant": product.get("variant"), "link": product.get("affiliate_link")},
         "costs": {**costs, "committed_usd": round(committed, 4)}, "scenes": scenes, "delivery": delivery,
-        "running": running, "error": error,
+        "running": running and not ended, "error": error,
     }
     return data
