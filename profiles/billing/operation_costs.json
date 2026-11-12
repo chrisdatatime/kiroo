@@ -4,6 +4,7 @@
   "retrieved_on": "2026-10-26",
   "operations": {
     "plan":         {"usd": 0.01, "per": "chamada", "label": "Direção (roteiro)"},
+    "facts":        {"usd": 0.01, "per": "chamada", "label": "Ficha técnica do produto (fotos)"},
     "image":        {"usd": null, "per": "imagem",  "label": "Imagem"},
     "review_image": {"usd": 0.01, "per": "chamada", "label": "Conferência da imagem"},
     "video":        {"usd": null, "per": "take",    "label": "Vídeo"},

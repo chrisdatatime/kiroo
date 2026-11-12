@@ -120,7 +120,9 @@ def op_cost(settings, op: str, *, n_refs: int = 4) -> float:
 
 def review_cost(op: str = "review_image") -> float:
     """Reserva por conferência/roteiro (chamadas de texto) — também vem da tabela."""
-    usd = cost_table()["operations"][op].get("usd")
+    ops = cost_table()["operations"]
+    # "facts" (ficha técnica visual) é chamada de texto como o roteiro: tabelas antigas sem a linha usam a do roteiro
+    usd = (ops.get(op) or (ops.get("plan") if op == "facts" else None) or ops[op]).get("usd")
     return float(usd) if usd is not None else 0.0
 
 
@@ -141,7 +143,7 @@ def estimate_production(settings, n_scenes: int = 3) -> dict:
     image = op_cost(settings, "image") + op_cost(settings, "review_image")
     video = op_cost(settings, "video") + op_cost(settings, "review_video")
     parts = {
-        "plan": op_cost(settings, "plan"),
+        "plan": op_cost(settings, "plan") + review_cost("facts"),   # roteiro + ficha técnica visual
         "images": n_scenes * img_t * image,
         "videos": n_scenes * vid_t * video,
         "included_adjustments": n_scenes * adj * adjustment_cost_usd(settings, "image"),

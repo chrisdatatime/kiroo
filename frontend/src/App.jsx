@@ -41,6 +41,7 @@ import MissionView from './shell/MissionView.jsx';
 import TeamView from './shell/TeamView.jsx';
 import { buildPipeline, attention } from './shell/pipeline.js';
 import { splitRequests, joinRequests, summaryRows } from './ui/direcao.js';
+import { sideBySide, anchorInfo, reviewCheck, formatAdvice } from './ui/fidelity.js';
 
 // Kiroo — escritório-jogo sobre o motor REAL (servidor Python).
 // O estado da produção vem de /api/state; as ações chamam a API. O jogo (mundo, movimento, personalização)
@@ -656,6 +657,17 @@ export default class App extends React.Component {
       (kind === 'img' ? 'A Iris' : 'A Lia') + ' está refazendo só a cena ' + idx + '.');
     this.setUI({ adjust: false, issues: [], adjText: '', learn: ok ? { agent: kind === 'img' ? 'iris' : 'lia', name: kind === 'img' ? 'a Iris' : 'a Lia', decision: 'reject', note, pid: P.id } : null });
   }
+  // Tentativas esgotadas (ou o operador prefere outra): aprova uma das versões lado a lado, com um clique.
+  chooseVersion(idx, stage, attemptId) {
+    const P = this.prodP(); if (!P) return;
+    this.act('escolher', () => post(`/api/productions/${P.id}/choose`, { scene: idx, stage, attempt_id: attemptId }), 'Versão escolhida: cena ' + idx + ' aprovada.');
+  }
+  // Imagem-âncora: a imagem fiel vira a referência principal do produto nas próximas cenas (null remove).
+  setAnchor(attemptId) {
+    const P = this.prodP(); if (!P) return;
+    this.act('ancora', () => post(`/api/productions/${P.id}/anchor`, { attempt_id: attemptId || '' }),
+      attemptId ? 'Imagem-âncora definida: a Iris usa esta imagem como referência principal do produto.' : 'Imagem-âncora removida.');
+  }
   // Cena bloqueada sem material: concede +1 tentativa e o motor gera de novo (só esta cena).
   retryScene(idx) {
     const P = this.prodP(); const kind = this.revKind(); if (!P) return;
@@ -887,7 +899,9 @@ export default class App extends React.Component {
       dir.rows = summaryRows(o.presentations, c);
     }
     dir.scenes = s.preview ? s.preview.scenes : [];
-    dir.warnings = s.preview ? s.preview.warnings : [];
+    dir.warnings = s.preview ? s.preview.warnings.filter((w) => !(s.preview.format_advice && w === s.preview.format_advice.text)) : [];
+    dir.advice = c ? formatAdvice({ preview: s.preview, presentation: c.presentation }) : null;
+    if (dir.advice) dir.advice.switchTo = () => this.setCreative({ presentation: 'product_only' });
     dir.reqText = s.reqText; dir.onReq = (e) => this.setState({ reqText: e.target.value });
     dir.addReq = () => { const v = (s.reqText || '').trim(); if (!v || !c) return; this.setCreative({ details_text: joinRequests(c.details_text, v) }); this.setState({ reqText: '' }); this.toast('Theo: anotado! Vou aplicar nas cenas.'); };
     dir.approve = () => this.approveDirection(); dir.load = () => this.loadOptions();
@@ -909,10 +923,7 @@ export default class App extends React.Component {
       const auto = att && att.reviews ? att.reviews.filter((r) => r.reviewer.startsWith('auto:')).slice(-1)[0] : null;
       let chk = { title: 'Conferência do Rui', text: 'Aguardando material.', bg: '#fff' };
       if (auto) {
-        const issues = (auto.issues || []).join(' ');
-        chk = auto.decision === 'approved' ? { title: 'Parece certo', text: 'Produto, cor e formato parecem bater com a referência. Confira você também: minha conferência pode errar.', bg: '#E3F5DC' }
-          : auto.decision === 'rejected' ? { title: 'Encontrei um problema', text: issues || 'Algo não bate com a referência.', bg: '#FFE1DC' }
-          : { title: 'Inconclusivo', text: (issues ? issues + ' ' : '') + (mode === 'simulated' ? 'Modo DEMO: não houve análise visual de verdade.' : 'Não tenho certeza. Compare com a referência.'), bg: '#FFE7C2' };
+        chk = reviewCheck(att, mode) || chk;   // produto errado bloqueia; mão/estética vira aviso
       } else if (sel[kind] === 'gerando' || sel[kind] === 'fila') chk = { title: 'Conferência do Rui', text: 'Vou conferir assim que ficar pronto.', bg: '#fff' };
       const tries = kind === 'img' ? sel.imgTries : sel.vidTries;
       const maxT = est ? (kind === 'img' ? est.max_tries.image : est.max_tries.video) : 3;
@@ -925,6 +936,9 @@ export default class App extends React.Component {
         canRetry: sel[kind] === 'falhou' && !(P && P.running), limitHit: tries >= maxT, nextTry: tries + 1, maxTries: maxT, tries,
         cost: est ? (kind === 'img' ? est.redo_image.credits : est.redo_video.credits) : 0, who: kind === 'img' ? 'a Iris' : 'a Lia', what: kind === 'img' ? 'imagem' : 'animação',
         chk, criteria: sel.criteria,
+        versions: (() => { const sb = sideBySide(sel, kind, !!(P && P.running)); return sb && { ...sb, items: sb.items.map((it) => ({ ...it, choose: () => this.chooseVersion(sel.idx, sb.stage, it.id) })) }; })(),
+        anchor: (() => { const a = anchorInfo(P, sel, kind); return a && { ...a, set: () => this.setAnchor(a.attemptId), clear: () => this.setAnchor(null) }; })(),
+        advice: formatAdvice({ production: P, presentation: P && P.creative ? P.creative.presentation : null }),
         media: { view, refUrl: ref && ref.url, imgUrl: sel.image && sel.image.url, vidUrl: sel.video && sel.video.url,
           label: view === 'ref' ? 'Referência · sua foto' : view === 'video' ? 'Conteúdo gerado · take v' + Math.max(tries, 1) : 'Conteúdo gerado · imagem',
           busy: (sel[kind] === 'gerando' || sel[kind] === 'fila') && view !== 'ref', busyText: kind === 'img' ? 'Criando a imagem da cena ' + sel.idx : 'Animando a cena ' + sel.idx },

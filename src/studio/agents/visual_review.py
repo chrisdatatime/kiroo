@@ -12,6 +12,7 @@ from pathlib import Path
 from ..ffmpeg import FFmpeg
 from ..models import ReviewDecision, ReviewResult, SceneSpec
 from ..providers.base import Reviewer
+from .fidelity import apply_severity
 
 VIDEO_SAMPLE_FRAMES = 6
 ASPECT_TOLERANCE = 0.03
@@ -26,11 +27,12 @@ def _aspect_ok(width: int | None, height: int | None, aspect: str = "9:16") -> b
 
 
 def _merge(model_result: ReviewResult, hard_issues: list[str], notes: list[str], extra_checks: dict) -> ReviewResult:
+    """Falhas técnicas e de PRODUTO bloqueiam; estética (mãos, luz) vira aviso (agents/fidelity.apply_severity)."""
     result = model_result.model_copy(deep=True)
     result.checks.update(extra_checks)
+    result = apply_severity(result, hard_issues)
     if hard_issues:
-        result.decision = ReviewDecision.REJECTED
-        result.issues = hard_issues + result.issues
+        result.issues = hard_issues + [i for i in result.issues if i not in hard_issues]
     result.issues += notes
     return result
 

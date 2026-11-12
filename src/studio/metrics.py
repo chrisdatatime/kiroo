@@ -16,10 +16,13 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
+import json
+
 from .db import Database
 
 OPERATIONS = {"image": "Imagem", "video": "Vídeo", "review_image": "Conferência de imagem",
-              "review_video": "Conferência de vídeo", "plan": "Roteiro (IA)", "chat": "Conversa com agentes",
+              "review_video": "Conferência de vídeo", "plan": "Roteiro (IA)",
+              "facts": "Ficha técnica (IA)", "chat": "Conversa com agentes",
               "training_test": "Teste de treinamento"}
 SCENE_KINDS = ("image", "video")   # "tentativas por cena": gerações de imagem e de vídeo de uma cena
 DELIVERED = "completed"
@@ -50,7 +53,42 @@ def _has(db: Database, table: str) -> bool:
     return bool(db.conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone())
 
 
-def _block(prods: list, attempts: list, interrupted: set[str]) -> dict:
+def _reasons(reason_events: list) -> list[dict]:
+    """Motivos das reprovações/avisos (eventos `retry_reason`): só categorias fixas, nunca o texto do revisor."""
+    from .agents.fidelity import CRITICAL_REASONS, REASON_LABELS
+    counts: dict[tuple, int] = defaultdict(int)
+    for e in reason_events:
+        try:
+            d = json.loads(e["data_json"] or "{}")
+        except ValueError:
+            continue
+        for code in d.get("codes") or ["outro"]:
+            code = code if code in REASON_LABELS else "outro"
+            counts[(code, d.get("kind") or "?", d.get("source") or "auto", bool(d.get("critical")))] += 1
+    rows = [{"code": c, "label": REASON_LABELS[c], "kind": k, "source": src, "blocking": crit,
+             "critical_category": c in CRITICAL_REASONS, "count": n} for (c, k, src, crit), n in counts.items()]
+    return sorted(rows, key=lambda r: (-r["count"], r["code"], r["kind"], r["source"]))
+
+
+def _scene_attempts(tries_kind: dict) -> dict:
+    """Tentativas por cena: média por posição da cena (1, 2, 3…) e distribuição (quantas cenas saíram na 1ª, 2ª…)."""
+    by_scene: dict[int, dict] = defaultdict(lambda: {"image": [], "video": []})
+    dist: dict[str, dict[str, int]] = {k: defaultdict(int) for k in SCENE_KINDS}
+    for kind, d in tries_kind.items():
+        for (_pid, idx), n in d.items():
+            by_scene[int(idx)][kind].append(n)
+            dist[kind]["4+" if n >= 4 else str(n)] += 1
+    return {
+        "by_scene": [{"scene": idx, "scenes": max(len(v["image"]), len(v["video"])),
+                      "avg_image": _avg(sum(v["image"]), len(v["image"]), 2),
+                      "avg_video": _avg(sum(v["video"]), len(v["video"]), 2),
+                      "max_image": max(v["image"]) if v["image"] else None}
+                     for idx, v in sorted(by_scene.items())],
+        "distribution": {OPERATIONS[k]: dict(sorted(v.items())) for k, v in dist.items()},
+    }
+
+
+def _block(prods: list, attempts: list, interrupted: set[str], reason_events: list | None = None) -> dict:
     """Métricas de um modo (real ou simulado). `prods`: produções do período; `attempts`: tentativas delas."""
     cost_by_prod: dict[str, float] = defaultdict(float)
     by_op: dict[str, dict] = defaultdict(lambda: {"usd": 0.0, "calls": 0, "failed": 0})
@@ -81,6 +119,8 @@ def _block(prods: list, attempts: list, interrupted: set[str]) -> dict:
         "avg_attempts_per_scene": _avg(sum(tries.values()), len(tries), 2),
         "avg_attempts_per_scene_by_kind": {OPERATIONS[k]: _avg(sum(v.values()), len(v), 2) for k, v in tries_kind.items()},
         "scenes_with_attempts": len(tries),
+        "scene_attempts": _scene_attempts(tries_kind),
+        "retry_reasons": _reasons(reason_events or []),
         "by_operation": _rows(by_op, label=lambda k: OPERATIONS.get(k, k)),
         "by_provider": _rows(by_provider, label=lambda k: k),
         "total_usd": _r(sum(cost_by_prod.values())),
@@ -105,10 +145,14 @@ def internal_metrics(db: Database, days: int = 30) -> dict:
         "SELECT DISTINCT production_id FROM events WHERE type='ops_alert' AND (data_json LIKE ? OR message LIKE ?)",
         (f'%"{OPS_BUDGET_REACHED}"%', f"{OPS_BUDGET_REACHED}%")).fetchall()}
     mode_of = {p["id"]: p["mode"] for p in prods}
+    reason_events = db.conn.execute(
+        "SELECT production_id, data_json FROM events WHERE type='retry_reason' AND production_id IN "
+        f"(SELECT id FROM productions {where})", args).fetchall()
     out: dict = {"days": int(days or 0), "since": since, "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
     for mode in ("real", "simulated"):
         out[mode] = _block([p for p in prods if p["mode"] == mode],
-                           [a for a in attempts if mode_of.get(a["production_id"]) == mode], interrupted)
+                           [a for a in attempts if mode_of.get(a["production_id"]) == mode], interrupted,
+                           [e for e in reason_events if mode_of.get(e["production_id"]) == mode])
 
     # fora das produções: conversa com os agentes (Anthropic) e testes de treinamento
     extra: dict[str, dict] = {}
@@ -146,6 +190,16 @@ def format_text(m: dict) -> str:
                   "  custo por operação:"]
         lines += [f"    {r['label']:26} {r['calls']:5} chamadas  {usd(r['usd'])}  (média {usd(r['avg_usd'])}, falhas {r['failed']})"
                   for r in b["by_operation"]] or ["    (nada)"]
+        sa = b.get("scene_attempts") or {}
+        lines.append("  tentativas por cena (posição): " + (" | ".join(
+            f"cena {r['scene']}: imagem {r['avg_image'] if r['avg_image'] is not None else '—'}, "
+            f"vídeo {r['avg_video'] if r['avg_video'] is not None else '—'}" for r in sa.get("by_scene", [])) or "—"))
+        for k, dist in (sa.get("distribution") or {}).items():
+            if dist:
+                lines.append(f"    {k}: " + ", ".join(f"{n} cena(s) com {t} tentativa(s)" for t, n in dist.items()))
+        lines.append("  motivos de nova tentativa:")
+        lines += [f"    {r['label']:26} {r['kind']:6} {r['source']:6} {'bloqueia' if r['blocking'] else 'aviso   '} {r['count']:5}"
+                  for r in b.get("retry_reasons", [])] or ["    (nada)"]
         lines.append("  custo por provedor:")
         lines += [f"    {r['label']:26} {r['calls']:5} chamadas  {usd(r['usd'])}  (média {usd(r['avg_usd'])})"
                   for r in b["by_provider"]] or ["    (nada)"]

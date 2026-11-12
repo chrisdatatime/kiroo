@@ -410,6 +410,16 @@ def _m006_chat_provider(conn: sqlite3.Connection) -> None:
         conn.execute("UPDATE chat_log SET provider='anthropic' WHERE source='llm'")
 
 
+def _m007_product_fidelity(conn: sqlite3.Connection) -> None:
+    """Fidelidade ao produto: ficha técnica visual (facts_json), imagem-âncora aprovada (anchor_json), aviso de formato
+    (format_advice) e o histórico ACUMULADO de correções por cena (cada tentativa nova recebe todas, não só a última)."""
+    for table, col, decl in (("productions", "facts_json", "TEXT"), ("productions", "anchor_json", "TEXT"),
+                             ("productions", "format_advice", "TEXT"),
+                             ("scenes", "image_corrections_json", "TEXT"), ("scenes", "video_corrections_json", "TEXT")):
+        if col not in _columns(conn, table):
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
+
+
 MIGRATIONS: list[Migration] = [
     Migration(1, "schema completo", _m001_baseline),
     Migration(2, "convites de uso único e consentimento", _m002_invites_consent),
@@ -417,6 +427,7 @@ MIGRATIONS: list[Migration] = [
     Migration(4, "confirmação do custo pelo cliente antes de gastar", _m004_cost_confirmation),
     Migration(5, "auditoria append-only do administrador e reautenticação recente", _m005_admin_audit),
     Migration(6, "provedor de IA em chat_log", _m006_chat_provider),
+    Migration(7, "ficha técnica, âncora e correções acumulativas", _m007_product_fidelity),
 ]
 LATEST = MIGRATIONS[-1].version
 assert [m.version for m in MIGRATIONS] == list(range(1, LATEST + 1)), "migrações devem ser 1..N em ordem"

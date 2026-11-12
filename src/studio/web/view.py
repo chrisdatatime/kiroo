@@ -121,6 +121,7 @@ def _attempt_json(pid: str, db: Database, att_id: str | None) -> dict | None:
     for r in db.reviews_for_attempt(att_id):
         res = json.loads(r["result_json"])
         reviews.append({"reviewer": r["reviewer"], "decision": r["decision"], "issues": res.get("issues", []),
+                        "critical_issues": res.get("critical_issues", []), "warnings": res.get("warnings", []),
                         "suggested_fix": res.get("suggested_fix"), "checks": res.get("checks", {}),
                         "method": res.get("method", ""), "note": res.get("note", "")})
     return {"id": a["id"], "no": a["attempt_no"], "status": a["status"], "simulated": bool(a["simulated"]),
@@ -256,6 +257,12 @@ def snapshot(settings: Settings, db: Database, pid: str | None, *, since: int = 
             "image_attempts": db.count_generation_attempts(pid, sc["idx"], "image"),
             "video_attempts": db.count_generation_attempts(pid, sc["idx"], "video"),
             "adjustments": adj,
+            # versões que ainda valem, para comparar lado a lado e aprovar a melhor com um clique
+            "candidates": {k: [_attempt_json(pid, db, a["id"]) for a in db.attempts(pid, scene_idx=sc["idx"], kind=k)
+                               if a["status"] == "succeeded" and not a["superseded"] and a["output_path"]]
+                           for k in ("image", "video")},
+            "corrections": {k: [c["text"] for c in json.loads(sc[f"{k}_corrections_json"] or "[]")]
+                            for k in ("image", "video") if f"{k}_corrections_json" in sc.keys()},
         })
     st = PS(p["status"])
     delivery = {}
@@ -290,6 +297,9 @@ def snapshot(settings: Settings, db: Database, pid: str | None, *, since: int = 
         gate = "videos"
     pool = Ledger(db).pool_state(pid) if has_pool else None
     caption_file = settings.data_dir / "productions" / pid / "delivery" / "caption.txt"
+    facts_raw = p["facts_json"] if "facts_json" in p.keys() else None
+    facts = json.loads(facts_raw)["facts"] if facts_raw else None
+    anchor = json.loads(p["anchor_json"]) if "anchor_json" in p.keys() and p["anchor_json"] else None
     data["production"] = {
         "go_ahead": go_ahead,
         "autonomy": p["autonomy"] if "autonomy" in p.keys() else "classico",
@@ -321,6 +331,13 @@ def snapshot(settings: Settings, db: Database, pid: str | None, *, since: int = 
                            for r in refs],
         },
         "video_context": product.get("video_context", ""),
+        # ficha técnica visual (o que o gerador e o revisor recebem) e a imagem-âncora do produto
+        "facts": ({k: facts.get(k) for k in ("colors", "button_count", "buttons", "left_side", "right_side", "cable",
+                                              "logos", "proportions", "asymmetric", "complexity", "source", "simulated")}
+                  if facts else None),
+        "anchor": ({"attempt_id": anchor["attempt_id"], "scene": anchor.get("scene"), "url": _media(pid, anchor["path"])}
+                   if anchor else None),
+        "format_advice": p["format_advice"] if "format_advice" in p.keys() else None,
         "visual_attributes": product.get("visual_attributes", {}),
         "id": pid, "mode": p["mode"], "status": p["status"], "label": PRODUCTION_LABELS[st],
         "reason": p["status_reason"], "format_id": p["format_id"], "product": {

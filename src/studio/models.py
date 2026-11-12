@@ -185,10 +185,45 @@ class ReviewDecision(StrEnum):
     INCONCLUSIVE = "inconclusive"
 
 
+class ProductButton(BaseModel):
+    """Um controle/botão/porta visível nas fotos, com posição relativa ao produto visto de frente."""
+
+    name: str = ""
+    position: str = Field(default="", description="ex.: topo, entre os cliques, lateral esquerda")
+    side: Literal["left", "right", "center", "top", "bottom", "front", "back", "unknown"] = "unknown"
+    color: str = ""
+
+
+class ProductFacts(BaseModel):
+    """Ficha técnica VISUAL do produto, extraída das fotos oficiais (Gemini texto multimodal) ou do que o operador
+    descreveu (simulado). Só o que é visível: nada de capacidade, material ou benefício. Vai em todo prompt de
+    imagem/vídeo e no revisor como critério bloqueante."""
+
+    summary_en: str = ""
+    colors: list[str] = Field(default_factory=list)
+    buttons: list[ProductButton] = Field(default_factory=list)
+    button_count: int | None = None
+    left_side: str = Field(default="", description="o que existe só no lado esquerdo (visto de frente/por cima)")
+    right_side: str = Field(default="", description="o que existe só no lado direito")
+    cable: str = Field(default="", description="cabo: existe? de onde sai? cor/tipo; 'none' se sem fio")
+    logos: list[str] = Field(default_factory=list, description="logos/inscrições visíveis e onde ficam")
+    proportions: str = ""
+    distinctive_parts: list[str] = Field(default_factory=list)
+    asymmetric: bool = False
+    complexity: Literal["simple", "moderate", "complex"] = "simple"
+    must_keep: list[str] = Field(default_factory=list, description="regras curtas, em inglês, que nunca podem mudar")
+    source: str = Field(default="", description="gemini-api:<modelo> | simulated | operator")
+    simulated: bool = False
+
+
 class ReviewResult(BaseModel):
     decision: ReviewDecision
     checks: dict[str, str] = Field(default_factory=dict, description="item → ok | problema | desconhecido")
     issues: list[str] = Field(default_factory=list)
+    # Gravidade (revisor com critérios): produto errado bloqueia; estética (mãos, luz) só avisa.
+    critical_issues: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    reason_codes: list[str] = Field(default_factory=list, description="categorias fixas (métricas), sem texto livre")
     suggested_fix: str | None = None
     confidence: float | None = None
     method: str = ""

@@ -88,6 +88,17 @@ class PlanningContext:
     art_direction: dict
     presenter_mode: str
     training: str = ""
+    facts: str = ""   # ficha técnica visual (bloco em inglês) que o planner deve respeitar
+
+
+@dataclass
+class FactsRequest:
+    """Pedido da ficha técnica: nome/variante (dados) e as fotos oficiais utilizáveis."""
+
+    name: str
+    variant: str
+    references: list[Path]
+    visual_attributes: dict = field(default_factory=dict)
 
 
 class Planner(Protocol):
@@ -98,6 +109,9 @@ class Planner(Protocol):
     simulated: bool
 
     def refine_script(self, ctx: PlanningContext) -> tuple[Script, dict]: ...
+
+    # Opcional (o orquestrador verifica com getattr): ficha técnica visual a partir das fotos.
+    # def describe_product(self, req: FactsRequest) -> tuple[dict, dict]: ...
 
 
 class Reviewer(Protocol):

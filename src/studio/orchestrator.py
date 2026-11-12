@@ -16,17 +16,17 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from . import budget as budget_mod
-from .agents import creative, editing, visual_review
+from .agents import creative, editing, fidelity, visual_review
 from .agents.product_prep import prepare_product
 from .config import Settings
 from .training import prompt_block, review_criteria
 from .credits import InsufficientCredits, Ledger, fmt as fmt_credits
 from .db import Database, now
 from .ffmpeg import FFmpeg, FFmpegError
-from .models import ProductInput, ProductSheet, ReviewDecision, ReviewResult, SceneSpec, Script
+from .models import ProductFacts, ProductInput, ProductSheet, ReviewDecision, ReviewResult, SceneSpec, Script
 from .pricing import UnknownPrice
 from .profiles import snapshot
-from .providers.base import (ImageGenerator, ImageRequest, OpState, PermanentError, Planner, PlanningContext,
+from .providers.base import (FactsRequest, ImageGenerator, ImageRequest, OpState, PermanentError, Planner, PlanningContext,
                              ProviderBillingError, Reviewer, TransientError, VideoGenerator, VideoRequest)
 
 # Prefixo fixo do motivo de pausa: a interface reconhece e mostra a saída certa (recarregar a conta do provedor).
@@ -231,6 +231,74 @@ class Orchestrator:
         raw = row["training_json"] if "training_json" in row.keys() else None
         return json.loads(raw) if raw else None
 
+    def _facts(self, pid: str) -> ProductFacts | None:
+        row = self.db.production(pid)
+        raw = row["facts_json"] if "facts_json" in row.keys() else None
+        return ProductFacts.model_validate(json.loads(raw)["facts"]) if raw else None
+
+    def _anchor(self, pid: str) -> dict | None:
+        row = self.db.production(pid)
+        raw = row["anchor_json"] if "anchor_json" in row.keys() else None
+        return json.loads(raw) if raw else None
+
+    def _corrections(self, row, kind: str) -> list[dict]:
+        """Histórico acumulado de correções da cena (produções antigas: só a última, em `{kind}_correction`)."""
+        col = f"{kind}_corrections_json"
+        raw = row[col] if col in row.keys() else None
+        if raw:
+            return json.loads(raw)
+        legacy = row[f"{kind}_correction"]
+        return [{"text": legacy, "source": "legado", "attempt": None}] if legacy else []
+
+    def _set_corrections(self, pid: str, idx: int, kind: str, history: list[dict]) -> None:
+        self.db.update_scene(pid, idx, **{
+            f"{kind}_corrections_json": json.dumps(history, ensure_ascii=False) if history else None,
+            f"{kind}_correction": history[-1]["text"] if history else None})
+
+    def _extract_facts(self, pid: str, sheet: ProductSheet) -> ProductFacts:
+        """Ficha técnica VISUAL (cor, botões, lados, cabo, logos, proporções) a partir das fotos oficiais.
+        Feita uma vez por conjunto de fotos (refazer o roteiro não paga de novo). Sem IA ou com falha: só o que o
+        operador digitou. Levanta BudgetExceeded se o freio de gasto bloquear."""
+        refs = [r for r in sheet.product.references if r.usable_for_generation]
+        key = sorted(r.sha256 for r in refs if r.sha256)
+        row = self.db.production(pid)
+        raw = row["facts_json"] if "facts_json" in row.keys() else None
+        if raw and json.loads(raw).get("refs") == key:
+            return ProductFacts.model_validate(json.loads(raw)["facts"])
+        st = self._storage(pid)
+        describe = getattr(self.planner, "describe_product", None)
+        facts = None
+        if describe is not None and refs:
+            req = FactsRequest(name=sheet.product.name, variant=sheet.product.variant,
+                               references=[st.path(r.stored_path) for r in refs],
+                               visual_attributes=dict(sheet.product.visual_attributes))
+            try:
+                data, _meta = self._call_text("facts", None, lambda: describe(req), self.planner, pid=pid,
+                                              prompt="describe_product")
+                facts = fidelity.parse_facts(data, source=f"{self.planner.provider}:{self.planner.model}",
+                                             simulated=self.planner.simulated)
+            except (TransientError, PermanentError) as exc:
+                self.db.add_event(pid, "facts_failed",
+                                  f"ficha técnica por IA falhou; usando só os atributos digitados: {exc}")
+        if facts is None:
+            facts = fidelity.facts_from_operator(sheet, simulated=self.planner.simulated)
+        self.db.update_production(pid, facts_json=json.dumps({"refs": key, "facts": facts.model_dump(mode="json")},
+                                                             ensure_ascii=False))
+        st.write_json("product_facts.json", facts.model_dump(mode="json"))
+        self.db.add_event(pid, "product_facts", "ficha técnica do produto pronta"
+                          + (f": {facts.button_count} botões" if facts.button_count is not None else "")
+                          + ("; assimétrico" if facts.asymmetric else "") + f"; complexidade {facts.complexity}",
+                          data={"source": facts.source, "complexity": facts.complexity, "asymmetric": facts.asymmetric})
+        return facts
+
+    def _advise_format(self, pid: str, facts: ProductFacts, presenter_mode: str) -> None:
+        """Produto assimétrico/complexo em "Somente mãos": sugere "Produto em destaque" e avisa o operador.
+        Não troca sozinho (a escolha é do operador) e não pausa a produção."""
+        advice = fidelity.FORMAT_ADVICE if presenter_mode == "hands_only" and fidelity.is_complex(facts) else None
+        if advice and not self.db.production(pid)["format_advice"]:
+            self.db.add_event(pid, "format_advice", advice, data={"suggested": "product_only"})
+        self.db.update_production(pid, format_advice=advice)
+
     def _script_obj(self, pid: str) -> Script:
         return Script.model_validate_json(self.db.production(pid)["script_json"])
 
@@ -261,10 +329,16 @@ class Orchestrator:
         profiles = self._profiles(pid)
         sheet = self._sheet(pid)
         draft = creative.build_draft(sheet, profiles)
+        try:
+            facts = self._extract_facts(pid, sheet)
+        except BudgetExceeded:
+            return False
+        self._advise_format(pid, facts, profiles["format"]["data"]["presenter_mode"])
         ctx = PlanningContext(draft=draft, product_sheet_json=sheet.model_dump_json(),
                               art_direction=profiles["art_direction"]["data"],
                               presenter_mode=profiles["format"]["data"]["presenter_mode"],
-                              training=prompt_block(self._training(pid), "theo") + prompt_block(self._training(pid), "nina"))
+                              training=prompt_block(self._training(pid), "theo") + prompt_block(self._training(pid), "nina"),
+                              facts=fidelity.facts_block(facts))
         try:
             script, meta = self._call_text("plan", None, lambda: self.planner.refine_script(ctx), self.planner,
                                            pid=pid, prompt="refine_script")
@@ -313,7 +387,7 @@ class Orchestrator:
         self.db.supersede_attempts(pid, idx, "video", reason)
         self.db.set_scene_status(pid, idx, SS.PENDING, reason, current_image_attempt=None, approved_image_attempt=None,
                                  current_video_attempt=None, approved_video_attempt=None, image_correction=None,
-                                 video_correction=None)
+                                 video_correction=None, image_corrections_json=None, video_corrections_json=None)
         if cascade:
             for other in self.db.scenes(pid):
                 if idx in self._spec(other).image_dependencies() and other["status"] != SS.PENDING:
@@ -353,6 +427,10 @@ class Orchestrator:
     def _resolve_refs(self, pid: str, spec: SceneSpec, sheet: ProductSheet) -> list[dict]:
         st = self._storage(pid)
         refs: list[dict] = []
+        anchor = self._anchor(pid)
+        if anchor and any(k.startswith("product:") for k in spec.references):
+            # imagem-âncora aprovada pelo operador: referência PRINCIPAL do produto (vai primeiro)
+            refs.append({"key": "product:anchor", "path": anchor["path"], "sha256": anchor["sha256"]})
         for key in spec.references:
             parts = key.split(":")
             if parts[0] == "product":
@@ -375,7 +453,8 @@ class Orchestrator:
         spec = self._spec(row)
         script = self._script_obj(pid)
         st = self._storage(pid)
-        correction = row[f"{kind}_correction"]
+        corrections = fidelity.corrections_block(self._corrections(row, kind))
+        facts = fidelity.facts_block(self._facts(pid))
         if kind == "image":
             refs = self._resolve_refs(pid, spec, self._sheet(pid))
             prompt = spec.image_prompt
@@ -383,18 +462,28 @@ class Orchestrator:
                 if r["key"].startswith("presenter:"):
                     usage = self._sheet(pid).presenter_assets[r["key"].split(":", 1)[1]]["usage_en"]
                     prompt += f"\nPresenter reference image: {usage}"
+            if any(r["key"] == "product:anchor" for r in refs):
+                prompt += ("\n\nPRIMARY PRODUCT REFERENCE: the FIRST attached image is the operator-approved anchor of "
+                           "this exact product. Match it exactly (shape, buttons, sides, cable, logos, color); the "
+                           "official photos only confirm details.")
+            if facts:
+                prompt += "\n\n" + facts
+            prompt += "\n\n" + fidelity.DEFAULT_NEGATIVE_EN
             prompt += prompt_block(self._training(pid), "iris")
-            if correction:
-                prompt += f"\n\nCORRECTION REQUESTED AFTER REVIEW (apply strictly): {correction}"
+            if corrections:
+                prompt += "\n\n" + corrections
             req = ImageRequest(prompt=prompt, reference_images=[st.path(r["path"]) for r in refs],
                                aspect_ratio=script.aspect_ratio, image_size=self.s.image_size)
         else:
             img = self.db.attempt(row["approved_image_attempt"])
             refs = [{"key": "start_image", "path": img["output_path"], "sha256": img["output_sha256"]}]
             prompt = spec.animation_prompt
+            if facts:
+                prompt += "\n\n" + facts
+            prompt += "\n\n" + fidelity.DEFAULT_NEGATIVE_EN
             prompt += prompt_block(self._training(pid), "lia")
-            if correction:
-                prompt += f"\n\nCORRECTION REQUESTED AFTER REVIEW (apply strictly): {correction}"
+            if corrections:
+                prompt += "\n\n" + corrections
             req = VideoRequest(prompt=prompt, start_image=st.path(img["output_path"]), aspect_ratio=script.aspect_ratio,
                                resolution=self.s.video_resolution, target_duration_s=spec.target_duration_s)
         return req, refs
@@ -724,9 +813,8 @@ class Orchestrator:
 
     def _review_fn(self, pid: str, idx: int, kind: str, att):
         spec = self._spec(self.db.scene(pid, idx))
-        extra = review_criteria(self._training(pid))
-        if extra:
-            spec = spec.model_copy(update={"approval_criteria": [*spec.approval_criteria, *extra]})
+        extra = fidelity.critical_criteria(self._facts(pid)) + review_criteria(self._training(pid))
+        spec = spec.model_copy(update={"approval_criteria": [*spec.approval_criteria, *extra]})
         st = self._storage(pid)
         output = st.path(att["output_path"])
         aspect = self._script_obj(pid).aspect_ratio
@@ -781,18 +869,29 @@ class Orchestrator:
             self.db.add_review(production_id=pid, scene_idx=idx, attempt_id=att_id, stage=kind,
                                reviewer=f"auto:{self.reviewer.provider}:{self.reviewer.model}",
                                decision=result.decision, result=result.model_dump(mode="json"))
+            if result.decision == ReviewDecision.REJECTED:
+                self._log_reason(pid, idx, kind, att["attempt_no"], result.reason_codes, "auto", critical=True)
+            elif result.warnings:
+                self._log_reason(pid, idx, kind, att["attempt_no"], result.reason_codes, "auto", critical=False)
+                self.db.add_event(pid, "review_warning", f"{kind} #{att['attempt_no']} segue com aviso (não bloqueia): "
+                                  + "; ".join(result.warnings)[:400], scene_idx=idx)
 
         autonomy = self._autonomy(pid)
         if result.decision == ReviewDecision.REJECTED and autonomy != "manual":
             row = self.db.scene(pid, idx)
             limit = (self.s.max_image_attempts if kind == "image" else self.s.max_video_attempts) + row[f"extra_{kind}_attempts"]
             if self.db.count_generation_attempts(pid, idx, kind) < limit:
-                fix = result.suggested_fix or "; ".join(result.issues)
-                self.db.update_scene(pid, idx, **{f"current_{kind}_attempt": None, f"{kind}_correction": fix})
-                self.db.add_event(pid, "auto_correction", f"{kind} reprovado na revisão automática; nova tentativa: {fix}",
-                                  scene_idx=idx)
+                fix = fidelity.correction_text(result)
+                history = fidelity.add_correction(self._corrections(row, kind), fix, source="auto",
+                                                  attempt_no=att["attempt_no"])
+                self.db.update_scene(pid, idx, **{f"current_{kind}_attempt": None})
+                self._set_corrections(pid, idx, kind, history)
+                self.db.add_event(pid, "auto_correction", f"{kind} reprovado na revisão automática; nova tentativa com "
+                                  f"{len(history)} correção(ões) acumulada(s): {fix}", scene_idx=idx)
                 return "progress"
-            self.db.set_scene_status(pid, idx, SS.BLOCKED, f"{kind} reprovado e tentativas esgotadas")
+            n = len(self.candidates(pid, idx, kind))
+            self.db.set_scene_status(pid, idx, SS.BLOCKED, f"{kind} reprovado e tentativas esgotadas"
+                                     + (f": compare as {n} versões lado a lado e aprove a melhor" if n > 1 else ""))
             return "idle"
         target = SS.AWAITING_IMAGE_APPROVAL if kind == "image" else SS.AWAITING_VIDEO_APPROVAL
         self.db.set_scene_status(pid, idx, target, f"revisão automática: {result.decision}")
@@ -800,6 +899,54 @@ class Orchestrator:
             self.approve(pid, idx, kind, f"aprovado pelo piloto ({autonomy}) após revisão automática: {result.decision}",
                          reviewer="piloto")
         return "progress"
+
+    def _log_reason(self, pid: str, idx: int, kind: str, attempt_no, codes: list[str], source: str, *,
+                    critical: bool) -> None:
+        """Motivo de cada reprovação/aviso, só com categorias fixas (métricas do administrador, sem texto livre)."""
+        self.db.add_event(pid, "retry_reason", f"{kind} #{attempt_no}: {', '.join(codes) or 'outro'}", scene_idx=idx,
+                          data={"kind": kind, "attempt_no": attempt_no, "codes": codes or ["outro"],
+                                "critical": critical, "source": source})
+
+    def candidates(self, pid: str, idx: int, kind: str) -> list:
+        """Versões geradas desta cena que ainda valem (não substituídas) — para a escolha lado a lado."""
+        return [a for a in self.db.attempts(pid, scene_idx=idx, kind=kind)
+                if a["status"] == "succeeded" and not a["superseded"] and a["output_path"]]
+
+    def choose_attempt(self, pid: str, idx: int, kind: str, attempt_id: str, note: str = "") -> None:
+        """Um clique: aprova uma das versões já geradas (tentativas esgotadas, ou o operador preferiu outra)."""
+        if kind not in ("image", "video"):
+            raise OrchestratorError("etapa inválida")
+        if attempt_id not in {a["id"] for a in self.candidates(pid, idx, kind)}:
+            raise OrchestratorError(f"versão não encontrada entre as da cena {idx}")
+        row = self.db.scene(pid, idx)
+        status = SS(row["status"])
+        allowed = {SS.BLOCKED, SS.AWAITING_IMAGE_APPROVAL if kind == "image" else SS.AWAITING_VIDEO_APPROVAL}
+        if status not in allowed:
+            raise OrchestratorError(f"cena {idx} não está aguardando escolha (estado: {status})")
+        if kind == "video" and not row["approved_image_attempt"]:
+            raise OrchestratorError("cena sem imagem aprovada")
+        att = self.db.attempt(attempt_id)
+        self.db.update_scene(pid, idx, **{f"current_{kind}_attempt": attempt_id})
+        self.db.add_event(pid, "version_chosen", f"{kind}: versão #{att['attempt_no']} escolhida lado a lado",
+                          scene_idx=idx, data={"attempt_id": attempt_id})
+        self.approve(pid, idx, kind, note or "escolhida lado a lado pelo operador")
+
+    def set_anchor(self, pid: str, attempt_id: str | None) -> None:
+        """Imagem-âncora do produto: uma imagem gerada que o operador aprovou como fiel vira a referência PRINCIPAL das
+        próximas gerações (cenas já aprovadas não mudam). `None` remove a âncora."""
+        if attempt_id is None:
+            self.db.update_production(pid, anchor_json=None)
+            self.db.add_event(pid, "anchor", "imagem-âncora removida")
+            return
+        att = self.db.conn.execute("SELECT * FROM attempts WHERE id=?", (attempt_id,)).fetchone()
+        if (att is None or att["production_id"] != pid or att["kind"] != "image" or att["status"] != "succeeded"
+                or not att["output_path"]):
+            raise OrchestratorError("a âncora precisa ser uma imagem gerada desta produção")
+        self._storage(pid).path(att["output_path"])
+        self.db.update_production(pid, anchor_json=json.dumps({"attempt_id": attempt_id, "path": att["output_path"],
+                                                               "sha256": att["output_sha256"], "scene": att["scene_idx"]}))
+        self.db.add_event(pid, "anchor", f"imagem-âncora: cena {att['scene_idx']}, versão #{att['attempt_no']} "
+                          "(referência principal do produto nas próximas cenas)", scene_idx=att["scene_idx"])
 
     # ========================================================= ações humanas
     def _reopen_production(self, pid: str) -> None:
@@ -819,14 +966,14 @@ class Orchestrator:
         if stage == "image":
             previous = row["approved_image_attempt"]
             self.db.set_scene_status(pid, idx, SS.IMAGE_APPROVED, "aprovada pelo operador",
-                                     approved_image_attempt=att_id, image_correction=None)
+                                     approved_image_attempt=att_id, image_correction=None, image_corrections_json=None)
             if previous and previous != att_id:
                 for other in self.db.scenes(pid):
                     if idx in self._spec(other).image_dependencies() and other["status"] != SS.PENDING:
                         self._reset_scene(pid, other["idx"], f"imagem aprovada da cena {idx} mudou")
         else:
             self.db.set_scene_status(pid, idx, SS.VIDEO_APPROVED, "aprovado pelo operador",
-                                     approved_video_attempt=att_id, video_correction=None)
+                                     approved_video_attempt=att_id, video_correction=None, video_corrections_json=None)
 
     def adjustment_info(self, pid: str, idx: int) -> dict:
         """Ajustes pedidos pelo cliente nesta cena: incluídos no pré-orçamento, usados, autorizados e custo do extra."""
@@ -878,16 +1025,21 @@ class Orchestrator:
             self.db.add_review(production_id=pid, scene_idx=idx, attempt_id=att_id, stage=stage, reviewer="human",
                                decision=ReviewDecision.REJECTED, result={"note": note})
         self._reopen_production(pid)
+        cur_id = row[f"current_{stage_target}_attempt"]
+        cur_no = self.db.attempt(cur_id)["attempt_no"] if cur_id else None
+        self._log_reason(pid, idx, stage_target, cur_no, fidelity.reason_codes([note]), "human", critical=True)
+        history = fidelity.add_correction(self._corrections(row, stage_target), note, source="human", attempt_no=cur_no)
         if stage_target == "image":
             self.db.supersede_attempts(pid, idx, "video", "imagem será refeita")
             self.db.set_scene_status(pid, idx, SS.GENERATING_IMAGE, f"correção solicitada: {note}",
-                                     current_image_attempt=None, image_correction=note, current_video_attempt=None,
+                                     current_image_attempt=None, current_video_attempt=None,
                                      approved_video_attempt=None)
         else:
             if not row["approved_image_attempt"]:
                 raise OrchestratorError("cena sem imagem aprovada; reprove a imagem")
             self.db.set_scene_status(pid, idx, SS.GENERATING_VIDEO, f"correção solicitada: {note}",
-                                     current_video_attempt=None, approved_video_attempt=None, video_correction=note)
+                                     current_video_attempt=None, approved_video_attempt=None)
+        self._set_corrections(pid, idx, stage_target, history)
 
     def grant_attempts(self, pid: str, idx: int, stage: str, extra: int) -> None:
         row = self.db.scene(pid, idx)

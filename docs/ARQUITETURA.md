@@ -29,6 +29,29 @@ Cena: `pending → generating_image → awaiting_image_approval → image_approv
 - Entrada idêntica (hash de provedor + modelo + prompt + parâmetros + hashes das referências) com resultado não reprovado é reaproveitada sem nova chamada.
 - Mudança de prompt de imagem → refaz imagem e vídeo da cena e invalida cenas dependentes. Mudança de prompt de animação → refaz só o vídeo. Nova imagem aprovada da cena 1 → cenas 2 e 3 voltam a `pending`. Nada é apagado: resultados antigos ficam `superseded`.
 
+## Fidelidade ao produto (`agents/fidelity.py`)
+
+- **Ficha técnica visual** (`product_facts.json`, coluna `facts_json`): antes do roteiro, o planner Gemini olha as fotos
+  oficiais (texto multimodal, operação `facts`, ~US$0,01, uma vez por conjunto de fotos) e devolve cor, botões (quantidade
+  e posição), lado esquerdo/direito, cabo, logos, proporções, assimetria e complexidade. Sem IA (DEMO) ou com falha, a
+  ficha repete só os atributos digitados. O bloco `PRODUCT SPEC SHEET` vai em todo prompt de imagem e de vídeo e no
+  planner; os itens viram critérios `CRÍTICO` do revisor.
+- **Prompt negativo padrão** (`DEFAULT_NEGATIVE_EN`): dedos extras, partes inventadas, lado trocado/espelhado, logos
+  alterados — em toda imagem e vídeo.
+- **Correções acumulativas** (`{image,video}_corrections_json` por cena): cada nova tentativa recebe as correções
+  anteriores como "ALREADY FIXED, KEEP IT FIXED" e a última como "NEW". Antes, só a última ia no prompt e consertar a
+  mão desfazia o conserto do produto. Zera ao aprovar.
+- **Revisor com gravidade**: `critical_issues` (produto) reprova; `aesthetic_issues` (mãos, luz) vira aviso e a cena
+  segue para o operador. Falha técnica (proporção/duração) continua bloqueante.
+- **Limite padrão de 2 imagens automáticas** por cena (`STUDIO_MAX_IMAGE_ATTEMPTS`). Esgotado, a cena fica
+  `blocked` e a revisão mostra as versões lado a lado; `POST /api/productions/<id>/choose {scene, stage, attempt_id}`
+  aprova uma com um clique.
+- **Imagem-âncora** (`POST .../anchor {attempt_id}`; vazio remove): uma imagem gerada e fiel vira a primeira referência
+  do produto (`product:anchor`) nas próximas gerações.
+- **Sugestão de formato**: produto assimétrico/complexo em "Somente mãos" → aviso para usar "Produto em destaque"
+  (heurística gratuita na prévia da Direção; confirmado pela ficha técnica no roteiro). Não troca nem pausa sozinho.
+- Cada reprovação/aviso grava o evento `retry_reason` com categorias fixas (métricas do administrador).
+
 ## Orçamento
 
 Antes de cada chamada paga: `comprometido + estimativa ≤ limite`, senão a produção pausa com motivo. Comprometido = custo confirmado quando houver, senão estimado (no simulado, sempre o estimado equivalente). Concorrência limitada por `STUDIO_MAX_INFLIGHT_OPS`.

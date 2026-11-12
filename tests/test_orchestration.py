@@ -198,8 +198,8 @@ def test_auto_rejection_feeds_correction_into_next_prompt(make_orch, product):
     orch.run(pid)
     attempts = orch.db.attempts(pid, 1, "image")
     assert len(attempts) == 2
-    assert "CORRECTION REQUESTED" not in attempts[0]["prompt"]
-    assert "CORRECTION REQUESTED" in attempts[1]["prompt"]
+    assert "CORRECTIONS FROM PREVIOUS REVIEWS" not in attempts[0]["prompt"]
+    assert "NEW, APPLY STRICTLY" in attempts[1]["prompt"]
     assert orch.db.scene(pid, 1)["status"] == SS.AWAITING_IMAGE_APPROVAL
 
 

@@ -366,6 +366,26 @@ function MetricBlock({ title, b }) {
           </tbody>
         </table>
       ))}
+      {b.scene_attempts && (
+        <table className="adm-table">
+          <caption>Tentativas por cena (posição no roteiro)</caption>
+          <thead><tr><th>Cena</th><th>Cenas</th><th>Imagem (média)</th><th>Imagem (máx.)</th><th>Vídeo (média)</th></tr></thead>
+          <tbody>
+            {b.scene_attempts.by_scene.length === 0 && <tr><td colSpan={5} className="g-muted">Nada no período.</td></tr>}
+            {b.scene_attempts.by_scene.map((r) => <tr key={r.scene}><td>{r.scene}</td><td>{r.scenes}</td><td>{r.avg_image ?? '—'}</td><td>{r.max_image ?? '—'}</td><td>{r.avg_video ?? '—'}</td></tr>)}
+          </tbody>
+        </table>
+      )}
+      {b.retry_reasons && (
+        <table className="adm-table">
+          <caption>Motivos de nova tentativa</caption>
+          <thead><tr><th>Motivo</th><th>Etapa</th><th>Quem</th><th>Efeito</th><th>Vezes</th></tr></thead>
+          <tbody>
+            {b.retry_reasons.length === 0 && <tr><td colSpan={5} className="g-muted">Nada no período.</td></tr>}
+            {b.retry_reasons.map((r) => <tr key={[r.code, r.kind, r.source, r.blocking].join(':')}><td>{r.label}</td><td>{r.kind === 'image' ? 'Imagem' : r.kind === 'video' ? 'Vídeo' : r.kind}</td><td>{r.source === 'human' ? 'Operador' : 'Revisor'}</td><td>{r.blocking ? 'Bloqueou' : 'Aviso'}</td><td>{r.count}</td></tr>)}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }

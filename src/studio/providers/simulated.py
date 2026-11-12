@@ -19,7 +19,7 @@ from pathlib import Path
 from .. import pricing
 from ..ffmpeg import FFmpeg
 from ..models import ReviewDecision, ReviewResult, SceneSpec, Script
-from .base import ImageRequest, OpResult, OpState, PermanentError, PlanningContext, TransientError, VideoRequest
+from .base import FactsRequest, ImageRequest, OpResult, OpState, PermanentError, PlanningContext, TransientError, VideoRequest
 
 SIM_PROVIDER = "simulated"
 
@@ -56,6 +56,7 @@ class SimulationScript:
     video_submit_failures: list[str] = field(default_factory=list)
     video_polls_before_done: int = 1
     video_with_audio: bool = False
+    # Além de ReviewDecision, aceita "aesthetic": reprovado pelo modelo SÓ por estética (mão) → vira aviso.
     image_reviews: list[ReviewDecision] = field(default_factory=list)
     video_reviews: list[ReviewDecision] = field(default_factory=list)
 
@@ -169,6 +170,16 @@ class SimulatedPlanner:
     def test_task(self, role: str, prompt: str) -> tuple[str, dict]:
         return "SIMULADO: nenhum modelo foi chamado. Este seria o pedido enviado:\n" + prompt[:900], {}
 
+    def describe_product(self, req: FactsRequest) -> tuple[dict, dict]:
+        """SIMULADO: nenhuma foto é analisada; a ficha repete só o que o operador digitou."""
+        from ..agents.fidelity import looks_complex
+        attrs = req.visual_attributes or {}
+        complex_ = looks_complex(req.name, "", attrs)
+        return ({"summary_en": "", "colors": [v for k, v in attrs.items() if "cor" in k.lower() or "color" in k.lower()],
+                 "must_keep": [f"{k}: {v}" for k, v in attrs.items()][:10], "asymmetric": complex_,
+                 "complexity": "complex" if complex_ else "simple"},
+                {"note": "SIMULADO: ficha técnica sem análise visual (só atributos digitados)"})
+
     def refine_script(self, ctx: PlanningContext) -> tuple[Script, dict]:
         script = ctx.draft.model_copy(update={"planner": "simulated:template (sem IA)", "simulated": True})
         return script, {"note": "SIMULADO: roteiro = template do formato, sem refinamento por IA"}
@@ -184,14 +195,20 @@ class SimulatedReviewer:
 
     def _result(self, queue: list[ReviewDecision], method: str) -> ReviewResult:
         decision = queue.pop(0) if queue else ReviewDecision.INCONCLUSIVE
-        issues, fix = [], None
-        if decision == ReviewDecision.REJECTED:
+        issues, fix, critical, warnings = [], None, [], []
+        checks = {"produto": "desconhecido", "maos": "desconhecido", "cenario": "desconhecido", "enquadramento": "desconhecido"}
+        if decision == "aesthetic":   # só a mão saiu errada: o produto está certo
+            decision = ReviewDecision.REJECTED
+            warnings = ["(simulado) dedo a mais na mão esquerda"]
+            checks.update(produto="ok", maos="problema")
+        elif decision == ReviewDecision.REJECTED:
             issues = ["(simulado) problema fictício para teste de correção"]
+            critical = list(issues)
             fix = "(simulado) manter tampa e alça idênticas às fotos oficiais"
         return ReviewResult(
             decision=decision,
-            checks={"produto": "desconhecido", "maos": "desconhecido", "cenario": "desconhecido", "enquadramento": "desconhecido"},
-            issues=issues,
+            checks=checks,
+            issues=issues, critical_issues=critical, warnings=warnings,
             suggested_fix=fix,
             method=f"SIMULADO — nenhuma análise visual foi feita. {method}",
             reviewer="simulated",

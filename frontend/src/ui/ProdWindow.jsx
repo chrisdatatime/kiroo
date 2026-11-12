@@ -188,6 +188,7 @@ function TabDirecao({ v }) {
                 </div>
               ))}
               {d.warnings.map((w, k) => <span key={k} role="alert" style={{ fontSize: 12.5, color: '#5C3300' }}>{w}</span>)}
+              {d.advice && <span role="alert" style={{ fontSize: 12.5, color: '#5C3300', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>{d.advice.text}{d.advice.canSwitch && <button className="g-btn g-sm" onClick={d.advice.switchTo}>Usar Produto em destaque</button>}</span>}
             </div>
           </div>
           <div style={{ flex: '1 1 260px', minWidth: 0 }} className="g-card">
@@ -334,6 +335,31 @@ function TabRevisao({ v }) {
         </div>
         <div style={{ font: '700 13.5px/1.4 Instrument Sans,sans-serif' }}><strong>{cur.title}</strong><br /><span className="g-muted">{cur.sub}</span></div>
         <BudgetBox v={v} />
+        {cur.advice && <div role="note" style={{ padding: 10, borderRadius: 12, background: '#FFF4D6', border: '1px solid #E7E7E4', fontSize: 13, lineHeight: 1.4 }}>{cur.advice.text}</div>}
+        {cur.versions && (
+          <div className="g-card" style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <span className="g-label">{cur.versions.blocked ? 'As tentativas automáticas acabaram: compare e aprove a melhor' : 'Compare as versões desta cena'}</span>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 10 }}>
+              {cur.versions.items.map((it) => (
+                <div key={it.id} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {it.video ? <video src={it.url} muted loop playsInline controls style={{ width: '100%', aspectRatio: '9 / 16', borderRadius: 10, background: '#0E0E10' }} />
+                    : <img src={it.url} alt={'Versão ' + it.no} style={{ width: '100%', aspectRatio: '9 / 16', objectFit: 'cover', borderRadius: 10, background: '#F2F2EF' }} />}
+                  <strong style={{ fontSize: 12.5 }}>Versão {it.no} · {it.verdict}</strong>
+                  {it.critical.length > 0 && <span style={{ fontSize: 12, color: '#7A2218' }}>{it.critical.join(' ')}</span>}
+                  {it.warnings.length > 0 && <span style={{ fontSize: 12, color: '#5C3300' }}>Aviso: {it.warnings.join(' ')}</span>}
+                  <button className="g-btn g-lime g-sm" onClick={it.choose} disabled={!it.canChoose || !!v.busy}>Aprovar esta</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {cur.anchor && (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', fontSize: 13 }}>
+            {cur.anchor.isAnchor
+              ? <><span><strong>Imagem-âncora do produto.</strong> As próximas cenas usam esta imagem como referência principal.</span><button className="g-btn g-sm" onClick={cur.anchor.clear} disabled={!!v.busy}>Remover âncora</button></>
+              : <button className="g-btn g-sm" onClick={cur.anchor.set} disabled={!!v.busy} title="O produto nesta imagem está fiel? Ela passa a guiar as próximas cenas.">{cur.anchor.hasAnchor ? 'Trocar a âncora por esta imagem' : 'Usar como âncora do produto'}</button>}
+          </div>
+        )}
         {cur.limitHit && cur.canAct && <div style={{ padding: 12, borderRadius: 12, background: '#FFE1DC', border: '2px solid #9A2E22', fontSize: 13.5, lineHeight: 1.4 }}><strong style={{ color: '#7A2218' }}>{cur.maxTries} tentativas usadas nesta cena.</strong> Para não gastar sem controle, novas tentativas ficam bloqueadas. Aprove a melhor versão ou ajuste a direção com o Theo.</div>}
         {cur.failed && (
           <div role="alert" style={{ padding: 12, borderRadius: 12, background: '#FFE1DC', border: '2px solid #9A2E22', fontSize: 13.5, lineHeight: 1.4, display: 'flex', flexDirection: 'column', gap: 8 }}>

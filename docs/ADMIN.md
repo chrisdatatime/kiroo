@@ -84,6 +84,10 @@ para produções **reais** e **DEMO** (custo equivalente estimado; nunca somam):
 - % de produções interrompidas por orçamento operacional (com evento `ops_alert` de `ops_budget_reached`, mesmo se
   retomadas depois);
 - tentativas médias por cena (gerações de imagem + vídeo por cena; também separado por tipo);
+- tentativas por posição da cena (1, 2, 3…: média de imagem e vídeo, máximo de imagem) e distribuição (quantas cenas
+  saíram na 1ª, 2ª… tentativa);
+- motivos de nova tentativa (eventos `retry_reason`, só categorias fixas: cor, botões, lado trocado, cabo, logo,
+  proporção, parte inventada, mãos, técnico), por etapa, origem (revisor/operador) e efeito (bloqueou/aviso);
 - custo, chamadas, falhas e média por operação e por provedor; fora das produções, conversa com agentes e testes de
   treinamento.
 

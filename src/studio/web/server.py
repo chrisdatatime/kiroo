@@ -67,7 +67,7 @@ PID_RE = re.compile(r"^prod_[0-9a-f]{10}$")
 MEDIA_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".mp4", ".txt", ".md", ".json"}
 LEGAL_PAGES = {"/termos": "termos.html", "/privacidade": "privacidade.html"}
 ACTIONS = {"run", "approve", "reject", "final", "pause", "resume", "cancel", "budget", "references", "validate",
-           "direction", "go_ahead", "autonomy", "edit", "music", "retry", "confirm"}
+           "direction", "go_ahead", "autonomy", "edit", "music", "retry", "confirm", "choose", "anchor"}
 GAME_DIST = Path(__file__).resolve().parents[3] / "frontend" / "dist"   # build do jogo (npm run build)
 # Arquivos da raiz do dist (vêm de frontend/public; ver frontend/scripts/brand-assets.mjs). Lista fechada, nada de listar pasta.
 BRAND_FILES = {"favicon.ico": "image/x-icon", "favicon.svg": "image/svg+xml", "apple-touch-icon.png": "image/png",
@@ -1033,6 +1033,7 @@ class App:
 
     def _preview(self, payload: dict, s) -> dict:
         """Monta as instruções de geração a partir das escolhas. Determinístico, sem chamadas pagas."""
+        from ..agents import fidelity
         from ..agents.creative import build_draft
         from ..claims import find_unsupported_claims
         from ..models import ProductSheet
@@ -1044,6 +1045,11 @@ class App:
                                              unknown_fields=[], presenter_assets={}, validated_at=None)
         draft = build_draft(sheet, snap)
         warnings = []
+        advice = None
+        if resolved.presentation == "hands_only" and fidelity.looks_complex(product.name, product.category,
+                                                                           product.visual_attributes):
+            advice = {"suggested": "product_only", "text": fidelity.FORMAT_ADVICE}
+            warnings.append(fidelity.FORMAT_ADVICE)
         for label, text in (("detalhe", choices.details_text), ("ambiente", choices.environment_custom)):
             bad = find_unsupported_claims(text, sheet)
             if bad:
@@ -1057,6 +1063,7 @@ class App:
             "scenes": [{"index": sc.index, "title": sc.title, "image_prompt": sc.image_prompt,
                         "animation_prompt": sc.animation_prompt} for sc in draft.scenes],
             "warnings": warnings,
+            "format_advice": advice,
         }
 
     @staticmethod
@@ -1205,7 +1212,7 @@ class App:
                 orch.db.close()
             self.start_run(pid)
             return _json(200, {"ok": True, "added": len(files)})
-        if self.is_running(pid) and action in {"approve", "reject", "final", "budget", "retry"}:
+        if self.is_running(pid) and action in {"approve", "reject", "final", "budget", "retry", "choose", "anchor"}:
             return _json(409, {"error": "a produção está em execução; aguarde terminar a etapa atual"})
         orch = self.orch_for(pid)
         try:
@@ -1229,6 +1236,18 @@ class App:
                                        "stage": exc.stage, "included": exc.included, "used": exc.used})
                 except InsufficientCreditsError as exc:   # nada foi gasto nem alterado: o vídeo continua como está
                     return _no_balance_for_adjustment(exc.needed_cc, exc.balance_cc)
+            elif action == "choose":   # tentativas esgotadas: aprova uma das versões lado a lado, com um clique
+                try:
+                    orch.choose_attempt(pid, int(payload["scene"]), str(payload.get("stage") or "image"),
+                                        str(payload.get("attempt_id") or ""))
+                except OrchestratorError as exc:
+                    return _json(409, {"error": str(exc)})
+            elif action == "anchor":   # imagem-âncora do produto (ou remover: attempt_id vazio)
+                try:
+                    orch.set_anchor(pid, str(payload["attempt_id"]) if payload.get("attempt_id") else None)
+                except OrchestratorError as exc:
+                    return _json(409, {"error": str(exc)})
+                continue_after = False
             elif action == "retry":
                 stage = payload.get("stage")
                 if stage not in {"image", "video"}:

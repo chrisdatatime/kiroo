@@ -22,6 +22,7 @@ export function sceneView(sc, goAhead) {
     idx: sc.idx, title: sc.title, motion: sc.motion, seconds: sc.target_duration_s, criteria: sc.criteria || [],
     img, vid, blocked: sc.status === 'blocked', iv: Math.max(sc.image_attempts, 1), vv: Math.max(sc.video_attempts, 1),
     imgTries: sc.image_attempts, vidTries: sc.video_attempts, image: sc.image, video: sc.video,
+    status: sc.status, candidates: sc.candidates || null,
   };
 }
 

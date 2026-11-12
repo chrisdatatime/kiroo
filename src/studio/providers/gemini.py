@@ -22,8 +22,8 @@ from pathlib import Path
 
 from .. import paid_gate, pricing
 from ..models import ReviewResult, SceneSpec, Script
-from .base import (ImageRequest, OpResult, OpState, PermanentError, PlanningContext, ProviderBillingError,
-                   TransientError, VideoRequest)
+from .base import (FactsRequest, ImageRequest, OpResult, OpState, PermanentError, PlanningContext,
+                   ProviderBillingError, TransientError, VideoRequest)
 
 PROVIDER = "gemini-api"
 
@@ -255,6 +255,18 @@ class GeminiPlanner(_GeminiText):
         data, meta = self._ask_json(parts)
         return str(data.get("result", "")), meta
 
+    def describe_product(self, req: FactsRequest) -> tuple[dict, dict]:
+        """Ficha técnica visual: texto multimodal sobre as fotos oficiais (não gera imagem)."""
+        from ..agents.fidelity import FACTS_INSTRUCTIONS
+        if not req.references:
+            raise PermanentError("sem fotos oficiais para a ficha técnica")
+        dados = json.dumps({"name": req.name, "variant": req.variant, "visual_attributes": req.visual_attributes},
+                           ensure_ascii=False)
+        parts = [{"type": "text", "text": FACTS_INSTRUCTIONS + " " + _DATA_NOTICE},
+                 {"type": "text", "text": f"<dados>\n{dados}\n</dados>"},
+                 *[_image_part(r) for r in req.references[:6]]]
+        return self._ask_json(parts)
+
     def refine_script(self, ctx: PlanningContext) -> tuple[Script, dict]:
         instructions = (
             "Você é diretor criativo de vídeos de produto para Shopee Vídeo. Ajuste o rascunho de roteiro ao "
@@ -273,6 +285,8 @@ class GeminiPlanner(_GeminiText):
         parts = [
             {"type": "text", "text": instructions},
             *([{"type": "text", "text": ctx.training}] if ctx.training else []),
+            *([{"type": "text", "text": "FICHA TÉCNICA VISUAL (das fotos; os prompts nunca podem contradizê-la):\n"
+                + ctx.facts}] if ctx.facts else []),
             {"type": "text", "text": "RASCUNHO:\n" + ctx.draft.model_dump_json(indent=1)},
             {"type": "text", "text": f"<dados>\n{ctx.product_sheet_json}\n</dados>"},
         ]
@@ -288,24 +302,34 @@ class GeminiPlanner(_GeminiText):
 
 _REVIEW_FORMAT = (
     'Responda SOMENTE com JSON: {"decision":"approved|rejected|inconclusive","checks":{"produto":"ok|problema|desconhecido",'
-    '"maos":"...","cenario":"...","enquadramento":"...","temporal":"..."},"issues":["..."],"suggested_fix":"...",'
-    '"confidence":0.0}. Use "inconclusive" se não for possível avaliar com segurança.'
+    '"maos":"...","cenario":"...","enquadramento":"...","temporal":"..."},"critical_issues":["..."],'
+    '"aesthetic_issues":["..."],"issues":["..."],"suggested_fix":"...","confidence":0.0}. '
+    'GRAVIDADE: "critical_issues" = SOMENTE fidelidade do PRODUTO (cor, número/posição de botões, lado esquerdo/direito '
+    'trocado ou espelhado, cabo, logos/inscrições, proporções, partes inventadas ou faltando) — isso reprova. '
+    '"aesthetic_issues" = mãos (dedos, pegada), luz, cenário, enquadramento — isso é só aviso. '
+    '"suggested_fix" corrige apenas os problemas críticos, em inglês, de forma objetiva. '
+    'Use "inconclusive" se não for possível avaliar com segurança.'
 )
 
 
 class GeminiReviewer(_GeminiText):
     def _to_result(self, data: dict, method: str) -> ReviewResult:
+        def strs(v):
+            return [str(x)[:500] for x in v if str(x).strip()][:12] if isinstance(v, list) else []
+        crit, aest = strs(data.get("critical_issues")), strs(data.get("aesthetic_issues"))
         data = {k: v for k, v in data.items() if k in {"decision", "checks", "issues", "suggested_fix", "confidence"}}
-        return ReviewResult(**data, method=method, reviewer=f"{PROVIDER}:{self.model}")
+        return ReviewResult(**data, critical_issues=crit, warnings=aest, method=method,
+                            reviewer=f"{PROVIDER}:{self.model}")
 
     def review_image(self, spec: SceneSpec, image: Path, references: list[Path]) -> tuple[ReviewResult, dict]:
         criteria = "\n".join(f"- {c}" for c in spec.approval_criteria)
         parts = [
             {"type": "text", "text": (
                 "Revise a IMAGEM GERADA (primeira imagem) comparando com as REFERÊNCIAS oficiais (demais imagens). "
-                "Verifique: produto (cor, variante, forma, proporções, tampa, alça, acabamento, acessórios, "
-                "inscrições), mãos (anatomia, número de dedos, manicure), cenário e enquadramento 9:16, ausência de "
-                f"texto/logos/interface inventados. Critérios da cena:\n{criteria}\nRestrições: {spec.constraints}\n"
+                "Verifique: produto (cor, variante, forma, proporções, botões, lado esquerdo/direito, cabo, logos, "
+                "tampa, alça, acabamento, acessórios, inscrições), mãos (anatomia, número de dedos, manicure), cenário "
+                "e enquadramento 9:16, ausência de texto/logos/interface inventados. Itens marcados CRÍTICO são "
+                f"bloqueantes. Critérios da cena:\n{criteria}\nRestrições: {spec.constraints}\n"
                 + _REVIEW_FORMAT)},
             _image_part(image),
             *[_image_part(r) for r in references],
@@ -321,6 +345,7 @@ class GeminiReviewer(_GeminiText):
                 "A primeira imagem é a foto aprovada que deveria ter sido animada; as seguintes são os quadros em "
                 "ordem. Verifique deformações do produto ou mãos, dedos extras, objetos novos, mudanças de cor/forma "
                 f"entre quadros e se o movimento corresponde a: {spec.motion}. Restrições: {spec.constraints}. "
+                "Critérios:\n" + "\n".join(f"- {c}" for c in spec.approval_criteria) + "\n"
                 + _REVIEW_FORMAT)},
             _image_part(approved_image),
             *[_image_part(p) for _, p in frames],
