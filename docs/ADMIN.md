@@ -135,6 +135,17 @@ amigável e retomam quando o kill switch sair. Confira com `python -m studio doc
 
 ## Créditos
 
+A tela **Créditos e extrato** do cliente mostra saldo, reservado, consumo por vídeo → cena → operação e o extrato.
+Quando falta saldo para um **ajuste extra**, o cliente vê "Saldo insuficiente para um novo ajuste" com saldo, custo e o
+que falta, e escolhe **Manter meu vídeo como está** (nada muda, nada é cobrado) ou **Adicionar créditos**. Como ainda não há
+pagamento, "Adicionar créditos" mostra o contato de `STUDIO_SUPPORT_CONTACT` e o passo a passo; você libera com o comando
+abaixo. Um vídeo já pago (pré-orçamento reservado) é entregue mesmo com o saldo livre zerado.
+
+**Mercado Pago (depois):** o ponto de integração é `src/studio/payments.py` — implementar
+`MercadoPagoProvider.start_checkout` e, no webhook, creditar com `Ledger.add(wid, cc, kind="purchase",
+ext_ref="mp:<payment_id>")` (o `ext_ref` já torna o crédito idempotente). `GET /api/credits/topup` é o que a tela lê.
+
+
 | O que | Comando |
 |---|---|
 | Conceder créditos | `studio admin grant-credits --email ana@exemplo.com --credits 100 --note "beta"` |

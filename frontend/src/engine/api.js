@@ -9,7 +9,8 @@ export function setLoggedOutHandler(fn) { onLoggedOut = fn; }
 async function parse(r) {
   const d = await r.json().catch(() => ({}));
   if (r.status === 401) { csrf = null; onLoggedOut(); throw new AuthRequired(d.error || 'Entre na sua conta'); }
-  if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+  // `data` leva a resposta inteira (ex.: saldo, custo e faltantes de um 402) para a tela mostrar a conta.
+  if (!r.ok) throw Object.assign(new Error(d.error || `HTTP ${r.status}`), { data: d, status: r.status });
   return d;
 }
 

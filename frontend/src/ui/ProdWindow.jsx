@@ -3,6 +3,8 @@ import Boneco from '../Boneco.jsx';
 import { Spinner, CloseButton, FormatArt } from './bits.jsx';
 import { formatPhotoUrl } from './direcao.js';
 import { CONFIRM_LABEL, needsConfirmation, summaryRows } from './nextVideo.js';
+import { ADD_LABEL, KEEP_LABEL, NO_BALANCE_TITLE, noBalanceRows } from './credits.js';
+import { TopUp } from './TopUp.jsx';
 
 // Janela da produção: uma aba por agente/etapa, com dados REAIS do motor.
 const Locked = ({ children }) => <div className="g-card" style={{ padding: 18, font: '700 15px/1.4 Instrument Sans,sans-serif' }}>{children}</div>;
@@ -123,6 +125,27 @@ function NextVideo({ v }) {
       <span style={{ font: '800 13.5px/1.4 Instrument Sans,sans-serif', color: '#205C2E' }}>{sm.no_extra_cost}</span>
       <span className="g-muted" style={{ fontSize: 12.5 }}>Sem confirmação, nada é gasto. Se uma geração falhar por erro técnico, ela não é cobrada.</span>
     </section>
+  );
+}
+
+// Falta de saldo para um ajuste extra: a conta à vista e duas saídas. Nada foi cobrado; o vídeo está preservado.
+function NoBalance({ v }) {
+  const [open, setOpen] = React.useState(false);
+  const n = v.noBalance;
+  if (!n) return null;
+  return (
+    <div role="alert" style={{ padding: 12, borderRadius: 12, background: '#FFE7C2', border: '2px solid #7A4300', display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <strong style={{ color: '#5C3300' }}>{NO_BALANCE_TITLE}</strong>
+      <dl style={{ margin: 0, display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))', gap: '6px 14px', fontSize: 13.5 }}>
+        {noBalanceRows(n).map(([k, val]) => <div key={k}><dt className="g-label">{k}</dt><dd style={{ margin: 0, fontWeight: 800 }}>{val}</dd></div>)}
+      </dl>
+      <span style={{ fontSize: 13.5, lineHeight: 1.45 }}>Nada foi cobrado. Seu vídeo, as cenas e as aprovações continuam salvos e você pode aprovar e baixar o que já está pronto.</span>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button className="g-btn g-sm g-lime" onClick={v.keepAsIs}>{KEEP_LABEL}</button>
+        <button className="g-btn g-sm" onClick={() => setOpen((o) => !o)} aria-expanded={open}>{ADD_LABEL}</button>
+      </div>
+      {open && <TopUp topup={n.topup} missingCc={n.missing_cc} onClose={() => setOpen(false)} />}
+    </div>
   );
 }
 
@@ -266,11 +289,12 @@ function BudgetBox({ v }) {
       <button className="g-btn g-sm g-lime" onClick={v.resumeOnly} disabled={!!v.busy}>Já recarreguei: retomar</button>
       <button className="g-btn g-sm" onClick={v.cancelProd} disabled={!!v.busy}>Encerrar produção</button>
     </>);
-  if (pz.kind === 'saldo') return box('Créditos insuficientes',
-    `O saldo do estúdio é de ${pz.balance} créditos e o próximo passo custaria cerca de ${pz.next}. O estúdio pausou antes de gastar. A compra de créditos chega com os planos; por enquanto, peça créditos ao administrador e depois retome.`,
+  if (pz.kind === 'saldo') return box('Saldo insuficiente para continuar',
+    `O saldo do estúdio é de ${pz.balance} créditos e o próximo passo custaria cerca de ${pz.next}. O estúdio pausou antes de gastar e tudo o que você já tem continua salvo.`,
     <>
-      <button className="g-btn g-sm" onClick={v.openCredits}>Ver créditos e extrato</button>
-      <button className="g-btn g-sm g-lime" onClick={v.resumeOnly} disabled={!!v.busy}>Já tenho créditos: retomar</button>
+      <button className="g-btn g-sm g-lime" onClick={v.dismissBudget}>{KEEP_LABEL}</button>
+      <button className="g-btn g-sm" onClick={v.openCredits}>{ADD_LABEL}</button>
+      <button className="g-btn g-sm" onClick={v.resumeOnly} disabled={!!v.busy}>Já adicionei: retomar</button>
     </>);
   if (pz.kind === 'outro') return box('Produção pausada', pz.reason || 'O estúdio pausou esta produção.',
     <button className="g-btn g-sm g-lime" onClick={v.resumeOnly} disabled={!!v.busy}>Retomar</button>);
@@ -334,6 +358,7 @@ function TabRevisao({ v }) {
               <strong>Preserva:</strong> as outras cenas, aprovações, direção e identidade.<br />
               <strong>Custo estimado:</strong> {cr(cur.cost)}.
             </div>
+            {v.noBalance && v.noBalance.scene === cur.n && <NoBalance v={v} />}
             {v.confirmExtra && v.confirmExtra.scene === cur.n && (
               <div role="alert" style={{ padding: 10, borderRadius: 10, background: '#fff', border: '2px solid #7A4300', fontSize: 13.5, lineHeight: 1.4 }}>
                 Os ajustes incluídos desta cena já foram usados. Este ajuste extra custa cerca de <strong>{v.confirmExtra.cost} créditos</strong>, reservados do saldo do estúdio. Autorizar?

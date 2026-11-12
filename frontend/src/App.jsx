@@ -33,6 +33,7 @@ class TourBoundary extends React.Component {
 import { deriveStage, sceneView, toCredits, creditsToUsd } from './engine/adapter.js';
 import { adjustmentGate, pauseKind } from './ui/pause.js';
 import { balanceLabel, needsConfirmation, usedLabel } from './ui/nextVideo.js';
+import { adjustFunds, noBalanceFromError, noBalanceNotice } from './ui/credits.js';
 import Shell, { VIEWS } from './shell/Shell.jsx';
 import Central from './shell/Central.jsx';
 import MissionView from './shell/MissionView.jsx';
@@ -210,7 +211,12 @@ export default class App extends React.Component {
     if (this.state.busy) return false;
     this.setState({ busy: label });
     try { await fn(); if (ok) this.toast(ok); await this.refresh(); return true; }
-    catch (e) { this.toast('Não deu certo: ' + e.message); return false; }
+    catch (e) {
+      // Falta de saldo para um ajuste extra: mostra a conta e as saídas (nada foi cobrado nem alterado).
+      const nb = noBalanceFromError(e, this.state.ui.revSel);
+      if (nb) { this.setUI({ noBalance: nb }); return false; }
+      this.toast('Não deu certo: ' + e.message); return false;
+    }
     finally { this.setState({ busy: null }); }
   }
 
@@ -631,6 +637,14 @@ export default class App extends React.Component {
     const sc = (P.scenes || []).find((x) => x.idx === idx);
     const gate = adjustmentGate(sc && sc.adjustments, stage);
     // Ajuste além dos incluídos: só com autorização explícita, mostrando o custo (confirmação dentro do jogo).
+    // Sem saldo para o ajuste extra: não pede autorização; mostra saldo, custo e quanto falta (o vídeo fica como está).
+    const costCc = sc && sc.adjustments && sc.adjustments.extra_cost_cc ? sc.adjustments.extra_cost_cc[stage] : gate.cost * 100;
+    const w = this.state.S && this.state.S.credits;
+    if (gate.needsAuth && w && !adjustFunds({ costCc, balanceCc: w.balance_cc, exempt: w.exempt }).enough) {
+      this.setUI({ confirmExtra: null, noBalance: noBalanceNotice({ scene: idx, costCc, balanceCc: w.balance_cc }) });
+      return;
+    }
+    this.setUI({ noBalance: null });
     if (gate.needsAuth && !(ui.confirmExtra && ui.confirmExtra.scene === idx)) { this.setUI({ confirmExtra: { scene: idx, cost: gate.cost } }); return; }
     const authorize = !!(gate.needsAuth && ui.confirmExtra && ui.confirmExtra.scene === idx);
     this.setUI({ confirmExtra: null });
@@ -1031,6 +1045,9 @@ export default class App extends React.Component {
       approveCur: () => rev && this.approveScene(rev.n), retryCur: () => rev && this.retryScene(rev.n),sendAdjust: () => this.sendAdjust(),
       budgetHit: ui.budgetHit || (P && P.status === 'paused' && ui.budgetDismissed !== P.reason), pauseReason: P && P.status === 'paused' ? P.reason : '',
       confirmExtra: ui.confirmExtra || null, cancelExtra: () => this.setUI({ confirmExtra: null }),
+      noBalance: ui.noBalance || null,
+      // "Manter meu vídeo como está": fecha o ajuste sem mudar nada; cenas, versões e aprovações continuam.
+      keepAsIs: () => this.setUI({ noBalance: null, confirmExtra: null, adjust: false, issues: [], adjText: '' }),
       dismissBudget: () => this.setUI({ budgetHit: false, confirmCap: null, budgetDismissed: P && P.status === 'paused' ? P.reason : null }),
       confirmCap: ui.confirmCap || null, confirmCapUsd: ui.confirmCapUsd || 0, cancelCap: () => this.setUI({ confirmCap: null }),
       pause: this.pauseInfo(), raiseMonthly: (n) => this.raiseMonthly(n), resumeOnly: () => this.resumeOnly(),
