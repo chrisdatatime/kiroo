@@ -18,6 +18,77 @@ Regras:
 - O log do contêiner não recebe código de convite, código de confirmação nem link de senha.
 - Tudo abaixo vale para o banco do ambiente onde o comando roda. Confira o ambiente antes: `python -m studio doctor`.
 
+## Aba Administrador (site) × CLI
+
+As duas usam **a mesma camada de regras** (`src/studio/admin_ops.py`): o que a CLI recusa, o site também recusa, e
+toda ação das duas (inclusive as recusadas) entra na auditoria.
+
+**Onde fica:** Preferências → grupo Estúdio → **Administrador** (ao lado de Minha conta, Créditos e Sobre), e no menu do
+estúdio (logo) → Administrador. Só aparece para administrador da plataforma (`users.is_platform_admin`); para qualquer
+outra pessoa, ou sem sessão, todas as rotas `/api/admin/*` respondem **404**. A checagem é no servidor, em cada rota.
+
+| Na aba | Equivalente na CLI |
+|---|---|
+| Contas (e-mail, nome, estúdio, modo, real liberado, teto, saldo, reservado, e-mail confirmado) | `list` |
+| Liberar / bloquear modo real | `allow-real` / `deny-real` |
+| Modo DEMO / REAL | `set-mode` |
+| Teto mensal (nunca acima de `STUDIO_MONTHLY_CAP_USD`) | `set-cap` |
+| Conceder / ajustar créditos (motivo obrigatório; ajuste aceita negativo) | `grant-credits` / `adjust-credits` |
+| Extrato da conta | `credits` |
+| Criar convite (1 a 30 dias), listar, revogar — o código aparece **uma vez** | `create-invite` / `list-invites` / `revoke-invite` |
+| Confirmar e-mail à mão | `verify-email` |
+| Gerar link de nova senha (aparece uma vez) | `reset-link` |
+| Exportar dados da conta | `export-user` |
+| Métricas internas | `metrics` (`--days N`, `--json`) |
+| Auditoria (somente leitura) | `audit` (`--limit N`) |
+
+Proteções da aba:
+
+- **Confirmação** em toda ação que muda algo: modal com o resumo do efeito e aviso de efeito financeiro (modo real,
+  teto, créditos). **Ajuste negativo** exige digitar o e-mail da conta alvo (o servidor confere).
+- **Limites** (só no site): até `STUDIO_ADMIN_MAX_GRANT` créditos por lançamento (padrão 200) e
+  `STUDIO_ADMIN_DAILY_GRANT_CAP` por dia por administrador (padrão 1000). Acima disso: CLI.
+- **Idempotência**: cada concessão/ajuste leva uma chave; duplo clique ou reenvio não credita duas vezes.
+- **Reautenticação**: ações que mudam algo exigem login nos últimos `STUDIO_ADMIN_REAUTH_MINUTES` (padrão 10) ou
+  confirmar a senha na própria aba (com Turnstile, se ligado). Conta só Google: "Entrar de novo com o Google".
+- **Própria conta**: o administrador pode mexer na própria conta, mas subir teto, saldo ou modo exige motivo e a linha
+  fica marcada **PRÓPRIA CONTA** na auditoria (e um aviso `admin_self_action` no log, sem dados pessoais).
+- CSRF (token da sessão + `Origin` do próprio host), limite de requisições `STUDIO_RATE_ADMIN` e respostas
+  `Cache-Control: no-store, private`.
+
+**Só pela CLI, de propósito:**
+
+| O que | Por quê |
+|---|---|
+| Apagar conta (`delete-user --yes`) | Irreversível (banco e arquivos); fica longe de um clique. |
+| Criar administrador (`create-user --admin`) ou tirar alguém de administrador | O site nunca cria nem promove administrador; o primeiro nasce só pela CLI ou `STUDIO_BOOTSTRAP_ADMIN_EMAIL`. |
+| Criar conta comum sem convite (`create-user`) | Pede senha no terminal. |
+| Créditos acima de `STUDIO_ADMIN_MAX_GRANT` por lançamento ou do limite diário | Lotes grandes exigem acesso ao servidor. |
+| Orçamento operacional de produção (`budget`, `resume`) e `ops-alerts` | Freio interno por produção; continua no console. |
+
+### Auditoria
+
+Tabela `admin_audit` (migração 5), **somente inclusão**: gatilhos do SQLite recusam `UPDATE` e `DELETE`. Cada linha:
+quando, ator (`web` com id/e-mail do administrador, ou `cli`), IP (web), ação, conta alvo, antes/depois (JSON),
+créditos, motivo, chave de idempotência, resultado (`ok`, `refused`, `duplicate`) e o erro da recusa. **Nunca** guarda
+senha, token, link de senha nem código de convite (só o id do convite). Ver: aba Auditoria ou `studio admin audit`.
+A trilha guarda o e-mail da conta alvo mesmo depois de a conta ser apagada (registro de segurança — PARA REVISÃO
+JURÍDICA quanto ao prazo de guarda).
+
+### Métricas internas
+
+`studio admin metrics` (padrão: últimos 30 dias; `--days 0` = tudo; `--json`) e a aba Métricas mostram, separado
+para produções **reais** e **DEMO** (custo equivalente estimado; nunca somam):
+
+- custo médio por vídeo entregue (produções concluídas: soma das tentativas, custo confirmado quando houver, senão estimado);
+- % de produções interrompidas por orçamento operacional (com evento `ops_alert` de `ops_budget_reached`, mesmo se
+  retomadas depois);
+- tentativas médias por cena (gerações de imagem + vídeo por cena; também separado por tipo);
+- custo, chamadas, falhas e média por operação e por provedor; fora das produções, conversa com agentes e testes de
+  treinamento.
+
+Só agregados: nada de e-mail, nome, produto, prompt ou id. Produções entram pelo `created_at` no período.
+
 ## Primeiro acesso (administrador)
 
 | O que | Comando |
@@ -73,8 +144,9 @@ Para a pessoa escolher a própria senha, crie a conta e mande um link: `studio a
   testes de treinamento e chat com IA). Teto efetivo 0 = nenhuma chamada paga: o estúdio opera como DEMO.
   A tela de Minha conta também recusa teto de conta acima do da plataforma.
 - Cada `set-mode`/`set-cap` entra no extrato do estúdio como "Ajuste" de 0 crédito com a nota
-  (`admin set-mode: simulated -> real`, `admin set-cap: US$0.00 -> US$3.00 (plataforma US$5.00)`), com autor `cli`.
-  Nenhum valor de segredo é impresso.
+  (`admin set-mode: simulated -> real`, `admin set-cap: US$0.00 -> US$3.00 (plataforma US$5.00)`), com autor `cli`
+  (ou `admin:<id>` quando feito pela aba), e na auditoria (`admin_audit`). Nenhum valor de segredo é impresso.
+- `--note` vira o motivo da auditoria em todas as ações.
 
 Roteiro para ligar o real na conta de teste do staging (plataforma com `STUDIO_MONTHLY_CAP_USD=5`):
 

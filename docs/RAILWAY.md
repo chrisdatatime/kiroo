@@ -225,6 +225,10 @@ para que nenhuma resposta de API ou de mídia privada fique em cache compartilha
    - Ação: **Cache eligibility** → **Bypass cache**.
    - **Deploy**.
 
+   - A aba Administrador (`/api/admin/*`) já está coberta por `/api/`. Se um dia a regra for estreitada,
+     mantenha uma condição explícita **URI Path** `starts with` `/api/admin/` com **Bypass cache**: dado de
+     administrador nunca pode ficar em cache compartilhado (o servidor também manda `Cache-Control: no-store, private`).
+
 **Deu certo quando:** uma resposta de `/api/` vier com `cf-cache-status: BYPASS` (ou `DYNAMIC`).
 
 ```bash

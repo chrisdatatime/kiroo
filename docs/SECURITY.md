@@ -75,6 +75,35 @@ Variáveis: [.env.example](../.env.example) e [RUNBOOK.md](RUNBOOK.md).
 - Exportar (`GET /api/account/export`) e apagar a própria conta (`POST /api/account/delete`, com senha e `APAGAR`):
   banco e arquivos (produções, uploads, trilhas, treinamento). — `src/studio/privacy.py`, `tests/test_signup_privacy.py`
 
+### 7. Aba Administrador e auditoria
+- Aba Administrador no app (Preferências → Administrador) com o que antes era só console. Regras numa camada única
+  (`src/studio/admin_ops.py`) usada pela CLI e pelo site; rotas em `src/studio/web/admin_api.py`.
+- **Autorização no servidor em cada rota**: quem não é administrador da plataforma (ou não entrou) recebe `404` em
+  qualquer `/api/admin/*`, antes de qualquer outra coisa (checado em `App.handle` e de novo no módulo). A aba nem aparece
+  no menu (`/api/me.admin`). Alvo pelo id no caminho (`usr_…`); o corpo não escolhe conta; id inválido → `404`.
+- **CSRF**: todo POST exige o token da sessão **e** `Origin` igual ao host da requisição (+ `Sec-Fetch-Site:
+  same-origin` quando presente). O cookie de sessão continua `HttpOnly`, `SameSite=Lax` (Lax é necessário para os
+  links de e-mail) e `Secure` em produção; a dupla token + Origin cobre o que o Strict cobriria.
+- **Reautenticação**: ação que muda algo exige login ou confirmação de senha nos últimos `STUDIO_ADMIN_REAUTH_MINUTES`
+  (padrão 10; `sessions.reauth_at`). A confirmação passa pelo Turnstile quando ligado (não é contornado) e tem limite
+  de erros (8 / 15 min por conta). Conta só Google: entrar de novo pelo Google (sessão nova = login recente).
+- **Limites**: `STUDIO_ADMIN_MAX_GRANT` (200) por lançamento e `STUDIO_ADMIN_DAILY_GRANT_CAP` (1000) por dia por
+  administrador, conferidos dentro da mesma transação do lançamento (dois pedidos simultâneos não furam o limite).
+  Teto da conta nunca acima do da plataforma. Acima dos limites, só CLI.
+- **Idempotência**: concessão/ajuste pela aba exige chave; o lançamento usa `ext_ref` único — duplo clique devolve o
+  mesmo lançamento (`duplicate`); chave reaproveitada para outro valor/conta → `409`.
+- **Auditoria imutável** (`admin_audit`, migração 5): quem, quando, o quê, antes/depois, motivo, IP, resultado
+  (inclusive recusas); gatilhos recusam `UPDATE`/`DELETE`; tela somente leitura. Sem senha, token, link de senha ou
+  código de convite. Ações na própria conta ficam marcadas.
+- **Ações só da CLI**: apagar conta, criar/remover administrador, lotes acima dos limites.
+- **Cabeçalhos**: `/api/admin/*` com `Cache-Control: no-store, private`, `Pragma: no-cache`; CSP do app inalterada.
+  Cloudflare: a regra de bypass de `/api/` cobre `/api/admin/*` (ver docs/RAILWAY.md).
+- **Limite de requisições** próprio: `STUDIO_RATE_ADMIN` (60/60 por usuário).
+- Testes: `tests/test_admin_panel.py` (404 em todas as rotas para não admin e sem sessão, CSRF em 5 variações,
+  reautenticação com senha/Turnstile/Google, limite por lançamento e diário, CLI sem limite, teto acima da plataforma,
+  idempotência, e-mail digitado no ajuste negativo, auditoria gravada e não editável, ações só da CLI, IDOR, segredos
+  fora do log e da auditoria, `no-store`, limite de requisições e métricas) e `frontend/tests/admin.test.mjs`.
+
 ### Já existia (fases anteriores)
 Cadastro fechado por padrão, ninguém vira admin sozinho, CSRF por sessão, cabeçalho de cliente nas rotas de auth,
 cookie HttpOnly/SameSite=Lax (Secure em produção), CSP sem script inline, HSTS, lista de hosts, proxy só quando
@@ -94,8 +123,8 @@ declarado, senha com scrypt, trava de instância única, backup com Litestream.
 | 8 | Créditos de conta apagada | Mantidos sem vínculo (nota trocada, workspace removido) por possível obrigação fiscal: confirmar com o jurídico/contador. |
 | 9 | `delete-user` pela CLI com produção rodando | A interface recusa (409); a CLI não confere. Pause as produções antes. |
 | 10 | Antivírus/decodificação completa de imagem | A checagem é pelos bytes iniciais e tamanho; a imagem não é decodificada inteira (sem Pillow). Arquivos só são servidos de volta com `nosniff` e tipo fixo. |
-| 11 | MFA para o administrador | Não há segundo fator. Mitigação: senha forte, admin só por CLI, sessão de 30 dias (avaliar encurtar para admin). |
-| 12 | Auditoria de ações de admin | `studio admin` não grava trilha de auditoria (quem concedeu crédito/liberou real). |
+| 11 | MFA para o administrador | Não há segundo fator. Mitigação: senha forte, admin só por CLI, reautenticação recente nas ações da aba Administrador (seção 7); avaliar sessão mais curta para admin. |
+| 12 | Prazo de guarda da auditoria de admin | `admin_audit` guarda o e-mail da conta alvo mesmo depois de apagada; definir a retenção com o jurídico. |
 | 14 | Envio real de chamadas pagas no staging | O portão foi testado com provedores falsos. Ligar `STUDIO_ALLOW_PAID_CALLS=1` + teto baixo no staging e conferir uma geração real é NAO_VERIFICADO. |
 
 ## Verificação desta fase

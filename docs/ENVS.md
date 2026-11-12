@@ -61,6 +61,17 @@ Como ler as colunas:
 | `STUDIO_BOOTSTRAP_ADMIN_EMAIL` | não | não | execução | `voce@exemplo.com` | Cria o administrador no primeiro boot e manda o link para definir a senha. Depois de usar, pode remover. Exige e-mail configurado (seção 5). |
 | `STUDIO_INVITE_CODES` | — | — | — | *(não usar)* | Aposentado. Se existir, é ignorado com aviso no log. |
 
+### Aba Administrador (site)
+
+| Variável | Obrig. | Segredo | Quando | Valor no staging | Para que serve |
+|---|---|---|---|---|---|
+| `STUDIO_ADMIN_MAX_GRANT` | não | não | execução | *(não definir; padrão `200`)* | Máximo de créditos por lançamento (concessão ou ajuste, em valor absoluto) feito pela **aba Administrador**. Acima disso, só pela CLI (`studio admin grant-credits`/`adjust-credits`, que não tem esse limite). |
+| `STUDIO_ADMIN_DAILY_GRANT_CAP` | não | não | execução | *(não definir; padrão `1000`)* | Máximo de créditos concedidos por dia (UTC) **por administrador** pela aba (soma das concessões e ajustes positivos; ajuste negativo não devolve limite). Acima disso, só pela CLI. |
+| `STUDIO_ADMIN_REAUTH_MINUTES` | não | não | execução | *(não definir; padrão `10`)* | Janela de "login recente": ações que mudam algo na aba exigem login ou confirmação de senha (conta só Google: entrar de novo pelo Google) nos últimos N minutos. |
+| `STUDIO_RATE_ADMIN` | não | não | execução | *(não definir; padrão `60/60`)* | Limite de requisições da aba (`/api/admin/*`), por usuário, além do geral de `/api`. Formato `N/S`. |
+
+Criar/remover administrador continua só pela CLI ou por `STUDIO_BOOTSTRAP_ADMIN_EMAIL`; o site não promove ninguém.
+
 ### Verificação anti-robô (Cloudflare Turnstile)
 
 | Variável | Obrig. | Segredo | Quando | Valor no staging | Para que serve |
