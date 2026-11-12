@@ -36,7 +36,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlencode, urlparse
 
-from .. import agent_config, creative_options, mailer, paid_gate
+from .. import agent_config, creative_options, mailer, paid_gate, payments
 from ..agent_chat import AgentChat
 from ..accounts import (LOGIN_WINDOW_MIN, RESET_MINUTES, TERMS_VERSION, VERIFY_MINUTES, Accounts, AuthError, GoogleAuthError,
                         verify_password)
@@ -194,6 +194,18 @@ class Response:
 
 def _json(status: int, data, headers: dict | None = None) -> Response:
     return Response(status, body=json.dumps(data, ensure_ascii=False, default=str).encode("utf-8"), headers=headers or {})
+
+
+def _no_balance_for_adjustment(cost_cc: int, balance_cc: int) -> Response:
+    """402 com a conta à vista quando falta saldo para um ajuste extra. Nada foi cobrado nem mudou: o vídeo, as cenas e
+    as aprovações continuam como estão e a entrega não depende deste ajuste."""
+    from ..credits import fmt
+    missing = max(cost_cc - balance_cc, 0)
+    return _json(402, {"error": "Saldo insuficiente para um novo ajuste", "insufficient_credits": True,
+                       "kind": "adjustment", "balance_cc": balance_cc, "balance": fmt(balance_cc), "cost_cc": cost_cc,
+                       "cost": fmt(cost_cc), "missing_cc": missing, "missing": fmt(missing),
+                       "keep_label": "Manter meu vídeo como está", "add_label": "Adicionar créditos",
+                       "topup": payments.topup_options(missing)})
 
 
 def _cookie(headers: dict, name: str = COOKIE) -> str | None:
@@ -786,8 +798,9 @@ class App:
             try:
                 led = Ledger(db)
                 credits = led.summary(ws["id"])
-                if path == "/api/credits":  # extrato e consumo por produção/etapa (Fase C)
-                    return _json(200, {**credits, "statement": led.statement(ws["id"]), "usage": led.usage(ws["id"])})
+                if path == "/api/credits":  # extrato e consumo por produção/cena/operação (Fase C)
+                    return _json(200, {**credits, "statement": led.statement(ws["id"]), "usage": led.usage(ws["id"]),
+                                       "topup": payments.topup_options()})
             finally:
                 db.close()
             return _json(200, {"csrf": ctx["sess"]["csrf"], "admin": ctx["admin"],
@@ -799,6 +812,12 @@ class App:
                                              "credits": credits},
                                "workspaces": [{"id": w["id"], "name": w["name"], "role": w["role"]} for w in ctx["workspaces"]],
                                "paid_calls": {k: v for k, v in paid_gate.status().items() if k in ("blocked", "message")}})
+        if path == "/api/credits/topup":   # "Adicionar créditos": hoje contato manual; ponto de integração do Mercado Pago
+            try:
+                missing = int(parse_qs(url.query).get("missing_cc", ["0"])[0])
+            except ValueError:
+                missing = 0
+            return _json(200, payments.topup_options(missing))
         if path == "/api/account/export":   # LGPD: cópia dos dados da própria conta
             from ..privacy import export_account
             db = Database(s.db_path)
@@ -1194,14 +1213,17 @@ class App:
                                 redo_image=bool(payload.get("redo_image")), authorize_extra=payload.get("authorize_extra") is True)
                 except AdjustmentNeedsAuthorization as exc:   # nada muda até o cliente autorizar, vendo o custo
                     from ..credits import fmt
+                    led = Ledger(orch.db)
+                    bal = led.balance(orch._wid(pid))
+                    short = 0 if led.exempt(orch._wid(pid)) else max(exc.cost_cc - bal, 0)
+                    if short:   # sem saldo: nem pede autorização, mostra a conta e as saídas
+                        return _no_balance_for_adjustment(exc.cost_cc, bal)
                     return _json(402, {"error": f"Os ajustes incluídos desta cena já foram usados. Um ajuste extra custa "
                                                 f"cerca de {fmt(exc.cost_cc)} créditos.", "needs_authorization": True,
                                        "cost_cc": exc.cost_cc, "cost_credits": fmt(exc.cost_cc), "scene": exc.scene,
                                        "stage": exc.stage, "included": exc.included, "used": exc.used})
-                except InsufficientCreditsError as exc:
-                    from ..credits import fmt
-                    return _json(402, {"error": f"O ajuste extra custa cerca de {fmt(exc.needed_cc)} créditos e o saldo é "
-                                                f"{fmt(exc.balance_cc)}. Nada foi cobrado.", "insufficient_credits": True})
+                except InsufficientCreditsError as exc:   # nada foi gasto nem alterado: o vídeo continua como está
+                    return _no_balance_for_adjustment(exc.needed_cc, exc.balance_cc)
             elif action == "retry":
                 stage = payload.get("stage")
                 if stage not in {"image", "video"}:

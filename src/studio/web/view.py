@@ -244,6 +244,7 @@ def snapshot(settings: Settings, db: Database, pid: str | None, *, since: int = 
         if has_pool:   # ajustes do cliente: incluídos no pré-orçamento e custo (visível) de um extra
             used, auth = sc["adjustments_used"], sc["adjustments_authorized"]
             adj = {"included": included, "used": used, "authorized": auth, "free_left": max(included + auth - used, 0),
+                   "extra_cost_cc": dict(extra_cc),
                    "extra_cost_credits": {k: -(-v // 100) for k, v in extra_cc.items()}}
         scenes.append({
             "idx": sc["idx"], "title": spec["title"], "status": sc["status"],

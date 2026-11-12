@@ -123,22 +123,35 @@ class Ledger:
         return out
 
     def usage(self, wid: str) -> list[dict]:
-        """Consumo por produção e por etapa (débitos)."""
+        """Consumo (débitos) por produção e, dentro dela, por operação (`stages`) e por cena → operação (`scenes`).
+        Cena None = o que não é de uma cena só (roteiro). Sai do próprio extrato: cada débito aponta a tentativa."""
         rows = self.db.conn.execute(
-            "SELECT e.production_id, e.stage, SUM(-e.amount_cc) cc, COUNT(*) n, p.product_json"
+            "SELECT e.production_id, e.stage, a.scene_idx scene, SUM(-e.amount_cc) cc, COUNT(*) n, p.product_json"
             " FROM credit_entries e LEFT JOIN productions p ON p.id=e.production_id"
-            " WHERE e.workspace_id=? AND e.kind='debit' GROUP BY e.production_id, e.stage", (wid,)).fetchall()
+            " LEFT JOIN attempts a ON a.id=e.attempt_id"
+            " WHERE e.workspace_id=? AND e.kind='debit' GROUP BY e.production_id, e.stage, a.scene_idx", (wid,)).fetchall()
         by: dict[str, dict] = {}
         for r in rows:
             d = by.setdefault(r["production_id"], {"production_id": r["production_id"], "product": _title(r["product_json"]),
-                                                   "total_cc": 0, "stages": []})
+                                                   "total_cc": 0, "stages": [], "_st": {}, "_sc": {}})
             d["total_cc"] += r["cc"]
-            d["stages"].append({"stage": STAGES.get(r["stage"] or "", r["stage"] or "outros"), "cc": r["cc"],
-                                "credits": fmt(r["cc"]), "calls": r["n"]})
+            label = STAGES.get(r["stage"] or "", r["stage"] or "outros")
+            st = d["_st"].setdefault(label, {"stage": label, "cc": 0, "calls": 0})
+            st["cc"] += r["cc"]
+            st["calls"] += r["n"]
+            sc = d["_sc"].setdefault(r["scene"], {"scene": r["scene"], "cc": 0, "operations": []})
+            sc["cc"] += r["cc"]
+            sc["operations"].append({"operation": label, "cc": r["cc"], "credits": fmt(r["cc"]), "calls": r["n"]})
         out = sorted(by.values(), key=lambda d: -d["total_cc"])
         for d in out:
             d["total"] = fmt(d["total_cc"])
-            d["stages"].sort(key=lambda s: -s["cc"])
+            d["stages"] = sorted(({**s, "credits": fmt(s["cc"])} for s in d.pop("_st").values()), key=lambda s: -s["cc"])
+            scenes = d.pop("_sc")
+            for sc in scenes.values():
+                sc["credits"] = fmt(sc["cc"])
+                sc["operations"].sort(key=lambda o: -o["cc"])
+            # cenas em ordem; "sem cena" (roteiro) por último
+            d["scenes"] = sorted(scenes.values(), key=lambda s: (s["scene"] is None, s["scene"] or 0))
         return out
 
     # ------------------------------------------------------------- escrita
