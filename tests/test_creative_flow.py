@@ -159,6 +159,56 @@ def test_choices_reach_generation_instructions(app, settings, presentation, fmt,
         db.close()
 
 
+def test_switching_hands_only_to_product_only_recomputes_format_script_and_review(app, settings):
+    """Regressão: trocar a apresentação depois de criada tem de regravar format_id, perfis, roteiro e revisor."""
+    from studio.agents.visual_review import NO_PEOPLE_RULE, with_presentation_rules
+    from studio.models import SceneSpec
+    creative = {"presentation": "hands_only", "proposal": "details", "environment": "neutro", "tone": "natural"}
+    status, data = post(app, "/api/productions", {**BASE, "creative": creative,
+                                                  "files": [{"name": "f.png", "data": PNG, "role": "front"}]})
+    assert status == 200, data
+    pid = data["pid"]
+    wait_idle(app, pid)
+    db = Database(settings.db_path)
+    try:
+        row = db.production(pid)
+        assert row["format_id"] == "maos_3cenas_15s"
+        assert "only two adult female hands" in json.loads(row["script_json"])["scenes"][0]["image_prompt"]
+    finally:
+        db.close()
+
+    status, _ = post(app, f"/api/productions/{pid}/direction", {"creative": {**creative, "presentation": "product_only"}})
+    assert status == 200
+    wait_idle(app, pid)
+
+    db = Database(settings.db_path)
+    try:
+        row = db.production(pid)
+        assert row["format_id"] == "produto_3cenas_15s"
+        profiles = json.loads(row["profiles_json"])
+        assert profiles["format"]["id"] == "produto_3cenas_15s" and profiles["format"]["data"]["presenter_mode"] == "product_only"
+        script = json.loads(row["script_json"])
+        assert script["format_id"] == "produto_3cenas_15s"
+        for sc in script["scenes"]:
+            assert sc["presenter_mode"] == "product_only"
+            assert "only two adult female hands" not in sc["image_prompt"] and "grip" not in sc["image_prompt"]
+            assert "No people, no hands" in sc["image_prompt"]
+            assert "hands enter from the frame edge" not in sc["animation_prompt"]
+        assert "No people, hands" in script["scenes"][0]["animation_prompt"]
+        assert any(e["type"] == "format_changed" for e in db.events(pid))
+        spec = SceneSpec.model_validate(script["scenes"][0])
+        ruled = with_presentation_rules(spec)
+        assert NO_PEOPLE_RULE in ruled.constraints and any("mão" in c for c in ruled.approval_criteria)
+        # e o cabeçalho/relatório mostram a apresentação e o formato ativos
+        state = json.loads(app.handle("GET", f"/api/state?pid={pid}", HOST, b"").body)["production"]
+        assert state["presentation"] == "product_only" and state["format_id"] == "produto_3cenas_15s"
+        assert state["presentation_label"] == "Produto em destaque"
+    finally:
+        db.close()
+    report = (settings.data_dir / "productions" / pid / "reports" / "review_report.md").read_text(encoding="utf-8")
+    assert "Produto em destaque" in report and "produto_3cenas_15s" in report
+
+
 def test_can_finish_without_typing_using_suggested_idea(app, settings):
     idea = co.ideas(BASE["name"], None, True)["ideas"][0]["choices"]
     status, data = post(app, "/api/productions", {**BASE, "creative": idea,

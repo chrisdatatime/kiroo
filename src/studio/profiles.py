@@ -43,10 +43,11 @@ def load_profile(profiles_dir: Path, kind: str, profile_id: str, version: str | 
     return data
 
 
-def snapshot(profiles_dir: Path, selection: dict[str, str]) -> dict:
-    """selection: {"presenter": "bia", "art_direction": "cozinha_sp_alto_padrao@v1", "format": "..."}"""
+def snapshot(profiles_dir: Path, selection: dict[str, str], only: tuple[str, ...] | None = None) -> dict:
+    """selection: {"presenter": "bia", "art_direction": "cozinha_sp_alto_padrao@v1", "format": "..."}
+    `only` restringe a quais perfis são (re)congelados (ex.: só o formato ao trocar a apresentação)."""
     snap = {}
-    for kind in KINDS:
+    for kind in only or KINDS:
         if kind not in selection:
             raise ProfileError(f"perfil '{kind}' não informado")
         ref = selection[kind]

@@ -27,6 +27,13 @@ def cost_summary(db: Database, pid: str) -> dict:
     }
 
 
+def _presentation_label(prod) -> str:
+    from .creative_options import PRESENTATIONS, presentation_of_format
+    pres = (json.loads(prod["product_json"]).get("creative") or {}).get("presentation")
+    pres = pres if pres in PRESENTATIONS else presentation_of_format(prod["format_id"])
+    return PRESENTATIONS[pres]["label"] if pres else "—"
+
+
 def write_reports(db: Database, pid: str, st: ProductionStorage) -> None:
     prod = db.production(pid)
     simulated = prod["mode"] == "simulated"
@@ -68,7 +75,8 @@ def write_reports(db: Database, pid: str, st: ProductionStorage) -> None:
 
     # --------------------------------------------------------- revisões
     lines = [banner + f"# Relatório de revisão — {pid}", "",
-             f"Estado: **{PRODUCTION_LABELS[ProductionStatus(prod['status'])]}**", "",
+             f"Estado: **{PRODUCTION_LABELS[ProductionStatus(prod['status'])]}**",
+             f"Apresentação: **{_presentation_label(prod)}** · formato: `{prod['format_id']}`", "",
              "Avaliações automáticas são auxiliares e podem errar; a aprovação de qualidade é do operador.", ""]
     for scene in db.scenes(pid):
         lines += [f"## Cena {scene['idx']} — {SCENE_LABELS[SceneStatus(scene['status'])]}", ""]

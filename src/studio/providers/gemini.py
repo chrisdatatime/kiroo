@@ -323,6 +323,8 @@ class GeminiReviewer(_GeminiText):
 
     def review_image(self, spec: SceneSpec, image: Path, references: list[Path]) -> tuple[ReviewResult, dict]:
         criteria = "\n".join(f"- {c}" for c in spec.approval_criteria)
+        if str(spec.presenter_mode) == "product_only":
+            criteria += "\n- Esta cena é SÓ O PRODUTO: qualquer mão, pessoa ou parte do corpo reprova a imagem."
         parts = [
             {"type": "text", "text": (
                 "Revise a IMAGEM GERADA (primeira imagem) comparando com as REFERÊNCIAS oficiais (demais imagens). "

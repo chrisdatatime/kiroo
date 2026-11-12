@@ -57,6 +57,18 @@ def event_agent(e) -> str:
     return "orchestrator"
 
 
+def _presentation(product: dict, format_id: str) -> str | None:
+    """Apresentação ativa: a da ficha (a que manda no formato); sem Direção ainda, a derivada do formato."""
+    from ..creative_options import PRESENTATIONS, presentation_of_format
+    pres = (product.get("creative") or {}).get("presentation")
+    return pres if pres in PRESENTATIONS else presentation_of_format(format_id)
+
+
+def _presentation_label(key: str | None) -> str:
+    from ..creative_options import PRESENTATIONS
+    return PRESENTATIONS[key]["label"] if key in PRESENTATIONS else "—"
+
+
 def _edit_styles(settings) -> dict:
     from ..agents import editing, sound
     return {"styles": [{"id": k, "label": v["label"], "hint": v["hint"], "music": v["music"]}
@@ -340,7 +352,9 @@ def snapshot(settings: Settings, db: Database, pid: str | None, *, since: int = 
         "format_advice": p["format_advice"] if "format_advice" in p.keys() else None,
         "visual_attributes": product.get("visual_attributes", {}),
         "id": pid, "mode": p["mode"], "status": p["status"], "label": PRODUCTION_LABELS[st],
-        "reason": p["status_reason"], "format_id": p["format_id"], "product": {
+        "reason": p["status_reason"], "format_id": p["format_id"],
+        "presentation": _presentation(product, p["format_id"]),
+        "presentation_label": _presentation_label(_presentation(product, p["format_id"])), "product": {
             "name": product.get("name"), "variant": product.get("variant"), "link": product.get("affiliate_link")},
         "costs": {**costs, "committed_usd": round(committed, 4)}, "scenes": scenes, "delivery": delivery,
         "running": running, "error": error,

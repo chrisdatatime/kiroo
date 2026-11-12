@@ -37,8 +37,21 @@ def _merge(model_result: ReviewResult, hard_issues: list[str], notes: list[str],
     return result
 
 
+NO_PEOPLE_RULE = "PROIBIDO: mãos, pessoas ou partes do corpo em cena (apresentação 'só o produto'); reprove se aparecerem"
+
+
+def with_presentation_rules(spec: SceneSpec) -> SceneSpec:
+    """Apresentação 'só o produto' proíbe mãos e pessoas: o revisor recebe isso como restrição e critério."""
+    if str(spec.presenter_mode) != "product_only" or NO_PEOPLE_RULE in spec.constraints:
+        return spec
+    return spec.model_copy(update={"constraints": [*spec.constraints, NO_PEOPLE_RULE],
+                                   "approval_criteria": [*spec.approval_criteria,
+                                                         "Nenhuma mão, pessoa ou parte do corpo aparece"]})
+
+
 def review_image(reviewer: Reviewer, ffmpeg: FFmpeg, spec: SceneSpec, image: Path, references: list[Path],
                  aspect: str) -> tuple[ReviewResult, dict]:
+    spec = with_presentation_rules(spec)
     hard, checks = [], {}
     if ffmpeg.available:
         info = ffmpeg.probe(image)
@@ -54,6 +67,7 @@ def review_image(reviewer: Reviewer, ffmpeg: FFmpeg, spec: SceneSpec, image: Pat
 
 def review_video(reviewer: Reviewer, ffmpeg: FFmpeg, spec: SceneSpec, video: Path, approved_image: Path,
                  frames_dir: Path, aspect: str) -> tuple[ReviewResult, dict]:
+    spec = with_presentation_rules(spec)
     probe = ffmpeg.probe(video)
     audio = ffmpeg.audio_levels(video)
     hard, notes, checks = [], [], {}

@@ -997,7 +997,8 @@ function prodView() {
     <div class="prod-head"><div style="flex:1;min-width:240px"><p class="eyebrow">${p.mode === "simulated" ? "Produção simulada" : "Produção real"} · ${esc(p.product.variant)}</p>
       <h1>${esc(p.product.name)}</h1>
       <div class="row"><span class="status ${["paused", "awaiting_references", "awaiting_final_review"].includes(p.status) ? "needs" : p.status === "completed" ? "okp" : p.status === "failed" ? "badp" : ""}">${esc(p.label)}</span>
-        ${p.running ? '<span class="status okp">agentes trabalhando…</span>' : ""}</div></div>
+        ${p.running ? '<span class="status okp">agentes trabalhando…</span>' : ""}
+        <span class="status" data-kv="active-format" title="Apresentação e formato ativos">${esc(p.presentation_label)} · <code>${esc(p.format_id)}</code></span></div></div>
       <div class="row">${sel}<button class="btn primary" data-run ${p.running ? "disabled" : ""}>▶ Avançar</button>${officeOpen ? "" : '<button class="btn" data-office>Mostrar escritório</button>'}</div></div>
     <ol class="progress" aria-label="Progresso">${progressSteps(p).map(s => `<li class="${s.cls}" ${s.cls === "now" ? 'aria-current="step"' : ""}>${s.l}</li>`).join("")}</ol>
     ${p.mode === "simulated" ? '<p class="notice warn">Produção simulada: imagens e vídeos são exemplos. Não comprovam integração real nem qualidade visual.</p>' : ""}

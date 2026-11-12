@@ -148,6 +148,18 @@ def environment_override(choices: CreativeChoices) -> str | None:
     return None
 
 
+def format_for(presentation: str) -> str:
+    """Formato (perfil) derivado da apresentação. Fonte única: toda mudança de apresentação passa por aqui."""
+    return PRESENTATIONS[presentation]["format"]
+
+
+def presentation_of_format(format_id: str) -> str | None:
+    for key, p in PRESENTATIONS.items():
+        if p["format"] == format_id:
+            return key
+    return None
+
+
 def profile_ids(choices: CreativeChoices) -> dict:
     return {"format": PRESENTATIONS[choices.presentation]["format"],
             "art_direction": ENVIRONMENTS[choices.environment]["art"], "presenter": "bia"}

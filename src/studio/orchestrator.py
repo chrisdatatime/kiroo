@@ -105,6 +105,9 @@ class Orchestrator:
         if autonomy not in AUTONOMY:
             raise OrchestratorError("autonomia inválida")
         mode = self.s.mode
+        if product.creative is not None:   # a apresentação escolhida manda no formato
+            from . import creative_options
+            format_id = creative_options.format_for(product.creative.presentation)
         if budget_usd < 0:
             raise OrchestratorError("orçamento não pode ser negativo")
         if mode == "real":
@@ -156,8 +159,30 @@ class Orchestrator:
         self.db.update_production(pid, product_json=json.dumps(product.model_dump(mode="json"), ensure_ascii=False))
         self._storage(pid).write_json("inputs/product_input.json", product.model_dump(mode="json"))
         self.db.add_event(pid, "product_updated", "ficha substituída pelo operador")
-        if PS(row["status"]) not in {PS.RECEIVED, PS.PAUSED}:
+        changed = self._sync_format(pid, product)
+        if changed and PS(row["status"]) == PS.PAUSED:   # ao retomar, revalida e refaz o roteiro no novo formato
+            self.db.update_production(pid, resume_status=PS.AWAITING_REFERENCES)
+        elif changed or PS(row["status"]) not in {PS.RECEIVED, PS.PAUSED}:
             self.db.set_production_status(pid, PS.AWAITING_REFERENCES, "ficha atualizada: revalidar")
+
+    def _sync_format(self, pid: str, product: ProductInput) -> bool:
+        """Apresentação → formato. O format_id e o perfil congelado SEMPRE seguem a apresentação atual da ficha
+        (criação, substituição da ficha e Direção). Retorna True se o formato mudou."""
+        from . import creative_options
+        if product.creative is None:
+            return False
+        want = creative_options.format_for(product.creative.presentation)
+        row = self.db.production(pid)
+        profiles = self._profiles(pid)
+        if row["format_id"] == want and profiles["format"]["id"] == want:
+            return False
+        old = row["format_id"]
+        profiles.update(snapshot(self.s.profiles_dir, {"format": want}, only=("format",)))
+        self.db.update_production(pid, format_id=want, profiles_json=json.dumps(profiles, ensure_ascii=False))
+        self._storage(pid).write_json("profiles_snapshot.json", profiles)
+        self.db.add_event(pid, "format_changed", f"apresentação {product.creative.presentation}: formato {old} → {want}",
+                          data={"presentation": product.creative.presentation, "from": old, "to": want})
+        return True
 
     # =============================================================== execução
     def run(self, pid: str, *, wait: bool = True, max_wait_s: float | None = None) -> str:
