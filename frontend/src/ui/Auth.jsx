@@ -111,7 +111,7 @@ function GoogleButton({ label, href, need }) {
 }
 
 // Verificação de segurança (Cloudflare Turnstile). O token vale uma vez: resetKey muda após cada tentativa.
-function TurnstileBox({ siteKey, resetKey, onToken, onFail }) {
+export function TurnstileBox({ siteKey, resetKey, onToken, onFail }) {
   const host = React.useRef(null);
   const wid = React.useRef(null);
   const cb = React.useRef({ onToken, onFail });

@@ -20,7 +20,7 @@ const Landing = lazyChunk(() => import('./landing/Landing.jsx'));
 const Preferences = lazyChunk(() => import('./ui/Preferences.jsx'));
 // Conversa com os agentes (Fase 6, mundo Phaser): chunk próprio, carrega no primeiro clique num agente
 const AgentChat = lazyChunk(() => import('./ui/world/AgentChat.jsx'));
-const PREF_WINS = ['prefs', 'account', 'pilot', 'credits', 'about'];
+const PREF_WINS = ['prefs', 'account', 'pilot', 'credits', 'about', 'admin'];
 // Kit de onboarding (Fase 5): chunk próprio, só carrega quando o tour abre (onboarding_done_at nulo ou "Rever tutorial")
 const Onboarding = lazyChunk(() => import('./onboarding/Onboarding.jsx'));
 // se o tour falhar, ele some (e o passo fica salvo); o estúdio continua funcionando

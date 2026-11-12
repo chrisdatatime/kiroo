@@ -1,0 +1,38 @@
+/* Aba Administrador (ui/Admin.jsx). Tinta/papel da marca; aviso financeiro em coral claro com texto em tinta. */
+.adm { font: 400 13.5px/1.45 'Instrument Sans', system-ui, sans-serif; color: #0E0E10; }
+.adm-note, .adm-warn { display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; border: 1px solid #E7E7E4; background: #F2F2EF; font-size: 12.5px; }
+.adm-note svg, .adm-warn svg { flex: none; margin-top: 2px; }
+.adm-warn { background: #FFE4DC; border-color: #F5C4B5; font-weight: 600; }
+.adm-self { background: #0E0E10; border-color: #0E0E10; color: #fff; }
+.adm-alert { color: #7A2218; background: #FFF3EF; border: 1px solid #F5C4B5; border-radius: 8px; padding: 8px 10px; font-size: 13px; }
+.adm-list { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+.adm-input { min-height: 40px; padding: 0 10px; border-radius: 8px; border: 1px solid #C9C9C4; background: #fff; color: #0E0E10; font: inherit; min-width: 0; }
+.adm-input:focus-visible, .adm-acc-head:focus-visible { outline: 2px solid #FF5B2E; outline-offset: 2px; }
+.adm-num { width: 110px; }
+.adm-acc { overflow: hidden; }
+.adm-acc-head { width: 100%; display: flex; flex-direction: column; gap: 4px; padding: 10px 14px; min-height: 44px; border: 0; background: none; text-align: left; cursor: pointer; font: inherit; color: inherit; }
+.adm-acc-head:hover { background: #FAFAF8; }
+.adm-acc-who { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.adm-acc-cols { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: #4A4A50; }
+.adm-tag { display: inline-block; padding: 1px 7px; border-radius: 999px; border: 1px solid #0E0E10; font: 600 10.5px/1.5 'Geist Mono', monospace; letter-spacing: .04em; margin-left: 6px; }
+.adm-acc-body { display: flex; flex-direction: column; gap: 12px; padding: 12px 14px; border-top: 1px solid #E7E7E4; }
+.adm-acc-body h4 { margin: 0 0 6px; font-size: 11.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #4A4A50; }
+.adm-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 6px; }
+.adm-inline { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: #4A4A50; }
+.adm-stmt { list-style: none; margin: 6px 0 0; padding: 0; max-height: 320px; overflow: auto; }
+.adm-stmt li { display: flex; gap: 10px; align-items: baseline; padding: 7px 2px; border-bottom: 1px dotted #E7E7E4; font-size: 12.5px; }
+.adm-self-row { background: #FFF3EF; }
+.adm-diff { display: block; font: 11px/1.4 'Geist Mono', monospace; color: #4A4A50; word-break: break-word; }
+.adm-secret { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-color: #0E0E10; }
+.adm-secret code { font: 600 14px/1.4 'Geist Mono', monospace; word-break: break-all; background: #F2F2EF; padding: 8px 10px; border-radius: 8px; user-select: all; }
+.adm-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+.adm-kpis > div { display: flex; flex-direction: column; gap: 2px; }
+.adm-kpis strong { font-size: 20px; }
+.adm-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.adm-table caption { text-align: left; font-weight: 600; padding: 6px 0; }
+.adm-table th, .adm-table td { text-align: left; padding: 5px 6px; border-bottom: 1px dotted #E7E7E4; }
+.adm-confirm { max-width: 460px; display: flex; flex-direction: column; gap: 10px; }
+.adm-summary { margin: 0; padding-left: 18px; font-size: 13.5px; }
+.adm-form, .adm-reauth { display: flex; flex-direction: column; gap: 10px; }
+.adm-field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.adm-actions { display: flex; gap: 8px; justify-content: flex-end; }

@@ -62,7 +62,8 @@ function WorkspaceMenu({ v, newMission }) {
         {v.account?.admin && (<>
           <DropdownMenuSeparator />
           <DropdownMenuLabel>Administrador</DropdownMenuLabel>
-          <DropdownMenuItem asChild><a href="/painel"><Shield />Painel do administrador</a></DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => v.openPrefs('admin')}><Shield />Administrador</DropdownMenuItem>
+          <DropdownMenuItem asChild><a href="/painel"><Shield />Painel antigo</a></DropdownMenuItem>
         </>)}
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={v.logout}><LogOut />Sair</DropdownMenuItem>
