@@ -162,6 +162,12 @@ def _agent_states(db: Database, pid: str | None, running: bool, error: str | Non
         if msg:
             states[agent]["message"] = msg
 
+    if status == PS.CANCELLED:   # encerrada: ninguém trabalha e nada espera por você (cenas antigas não contam)
+        set_("orchestrator", "done", "Missão cancelada. O que já foi gerado continua no histórico.")
+        return states
+    if status == PS.FAILED:
+        set_("orchestrator", "blocked", reason or "A missão falhou.")
+        return states
     if running:
         set_("orchestrator", "working")
     if error:
@@ -217,7 +223,8 @@ def _agent_states(db: Database, pid: str | None, running: bool, error: str | Non
 def snapshot(settings: Settings, db: Database, pid: str | None, *, since: int = 0, running: bool = False,
              error: str | None = None, workspace_id: str | None = None) -> dict:
     productions = [{"id": r["id"], "mode": r["mode"], "status": r["status"],
-                    "label": PRODUCTION_LABELS[PS(r["status"])],
+                    "label": PRODUCTION_LABELS[PS(r["status"])], "format_id": r["format_id"],
+                    "ended": r["status"] if r["status"] in (PS.CANCELLED, PS.FAILED) else None,
                     "name": json.loads(r["product_json"]).get("name", ""), "created_at": r["created_at"]}
                    for r in db.productions(workspace_id)]
     if pid is None and productions:
@@ -263,9 +270,11 @@ def snapshot(settings: Settings, db: Database, pid: str | None, *, since: int = 
             adj = {"included": included, "used": used, "authorized": auth, "free_left": max(included + auth - used, 0),
                    "extra_cost_cc": dict(extra_cc),
                    "extra_cost_credits": {k: -(-v // 100) for k, v in extra_cc.items()}}
+        stopped = bool(ended) and SS(sc["status"]) in (SS.PENDING, SS.GENERATING_IMAGE, SS.GENERATING_VIDEO)
         scenes.append({
             "idx": sc["idx"], "title": spec["title"], "status": sc["status"],
-            "label": SCENE_LABELS[SS(sc["status"])], "motion": spec["motion"],
+            "label": "Interrompida" if stopped else SCENE_LABELS[SS(sc["status"])], "stopped": stopped,
+            "motion": spec["motion"],
             "target_duration_s": spec["target_duration_s"], "criteria": spec["approval_criteria"],
             "image": _attempt_json(pid, db, sc["current_image_attempt"]),
             "video": _attempt_json(pid, db, sc["current_video_attempt"]),

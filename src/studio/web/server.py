@@ -1155,6 +1155,16 @@ class App:
         return Response(200, ctype, file=f, headers={"Cache-Control": "private, no-store"})
 
     def _action(self, pid: str, action: str, payload: dict, s) -> Response:
+        if action != "cancel":   # missão cancelada/falhou: nenhuma ação de avançar (nem por uma tela antiga aberta)
+            db = Database(s.db_path)
+            try:
+                status = db.production(pid)["status"]
+            finally:
+                db.close()
+            if status in (PS.CANCELLED, PS.FAILED):
+                what = "cancelada" if status == PS.CANCELLED else "encerrada com falha"
+                return _json(409, {"error": f"Esta missão foi {what}: nada mais é gerado nem cobrado nela. "
+                                            "Comece uma nova missão.", "ended": status})
         if action == "run":
             self.orch_for(pid).db.close()  # valida se a produção pode rodar no modo atual
             return _json(200, {"ok": True, "started": self.start_run(pid)})

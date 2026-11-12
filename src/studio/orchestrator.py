@@ -32,7 +32,7 @@ from .providers.base import (FactsRequest, ImageGenerator, ImageRequest, OpState
 # Prefixo fixo do motivo de pausa: a interface reconhece e mostra a saída certa (recarregar a conta do provedor).
 PROVIDER_BILLING_REASON = "provedor de IA sem saldo"
 from .reports import write_reports
-from .states import TERMINAL, ProductionStatus as PS, SceneStatus as SS
+from .states import PRODUCTION_LABELS, TERMINAL, ProductionStatus as PS, SceneStatus as SS
 from .storage import ProductionStorage, sha256_file
 
 log = logging.getLogger("studio")
@@ -709,7 +709,10 @@ class Orchestrator:
 
     def _hold(self, pid: str, estimate: float, what: str, stage: str) -> str | None:
         """Teto do mês + orçamento operacional e, nas produções antigas, reserva de créditos por chamada.
-        Com pré-orçamento o saldo do cliente já foi reservado na criação: nenhuma chamada pede saldo de novo."""
+        Com pré-orçamento o saldo do cliente já foi reservado na criação: nenhuma chamada pede saldo de novo.
+        Produção encerrada (cancelada/falhou/concluída): nenhuma chamada paga nova, nem de texto."""
+        if PS(self.db.production(pid)["status"]) in TERMINAL:
+            raise BudgetExceeded(f"produção encerrada: {what} não foi enviado")
         self._check_budget(pid, estimate, what, stage)
         wid = self._wid(pid)
         if wid is None or estimate <= 0 or self.db.production(pid)["mode"] != "real":
@@ -883,6 +886,8 @@ class Orchestrator:
 
     def _poll(self, pid: str, att_id: str) -> str:
         att = self.db.attempt(att_id)
+        if PS(self.db.production(pid)["status"]) in TERMINAL or att["status"] != "submitted":
+            return "paused"   # cancelada no meio: o resultado não é mais buscado nem registrado (nada é cobrado)
         gen = self._gen(att["kind"])
         try:
             result = gen.poll(att["remote_op_id"])
@@ -909,6 +914,8 @@ class Orchestrator:
             self.db.add_event(pid, "attempt_failed", f"{att['kind']} #{att['attempt_no']}: {result.error}",
                               scene_idx=att["scene_idx"])
             return "progress"
+        if PS(self.db.production(pid)["status"]) in TERMINAL or self.db.attempt(att_id)["status"] != "submitted":
+            return "paused"   # cancelada enquanto o provedor respondia: descartado, sem registrar nem cobrar
         st = self._storage(pid)
         ext = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp", "video/mp4": ".mp4"}.get(
             result.mime_type or "", ".png" if att["kind"] == "image" else ".mp4")
@@ -1219,7 +1226,24 @@ class Orchestrator:
         self.db.resume_production(pid)
 
     def cancel(self, pid: str, reason: str = "cancelada pelo operador") -> None:
+        """Encerra de vez. Nada novo é enviado (as barreiras de _hold/_submit recusam qualquer chamada depois daqui);
+        tentativas ainda não enviadas são descartadas sem custo e as que já estavam no provedor são abandonadas sem
+        cobrança do cliente. Acerta o que terminou e devolve o resto do pré-orçamento."""
+        status = PS(self.db.production(pid)["status"])
+        if status in TERMINAL:
+            raise OrchestratorError(f"produção já encerrada ({PRODUCTION_LABELS[status].lower()})")
         self.db.set_production_status(pid, PS.CANCELLED, reason)
+        dropped = 0
+        for att in self.db.attempts(pid):
+            if att["kind"] in ("image", "video") and att["status"] in ("created", "submitted") and not att["superseded"]:
+                sent = att["status"] == "submitted"
+                self.db.update_attempt(att["id"], status="failed", superseded=1, error_permanent=0, finished_at=now(),
+                                       next_retry_at=None, estimated_cost_usd=att["estimated_cost_usd"] if sent else 0.0,
+                                       error="cancelada pelo operador" + (": resultado do provedor descartado, sem "
+                                                                          "cobrança" if sent else ": não enviado"))
+                dropped += 1
+        if dropped:
+            self.db.add_event(pid, "cancel_inflight", f"{dropped} geração(ões) em andamento interrompida(s) sem cobrança")
         self._settle(pid)   # acerta o que terminou e devolve o resto do pré-orçamento
 
     def set_autonomy(self, pid: str, mode: str) -> None:
