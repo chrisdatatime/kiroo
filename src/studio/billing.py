@@ -48,6 +48,16 @@ def policy() -> CreditPolicy:
     )
 
 
+def credit_price_brl_configured() -> float | None:
+    """Preço do crédito em R$ SÓ quando o operador configurou STUDIO_CREDIT_PRICE_BRL (> 0). Sem a variável não há
+    tabela de preço: a interface não mostra R$ (o padrão interno de 1,00 serve só à conversão de custo)."""
+    try:
+        v = float(os.environ.get("STUDIO_CREDIT_PRICE_BRL") or 0)
+    except ValueError:
+        return None
+    return v if math.isfinite(v) and v > 0 else None
+
+
 DEFAULT_PRODUCTION_CAP_CREDITS = 80
 
 

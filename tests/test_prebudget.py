@@ -21,9 +21,12 @@ from .test_upload_demo_spend import FakeRealImages
 GRANT = 50_000   # 500 créditos
 
 
-def new_prod(orch, product, wid, *, budget_usd=50.0, prebudget=True):
-    return orch.create_production(product, format_id="maos_3cenas_15s", art_direction="cozinha_sp_alto_padrao",
-                                  presenter="bia", budget_usd=budget_usd, workspace_id=wid, prebudget=prebudget)
+def new_prod(orch, product, wid, *, budget_usd=50.0, prebudget=True, confirm=True):
+    pid = orch.create_production(product, format_id="maos_3cenas_15s", art_direction="cozinha_sp_alto_padrao",
+                                 presenter="bia", budget_usd=budget_usd, workspace_id=wid, prebudget=prebudget)
+    if prebudget and confirm:   # "Confirmar e criar vídeo": sem isto nada é gasto (ver tests/test_next_video.py)
+        orch.confirm_cost(pid)
+    return pid
 
 
 def funded(settings, tmp_path, cc=GRANT, image_gen=None):

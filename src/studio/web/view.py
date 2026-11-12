@@ -306,6 +306,10 @@ def snapshot(settings: Settings, db: Database, pid: str | None, *, since: int = 
                     {"spent": pol.credits(committed), "budget": pol.credits(p["budget_usd"]), "prebudget": False,
                      "policy": pol.describe()}),
         "pause_code": p["pause_code"] if "pause_code" in p.keys() else None,
+        # "Seu próximo vídeo": exigido em modo real com pré-orçamento; sem confirmação nada é gasto
+        "confirmation": ({"required": True, "confirmed": p["cost_confirmed_at"] is not None,
+                          "summary": budget_mod.next_video_summary(db, settings, pid)}
+                         if has_pool and p["mode"] == "real" else {"required": False, "confirmed": True, "summary": None}),
         "estimates": billing.stage_estimates(settings, n_scenes=len(sc_rows) or 3),
         "caption": caption_file.read_text(encoding="utf-8") if caption_file.is_file() else None,
         "sheet": {

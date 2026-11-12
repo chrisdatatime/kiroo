@@ -67,7 +67,7 @@ PID_RE = re.compile(r"^prod_[0-9a-f]{10}$")
 MEDIA_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".mp4", ".txt", ".md", ".json"}
 LEGAL_PAGES = {"/termos": "termos.html", "/privacidade": "privacidade.html"}
 ACTIONS = {"run", "approve", "reject", "final", "pause", "resume", "cancel", "budget", "references", "validate",
-           "direction", "go_ahead", "autonomy", "edit", "music", "retry"}
+           "direction", "go_ahead", "autonomy", "edit", "music", "retry", "confirm"}
 GAME_DIST = Path(__file__).resolve().parents[3] / "frontend" / "dist"   # build do jogo (npm run build)
 # Arquivos da raiz do dist (vêm de frontend/public; ver frontend/scripts/brand-assets.mjs). Lista fechada, nada de listar pasta.
 BRAND_FILES = {"favicon.ico": "image/x-icon", "favicon.svg": "image/svg+xml", "apple-touch-icon.png": "image/png",
@@ -1126,6 +1126,16 @@ class App:
         if action == "run":
             self.orch_for(pid).db.close()  # valida se a produção pode rodar no modo atual
             return _json(200, {"ok": True, "started": self.start_run(pid)})
+        if action == "confirm":
+            # "Confirmar e criar vídeo": só autoriza o custo que o cliente viu (não inicia nada). Quem inicia é a ação
+            # seguinte (direction ou run), para a confirmação valer antes de qualquer gasto e sem corrida com a execução.
+            orch = self.orch_for(pid)
+            try:
+                raw = payload.get("total_cc")
+                orch.confirm_cost(pid, int(raw) if isinstance(raw, (int, float)) and not isinstance(raw, bool) else None)
+            finally:
+                orch.db.close()
+            return _json(200, {"ok": True})
         if action in {"validate", "direction", "go_ahead", "autonomy", "edit", "music"}:
             if self.is_running(pid):
                 return _json(409, {"error": "a produção está em execução; aguarde"})

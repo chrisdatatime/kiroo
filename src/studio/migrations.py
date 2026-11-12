@@ -358,10 +358,22 @@ def _m003_prebudget(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS ix_charges_prod ON production_charges(production_id)")
 
 
+def _m004_cost_confirmation(conn: sqlite3.Connection) -> None:
+    """Confirmação do custo pelo cliente ("Confirmar e criar vídeo"): sem ela uma produção com pré-orçamento não gasta.
+    Produções que já passaram da validação antes desta versão contam como confirmadas (não ficam presas)."""
+    for col, decl in (("cost_confirmed_at", "TEXT"), ("cost_confirmed_cc", "INTEGER")):
+        if col not in _columns(conn, "productions"):
+            conn.execute(f"ALTER TABLE productions ADD COLUMN {col} {decl}")
+    conn.execute("UPDATE productions SET cost_confirmed_at=updated_at, cost_confirmed_cc=prebudget_cc WHERE "
+                 "prebudget_cc IS NOT NULL AND cost_confirmed_at IS NULL AND status NOT IN "
+                 "('received','awaiting_references','validated')")
+
+
 MIGRATIONS: list[Migration] = [
     Migration(1, "schema completo", _m001_baseline),
     Migration(2, "convites de uso único e consentimento", _m002_invites_consent),
     Migration(3, "pré-orçamento, código de pausa, ajustes por cena e cobrança por tentativa", _m003_prebudget),
+    Migration(4, "confirmação do custo pelo cliente antes de gastar", _m004_cost_confirmation),
 ]
 LATEST = MIGRATIONS[-1].version
 assert [m.version for m in MIGRATIONS] == list(range(1, LATEST + 1)), "migrações devem ser 1..N em ordem"

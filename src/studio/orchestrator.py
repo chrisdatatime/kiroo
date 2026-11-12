@@ -190,6 +190,8 @@ class Orchestrator:
             if status in {PS.RECEIVED, PS.AWAITING_REFERENCES}:
                 if not self._prepare(pid):
                     break
+            elif status in {PS.VALIDATED, PS.SCRIPTED, PS.PRODUCING} and self.needs_confirmation(pid):
+                break   # "Seu próximo vídeo": sem a confirmação do cliente nada é gasto (nem roteiro por IA)
             elif status == PS.VALIDATED:
                 if not self._script(pid):
                     break
@@ -472,6 +474,26 @@ class Orchestrator:
             self._ledger = Ledger(self.db)
         return self._ledger
 
+    def needs_confirmation(self, pid: str) -> bool:
+        """Produção real com pré-orçamento que o cliente ainda não confirmou ("Confirmar e criar vídeo")."""
+        prod = self.db.production(pid)
+        return (prod["mode"] == "real" and self._has_prebudget(pid) and "cost_confirmed_at" in prod.keys()
+                and prod["cost_confirmed_at"] is None)
+
+    def confirm_cost(self, pid: str, authorized_cc: int | None = None) -> None:
+        """O cliente autoriza o custo mostrado em "Seu próximo vídeo". Se o valor mudou desde que ele viu (`authorized_cc`
+        diferente do reservado), recusa: ele precisa rever. Idempotente."""
+        prod = self.db.production(pid)
+        if not self._has_prebudget(pid) or prod["cost_confirmed_at"] is not None:
+            return
+        if PS(prod["status"]) in TERMINAL:
+            raise OrchestratorError("produção encerrada")
+        if authorized_cc is not None and int(authorized_cc) != prod["prebudget_cc"]:
+            raise OrchestratorError("o custo mudou desde que você viu o resumo; revise e confirme de novo")
+        self.db.update_production(pid, cost_confirmed_at=now(), cost_confirmed_cc=prod["prebudget_cc"])
+        self.db.add_event(pid, "cost_confirmed", f"cliente autorizou {fmt_credits(prod['prebudget_cc'])} créditos",
+                          data={"cc": prod["prebudget_cc"]})
+
     def _has_prebudget(self, pid: str) -> bool:
         prod = self.db.production(pid)
         return "prebudget_cc" in prod.keys() and prod["prebudget_cc"] is not None
@@ -484,6 +506,8 @@ class Orchestrator:
         if wid is None or estimate <= 0 or self.db.production(pid)["mode"] != "real":
             return None  # DEMO e produções sem workspace (CLI antiga) não usam créditos
         if self._has_prebudget(pid):
+            if self.needs_confirmation(pid):   # defesa: nenhum caminho chega aqui sem a confirmação do cliente
+                raise BudgetExceeded("aguardando a confirmação do cliente")
             return None  # o acerto sai do pré-orçamento em settle_pool
         try:
             return self.ledger().hold(wid, pid, estimate, stage)

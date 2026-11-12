@@ -158,6 +158,39 @@ def ops_budget_usd(estimate_usd: float, default_usd: float) -> float:
     return round(max(default_usd, estimate_usd * ops_budget_factor()), 4)
 
 
+# ------------------------------------------------------------------ "Seu próximo vídeo"
+NO_EXTRA_COST = "Nenhum custo adicional será aplicado sem sua autorização."
+
+
+def next_video_summary(db, settings, pid: str) -> dict:
+    """Resumo mostrado ANTES de gastar: produto, formato, cenas, ajustes incluídos, custo total autorizado (créditos;
+    R$ só com STUDIO_CREDIT_PRICE_BRL), saldo e a garantia de que nada além disso é cobrado sem autorização."""
+    from . import billing
+    from .credits import Ledger, fmt
+    p = db.production(pid)
+    profile = json.loads(p["profiles_json"])["format"]["data"]
+    product = json.loads(p["product_json"])
+    led = Ledger(db)
+    wid = p["workspace_id"]
+    total = p["prebudget_cc"] or 0
+    pool = led.pool_state(pid)
+    exempt = led.exempt(wid)
+    # saldo atual = o que o estúdio tem agora, contando o que já está reservado para este vídeo
+    balance = led.balance(wid) + (pool["remaining_cc"] if not pool["closed"] else 0)
+    price = billing.credit_price_brl_configured()
+    brl = round(total / 100 * price, 2) if price else None
+    return {
+        "product": product.get("name") or "", "format": profile.get("aspect_ratio") or "9:16",
+        "scenes": len(profile.get("scenes") or []) or 3,
+        "included_adjustments_per_scene": included_adjustments_per_scene(),
+        "total_cc": total, "total_credits": fmt(total),
+        "total_brl": (f"{brl:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") if brl is not None else None),
+        "balance_cc": balance, "balance": fmt(balance), "exempt": exempt,
+        "balance_after": fmt(led.balance(wid)),   # o que sobra livre depois de reservar este vídeo
+        "no_extra_cost": NO_EXTRA_COST,
+    }
+
+
 # ------------------------------------------------------------------ aviso ao administrador
 def notify_admin(db, pid: str, code: str, detail: str) -> None:
     """Registra o alerta (evento `ops_alert`, que `studio admin ops-alerts` lista), loga e, se houver e-mail
