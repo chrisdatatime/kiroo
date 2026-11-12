@@ -30,6 +30,7 @@ Como ler as colunas:
 | `STUDIO_ESTIMATE_VIDEO_TRIES_PER_SCENE` | não | não | execução | *(não definir; padrão `2`)* | Takes previstos por cena no pré-orçamento. Mínimo 1. |
 | `STUDIO_INCLUDED_ADJUSTMENTS_PER_SCENE` | não | não | execução | *(não definir; padrão `1`)* | Ajustes pedidos pelo cliente por cena já incluídos no pré-orçamento (sem cobrança extra). Além deles, o ajuste exige autorização explícita do cliente com o custo em créditos à vista. `0` = todo ajuste pede autorização. |
 | `STUDIO_OPERATION_COSTS_FILE` | não | não | execução | *(não definir)* | Caminho de uma tabela de custos por operação (formato de `profiles/billing/operation_costs.json`: roteiro, imagem, conferências, vídeo; `usd: null` = tabela de preços do modelo). Base do pré-orçamento e das reservas de conferência/roteiro. |
+| `STUDIO_CREDIT_PRICE_BRL` | não | não | execução | *(não definir)* | Preço de 1 crédito em R$. **Só com ele definido (> 0) o resumo "Seu próximo vídeo" mostra o valor em R$**; sem ele a interface mostra apenas créditos (o padrão interno 1,00 serve só à conversão de custo). |
 | `STUDIO_KILL_SWITCH` | não | não | execução | *(não definir)* | `1` bloqueia qualquer chamada paga em qualquer ambiente. Trava de emergência; com `ALLOW_PAID_CALLS=0` já é redundante. |
 
 > Em staging nunca coloque `GEMINI_API_KEY` nem `ANTHROPIC_API_KEY`. Sem chave o modo simulado funciona

@@ -102,6 +102,11 @@ Liberar o estúdio não basta para gastar. A chamada paga só sai quando **todos
   que a estimativa → a produção não começa (`402`, "Nada foi cobrado"). Durante a produção, cada tentativa concluída
   sai dessa reserva; o cliente nunca paga mais que o pré-orçamento + os ajustes extras que ele autorizou. Ao concluir
   ou cancelar, o que sobrou volta ao saldo.
+- **"Seu próximo vídeo"** (confirmação): antes de qualquer gasto o cliente vê produto, formato (9:16), nº de cenas, ajustes
+  incluídos por cena, custo total em créditos (e R$ só com `STUDIO_CREDIT_PRICE_BRL`), saldo e "Nenhum custo adicional
+  será aplicado sem sua autorização", e confirma em **Confirmar e criar vídeo** (`POST /api/productions/{id}/confirm`,
+  com o `total_cc` visto; valor diferente é recusado). Sem confirmação a produção real espera em *validada* e não gasta
+  (nem roteiro por IA); cancelar antes devolve a reserva. DEMO e produções antigas não têm essa etapa.
 - **Falha técnica** (erro do provedor, tempo esgotado): não sai nada do cliente (no regime antigo, a reserva é estornada).
 - **Ajustes pedidos pelo cliente**: `STUDIO_INCLUDED_ADJUSTMENTS_PER_SCENE` por cena (padrão 1) já estão no pré-orçamento.
   Além disso, a tela mostra o custo do ajuste extra e só segue com autorização explícita (`authorize_extra`), que
