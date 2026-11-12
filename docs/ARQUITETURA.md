@@ -42,7 +42,8 @@ Cena: `pending → generating_image → awaiting_image_approval → image_approv
   anteriores como "ALREADY FIXED, KEEP IT FIXED" e a última como "NEW". Antes, só a última ia no prompt e consertar a
   mão desfazia o conserto do produto. Zera ao aprovar.
 - **Revisor com gravidade**: `critical_issues` (produto) reprova; `aesthetic_issues` (mãos, luz) vira aviso e a cena
-  segue para o operador. Falha técnica (proporção/duração) continua bloqueante.
+  segue para o operador. Falha técnica (proporção/duração) continua bloqueante. Exceção: em "Produto em destaque" mão ou
+  pessoa é sempre crítica (ver abaixo).
 - **Limite padrão de 2 imagens automáticas** por cena (`STUDIO_MAX_IMAGE_ATTEMPTS`). Esgotado, a cena fica
   `blocked` e a revisão mostra as versões lado a lado; `POST /api/productions/<id>/choose {scene, stage, attempt_id}`
   aprova uma com um clique.

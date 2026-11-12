@@ -12,7 +12,7 @@ from pathlib import Path
 from ..ffmpeg import FFmpeg
 from ..models import ReviewDecision, ReviewResult, SceneSpec
 from ..providers.base import Reviewer
-from .fidelity import apply_severity
+from .fidelity import apply_severity, enforce_product_only
 
 VIDEO_SAMPLE_FRAMES = 6
 ASPECT_TOLERANCE = 0.03
@@ -26,11 +26,15 @@ def _aspect_ok(width: int | None, height: int | None, aspect: str = "9:16") -> b
     return abs(width / height - a / b) <= ASPECT_TOLERANCE
 
 
-def _merge(model_result: ReviewResult, hard_issues: list[str], notes: list[str], extra_checks: dict) -> ReviewResult:
-    """Falhas técnicas e de PRODUTO bloqueiam; estética (mãos, luz) vira aviso (agents/fidelity.apply_severity)."""
+def _merge(model_result: ReviewResult, hard_issues: list[str], notes: list[str], extra_checks: dict,
+           spec: SceneSpec | None = None) -> ReviewResult:
+    """Falhas técnicas e de PRODUTO bloqueiam; estética (mãos, luz) vira aviso (agents/fidelity.apply_severity).
+    Exceção: em "Produto em destaque" qualquer mão/pessoa é bloqueante (fidelity.enforce_product_only)."""
     result = model_result.model_copy(deep=True)
     result.checks.update(extra_checks)
     result = apply_severity(result, hard_issues)
+    if spec is not None and str(spec.presenter_mode) == "product_only":
+        result = enforce_product_only(result)
     if hard_issues:
         result.issues = hard_issues + [i for i in result.issues if i not in hard_issues]
     result.issues += notes
@@ -62,7 +66,7 @@ def review_image(reviewer: Reviewer, ffmpeg: FFmpeg, spec: SceneSpec, image: Pat
     else:
         checks["proporcao"] = "desconhecido"
     result, meta = reviewer.review_image(spec, image, references)
-    return _merge(result, hard, [], checks), meta
+    return _merge(result, hard, [], checks, spec), meta
 
 
 def review_video(reviewer: Reviewer, ffmpeg: FFmpeg, spec: SceneSpec, video: Path, approved_image: Path,
@@ -88,4 +92,4 @@ def review_video(reviewer: Reviewer, ffmpeg: FFmpeg, spec: SceneSpec, video: Pat
     frames = ffmpeg.sample_frames(video, VIDEO_SAMPLE_FRAMES, frames_dir)
     result, meta = reviewer.review_video(spec, frames, approved_image, audio, probe)
     meta = {**meta, "probe": probe, "audio": audio, "frames": [(t, str(p)) for t, p in frames]}
-    return _merge(result, hard, notes, checks), meta
+    return _merge(result, hard, notes, checks, spec), meta

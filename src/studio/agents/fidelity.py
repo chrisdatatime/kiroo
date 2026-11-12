@@ -22,6 +22,23 @@ DEFAULT_NEGATIVE_EN = (
     "a mirrored or left/right-swapped product layout; changed, invented or misspelled logos and text; warped or "
     "rescaled proportions; a different color, finish or variant."
 )
+# "Produto em destaque": o negativo padrão fala de dedos e mãos, o que PUXA o modelo para pôr mãos em cena.
+# Aqui a regra é ausência total de pessoas, e o resto (fidelidade do produto) continua igual.
+PRODUCT_ONLY_NEGATIVE_EN = (
+    "AVOID (always): any person or body part in the frame — no hands, fingers, arms, faces, legs, silhouettes, "
+    "reflections or shadows of people; invented buttons, ports, wheels, lights, cables, straps, stickers or parts not "
+    "visible in the official photos; a mirrored or left/right-swapped product layout; changed, invented or misspelled "
+    "logos and text; warped or rescaled proportions; a different color, finish or variant."
+)
+PRODUCT_ONLY_LOCK_EN = (
+    "FINAL RULE (overrides anything above, including corrections and notes): PRODUCT ONLY. No hands, fingers, arms, "
+    "people or any human body part may appear at any moment, not even partially at the frame edge. Movement comes "
+    "only from the camera."
+)
+
+
+def negative_for(presenter_mode: str) -> str:
+    return PRODUCT_ONLY_NEGATIVE_EN if str(presenter_mode) == "product_only" else DEFAULT_NEGATIVE_EN
 
 # ------------------------------------------------------------------ ficha técnica
 FACTS_INSTRUCTIONS = (
@@ -195,9 +212,10 @@ REASONS = {
     "produto_parte_inventada": ("Parte inventada", r"invent|acess[óo]rio|extra part|adicion|a mais|não existe"),
     "mao": ("Mãos", r"m[ãa]o|dedo|finger|hand|unha|polegar|anatom"),
 }
-CRITICAL_REASONS = {k for k in REASONS if k.startswith("produto_")}
+CRITICAL_REASONS = {k for k in REASONS if k.startswith("produto_")} | {"pessoa_proibida"}
 REASON_LABELS = {**{k: v[0] for k, v in REASONS.items()}, "produto_outro": "Produto (outro)", "estetica": "Estética",
-                 "tecnico": "Técnico (proporção/duração)", "outro": "Outro"}
+                 "tecnico": "Técnico (proporção/duração)", "outro": "Outro",
+                 "pessoa_proibida": "Mão/pessoa em 'Produto em destaque'"}
 
 
 def reason_codes(texts: list[str]) -> list[str]:
@@ -244,11 +262,52 @@ def apply_severity(result: ReviewResult, hard_issues: list[str] | None = None) -
     return r
 
 
+# ------------------------------------------------------------------ "Produto em destaque": nenhuma pessoa em cena
+PEOPLE_LABEL = "mão/pessoa em cena: 'Produto em destaque' não permite mãos nem pessoas"
+PEOPLE_FIX_EN = ("Remove every hand, finger, arm and person from the frame; show only the product resting on the "
+                 "surface; the camera alone provides the movement.")
+_PEOPLE_RE = re.compile(r"m[ãa]os?\b|dedos?\b|polegar|unhas?\b|bra[çc]os?\b|pessoas?\b|rosto|corpo\b|pele\b|"
+                        r"\bhands?\b|fingers?|thumbs?|nails?\b|\barms?\b|person|people|\bface\b|\bbody\b|skin\b", re.I)
+_NEGATION_RE = re.compile(r"(\bsem\b|\bnenhum[a]?\b|\bn[ãa]o (h[áa]|aparece|tem)\b|aus[êe]ncia|\bausentes?\b|"
+                          r"\bno\b|\bwithout\b|\bnone\b|\bfree of\b)[^.;]{0,25}$", re.I)
+_PRESENT = {"problema", "presente", "presentes", "sim", "yes", "present", "visivel", "visível"}
+
+
+def people_flagged(result: ReviewResult) -> list[str]:
+    """Indícios de mão/pessoa na revisão: checagem marcada ou texto que cita mão/dedo/pessoa sem negar."""
+    hits = [f"checagem {k}: {v}" for k, v in result.checks.items()
+            if k.lower() in ("pessoas", "maos", "mãos", "people", "hands") and (v or "").strip().lower() in _PRESENT]
+    for text in [*result.critical_issues, *result.warnings, *result.issues]:
+        m = _PEOPLE_RE.search(text or "")
+        if m and not _NEGATION_RE.search((text or "")[:m.start()]) and text != PEOPLE_LABEL:
+            hits.append(text)
+    return list(dict.fromkeys(hits))
+
+
+def enforce_product_only(result: ReviewResult) -> ReviewResult:
+    """Garantia dura de "Produto em destaque": qualquer indício de mão/pessoa REPROVA (não é aviso estético), com a
+    correção certa para a próxima tentativa. A cena não chega ao vídeo com mão (nenhuma tentativa de vídeo é gasta)."""
+    hits = people_flagged(result)
+    if not hits:
+        return result
+    r = result.model_copy(deep=True)
+    r.decision = ReviewDecision.REJECTED
+    r.checks["pessoas"] = "problema"
+    r.critical_issues = [PEOPLE_LABEL, *[c for c in r.critical_issues if c != PEOPLE_LABEL]]
+    r.warnings = [w for w in r.warnings if w not in hits]
+    if PEOPLE_LABEL not in r.issues:
+        r.issues.insert(0, PEOPLE_LABEL)
+    r.suggested_fix = PEOPLE_FIX_EN + (" " + r.suggested_fix if r.suggested_fix else "")
+    r.reason_codes = list(dict.fromkeys(["pessoa_proibida", *[c for c in r.reason_codes if c not in ("mao", "estetica")]]))
+    return r
+
+
 def correction_text(result: ReviewResult) -> str:
     """O que vai para a próxima tentativa: a sugestão do revisor ou os problemas CRÍTICOS (não a estética)."""
     return (result.suggested_fix or "; ".join(result.critical_issues or result.issues)).strip()
 
 
-__all__ = ["DEFAULT_NEGATIVE_EN", "FACTS_INSTRUCTIONS", "FORMAT_ADVICE", "parse_facts", "facts_from_operator",
+__all__ = ["DEFAULT_NEGATIVE_EN", "PRODUCT_ONLY_NEGATIVE_EN", "PRODUCT_ONLY_LOCK_EN", "negative_for",
+           "people_flagged", "enforce_product_only", "PEOPLE_LABEL", "FACTS_INSTRUCTIONS", "FORMAT_ADVICE", "parse_facts", "facts_from_operator",
            "facts_block", "critical_criteria", "is_complex", "looks_complex", "add_correction", "corrections_block",
            "apply_severity", "correction_text", "reason_codes", "REASON_LABELS", "CRITICAL_REASONS"]

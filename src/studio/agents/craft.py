@@ -88,8 +88,9 @@ def image_craft(shot: str, sheet: ProductSheet, mode: PresenterMode | str) -> st
         ("COLOR: neutral white balance (about 5200 K) so the product color matches the official photos exactly; "
          "natural contrast, no heavy filter or color cast."),
         material_notes(sheet),
-        ("9:16 SAFE AREA: keep the product and the hands inside the central area; the top 12% and the bottom 22% of "
-         "the frame will be covered by app interface, so nothing important goes there."),
+        ("9:16 SAFE AREA: keep the product" + ("" if str(mode) == PresenterMode.PRODUCT_ONLY.value else " and the hands")
+         + " inside the central area; the top 12% and the bottom 22% of the frame will be covered by app interface, "
+         "so nothing important goes there."),
         ("REALISM: authentic everyday scene captured by a careful creator — tiny natural imperfections are fine; the "
          "product itself is clean and pristine."),
     ]
@@ -99,21 +100,40 @@ def image_craft(shot: str, sheet: ProductSheet, mode: PresenterMode | str) -> st
     return "\n".join(lines)
 
 
-def motion_craft(shot: str, used_s: float) -> str:
+# "Produto em destaque": o movimento é SÓ da câmera e o produto fica parado (o formato diz isso em cada cena).
+_MOTION_SHOT_PRODUCT_ONLY = {
+    "hero": ("CAMERA: smooth, gimbal-stable move exactly as described above (no zoom pumping). HOOK: the camera starts "
+             "moving within the first 0.3 s, so the first second already has motion. The product itself never moves."),
+    "detail": ("CAMERA: very slow, stable push toward the detail with constant focus; light gliding over the surface "
+               "reveals texture and finish. The product itself never moves."),
+    "lifestyle": ("CAMERA: slow, steady move exactly as described above; the product stays still and remains the "
+                  "sharpest element."),
+    "closing": ("CAMERA: very slow, constant move exactly as described above, no zoom pumping. The product ends centered, "
+                "whole and still."),
+}
+
+
+def motion_craft(shot: str, used_s: float, mode: PresenterMode | str | None = None) -> str:
     used = max(used_s, 1.0)
     hold = 0.5 if used >= 3 else 0.3
     act_end = round(used - hold, 1)
+    product_only = str(mode) == PresenterMode.PRODUCT_ONLY.value
+    shots = _MOTION_SHOT_PRODUCT_ONLY if product_only else _MOTION_SHOT
+    physics = ("PHYSICS: only the camera moves; the product stays perfectly still on the surface; consistent contact "
+               "shadows; no person, hand or body part ever enters the frame." if product_only else
+               "PHYSICS: one main action only; real weight and inertia; hands and product move together without sliding; "
+               "consistent contact shadows.")
     return "\n".join([
         "MOTION CRAFT (video specialist):",
         f"TIMING: only the first {used:g} seconds of this take will be used. Start exactly on the provided frame, "
         f"complete the whole action between 0 s and {act_end:g} s with ease-in and ease-out, then hold the final pose "
         f"steady from {act_end:g} s to {used:g} s so the edit can transition on a stable frame. After that, keep "
         "everything still.",
-        _MOTION_SHOT.get(shot, _MOTION_SHOT["hero"]),
-        ("PHYSICS: one main action only; real weight and inertia; hands and product move together without sliding; "
-         "consistent contact shadows."),
+        shots.get(shot, shots["hero"]),
+        physics,
         ("STABILITY: product geometry, color, labels and proportions stay rigid and identical in every frame; constant "
-         "exposure and white balance; no flicker, morphing, warping, melting edges, extra fingers or objects appearing."),
+         "exposure and white balance; no flicker, morphing, warping, melting edges, "
+         + ("people, hands or new objects appearing." if product_only else "extra fingers or objects appearing.")),
     ])
 
 

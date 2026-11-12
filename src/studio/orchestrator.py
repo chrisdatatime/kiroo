@@ -569,6 +569,10 @@ class Orchestrator:
         st = self._storage(pid)
         corrections = fidelity.corrections_block(self._corrections(row, kind))
         facts = fidelity.facts_block(self._facts(pid))
+        # modo do formato ATUAL (a barreira _generation_allowed já garantiu que roteiro e cenas o seguem)
+        mode = self._profiles(pid)["format"]["data"]["presenter_mode"]
+        negative = fidelity.negative_for(mode)
+        lock = ("\n\n" + fidelity.PRODUCT_ONLY_LOCK_EN) if mode == "product_only" else ""
         if kind == "image":
             refs = self._resolve_refs(pid, spec, self._sheet(pid))
             prompt = spec.image_prompt
@@ -582,10 +586,11 @@ class Orchestrator:
                            "official photos only confirm details.")
             if facts:
                 prompt += "\n\n" + facts
-            prompt += "\n\n" + fidelity.DEFAULT_NEGATIVE_EN
+            prompt += "\n\n" + negative
             prompt += prompt_block(self._training(pid), "iris")
             if corrections:
                 prompt += "\n\n" + corrections
+            prompt += lock   # por último: nada depois (treino, correção) pode reintroduzir mãos
             req = ImageRequest(prompt=prompt, reference_images=[st.path(r["path"]) for r in refs],
                                aspect_ratio=script.aspect_ratio, image_size=self.s.image_size)
         else:
@@ -594,10 +599,11 @@ class Orchestrator:
             prompt = spec.animation_prompt
             if facts:
                 prompt += "\n\n" + facts
-            prompt += "\n\n" + fidelity.DEFAULT_NEGATIVE_EN
+            prompt += "\n\n" + negative
             prompt += prompt_block(self._training(pid), "lia")
             if corrections:
                 prompt += "\n\n" + corrections
+            prompt += lock
             req = VideoRequest(prompt=prompt, start_image=st.path(img["output_path"]), aspect_ratio=script.aspect_ratio,
                                resolution=self.s.video_resolution, target_duration_s=spec.target_duration_s)
         return req, refs

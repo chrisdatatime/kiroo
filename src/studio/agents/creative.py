@@ -67,7 +67,7 @@ def build_draft(sheet: ProductSheet, profiles: dict) -> Script:
         # manual dos especialistas (agents/craft.py) entre o template e a direção do operador, que vem por último
         shot = craft.shot_of(bp, bp["index"], len(fmt["scenes"]))
         img_craft = "\n\n" + craft.image_craft(shot, sheet, mode)
-        mot_craft = "\n\n" + craft.motion_craft(shot, bp["target_duration_s"])
+        mot_craft = "\n\n" + craft.motion_craft(shot, bp["target_duration_s"], mode)
         scenes.append(SceneSpec(
             index=bp["index"], title=bp["title"], objective=bp["objective"], framing=bp["framing"],
             presenter_mode=mode, references=bp["references"],
@@ -82,6 +82,11 @@ def build_draft(sheet: ProductSheet, profiles: dict) -> Script:
 
 
 VALID_REF_PREFIXES = ("product:", "presenter:", "scene:")
+# Instrução POSITIVA de mão/pessoa (não a negação "no hands"): bloco HANDS do perfil, mão segurando/ajustando etc.
+_HAND_ACTION = re.compile(r"\bHANDS:|\bPRESENTER:|\b(right|left|her|his|a|the|two|one)\s+hands?\b(?!\s*,)|"
+                          r"\bhands?\s+(hold|holds|holding|grip|grips|gripping|adjust|adjusts|lift|lifts|enter|enters|"
+                          r"reach|reaches|touch|touches|pick|picks|place|places|rotate|rotates|turn|turns)\b|"
+                          r"\bfingers?\s+(press|presses|tap|taps|touch|touches)\b", re.I)
 _PLACEHOLDER = re.compile(r"\$\{?(product_block|environment|lighting|camera|negative|hands)")
 
 
@@ -112,6 +117,20 @@ def validate_script(script: Script, profiles: dict, sheet: ProductSheet) -> list
                 errors.append(f"{tag}: depende da cena {dep}, que não é anterior")
         if not any(r.startswith("product:") for r in s.references):
             errors.append(f"{tag}: sem referência oficial do produto")
+    if fmt.get("presenter_mode") == PresenterMode.PRODUCT_ONLY.value:
+        # "Produto em destaque": o bloqueio de pessoas tem de sobreviver ao planejador e nenhuma instrução de mão entra
+        no_people = (profiles.get("presenter", {}).get("data", {}).get("modes", {}).get("product_only", {})
+                     .get("prompt_block_en") or "No people, no hands")
+        for s in script.scenes:
+            tag = f"cena {s.index}"
+            if str(s.presenter_mode) != PresenterMode.PRODUCT_ONLY.value:
+                errors.append(f"{tag}: modo {s.presenter_mode} num formato só de produto")
+            if no_people not in s.image_prompt:
+                errors.append(f"{tag}: prompt de imagem perdeu o bloqueio de pessoas/mãos")
+            if "no people" not in s.animation_prompt.lower():
+                errors.append(f"{tag}: prompt de animação perdeu o bloqueio de pessoas/mãos")
+            if _HAND_ACTION.search(s.image_prompt) or _HAND_ACTION.search(s.animation_prompt):
+                errors.append(f"{tag}: instrução de mão/pessoa num formato só de produto")
     for ov in script.overlays:
         bad = find_unsupported_claims(ov.text, sheet)
         if bad:

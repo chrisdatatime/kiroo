@@ -268,13 +268,20 @@ class GeminiPlanner(_GeminiText):
         return self._ask_json(parts)
 
     def refine_script(self, ctx: PlanningContext) -> tuple[Script, dict]:
+        product_only = str(ctx.presenter_mode) == "product_only"
+        subject = ("sujeito, cenário, ótica, luz, materiais — SEM mãos nem pessoas" if product_only
+                   else "sujeito, ação das mãos, cenário, ótica, luz, materiais")
+        people = ("FORMATO SÓ O PRODUTO: nenhuma mão, dedo, braço ou pessoa pode aparecer nem ser sugerida (nada de "
+                  "'segurar', 'pegar', 'ajustar a pegada'); o movimento vem só da câmera; preserve LITERALMENTE a frase "
+                  "'No people, no hands, no body parts in frame. Product only.' no prompt de imagem e 'No people' no de "
+                  "animação. " if product_only else "")
         instructions = (
             "Você é diretor criativo de vídeos de produto para Shopee Vídeo. Ajuste o rascunho de roteiro ao "
             "produto, mantendo a esteira: foto aprovada por cena → animação dessa foto. Regras: não invente "
             "capacidade, material, vedação, conservação térmica, resistência, certificações, benefícios, testes "
             "ou depoimentos; descreva apenas atributos visuais presentes na ficha. Mantenha os prompts de geração "
-            "em inglês, sem texto na imagem, sem fala. Escreva como especialistas: o prompt de imagem é a descrição "
-            "narrativa e concreta de uma fotografia (sujeito, ação das mãos, cenário, ótica, luz, materiais), não uma "
+            "em inglês, sem texto na imagem, sem fala. " + people + "Escreva como especialistas: o prompt de imagem é a "
+            f"descrição narrativa e concreta de uma fotografia ({subject}), não uma "
             "lista de palavras-chave; o prompt de animação tem UMA ação principal, câmera explícita e linha do tempo em "
             "segundos dentro da duração útil. Preserve INTEGRALMENTE os blocos 'PHOTOGRAPHY CRAFT', 'MOTION CRAFT' e "
             "'OPERATOR CREATIVE DIRECTION'/'CREATIVE DIRECTION' quando existirem (pode só adaptar o restante ao "
@@ -310,6 +317,18 @@ _REVIEW_FORMAT = (
     '"suggested_fix" corrige apenas os problemas críticos, em inglês, de forma objetiva. '
     'Use "inconclusive" se não for possível avaliar com segurança.'
 )
+# "Produto em destaque": a presença de qualquer pessoa é o erro mais grave da cena (a regra acima, de mão como
+# estética, NÃO vale aqui). O código também reprova sozinho se o revisor citar mão/pessoa (fidelity.enforce_product_only).
+_PRODUCT_ONLY_REVIEW = (
+    'ESTA CENA É SÓ O PRODUTO ("Produto em destaque"): procure com atenção mãos, dedos, braços, pessoas ou qualquer '
+    'parte do corpo, inclusive parcial na borda, reflexo ou sombra. Se houver, é CRÍTICO: coloque em "critical_issues" '
+    '(nunca em "aesthetic_issues"), use decision "rejected" e checks.pessoas = "problema". Sem ninguém em cena, '
+    'checks.pessoas = "ok". '
+)
+
+
+def _people_rule(spec: SceneSpec) -> str:
+    return _PRODUCT_ONLY_REVIEW if str(spec.presenter_mode) == "product_only" else ""
 
 
 class GeminiReviewer(_GeminiText):
@@ -332,7 +351,7 @@ class GeminiReviewer(_GeminiText):
                 "tampa, alça, acabamento, acessórios, inscrições), mãos (anatomia, número de dedos, manicure), cenário "
                 "e enquadramento 9:16, ausência de texto/logos/interface inventados. Itens marcados CRÍTICO são "
                 f"bloqueantes. Critérios da cena:\n{criteria}\nRestrições: {spec.constraints}\n"
-                + _REVIEW_FORMAT)},
+                + _people_rule(spec) + _REVIEW_FORMAT)},
             _image_part(image),
             *[_image_part(r) for r in references],
         ]
@@ -348,7 +367,7 @@ class GeminiReviewer(_GeminiText):
                 "ordem. Verifique deformações do produto ou mãos, dedos extras, objetos novos, mudanças de cor/forma "
                 f"entre quadros e se o movimento corresponde a: {spec.motion}. Restrições: {spec.constraints}. "
                 "Critérios:\n" + "\n".join(f"- {c}" for c in spec.approval_criteria) + "\n"
-                + _REVIEW_FORMAT)},
+                + _people_rule(spec) + _REVIEW_FORMAT)},
             _image_part(approved_image),
             *[_image_part(p) for _, p in frames],
         ]
