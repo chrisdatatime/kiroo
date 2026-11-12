@@ -402,12 +402,21 @@ def _m005_admin_audit(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE sessions ADD COLUMN reauth_at TEXT")
 
 
+def _m006_chat_provider(conn: sqlite3.Connection) -> None:
+    """Provedor de IA de cada chamada da conversa (gemini | anthropic), para métricas e extrato.
+    Chamadas antigas ao modelo (source='llm') eram todas da Anthropic."""
+    if "provider" not in _columns(conn, "chat_log"):
+        conn.execute("ALTER TABLE chat_log ADD COLUMN provider TEXT NOT NULL DEFAULT ''")
+        conn.execute("UPDATE chat_log SET provider='anthropic' WHERE source='llm'")
+
+
 MIGRATIONS: list[Migration] = [
     Migration(1, "schema completo", _m001_baseline),
     Migration(2, "convites de uso único e consentimento", _m002_invites_consent),
     Migration(3, "pré-orçamento, código de pausa, ajustes por cena e cobrança por tentativa", _m003_prebudget),
     Migration(4, "confirmação do custo pelo cliente antes de gastar", _m004_cost_confirmation),
     Migration(5, "auditoria append-only do administrador e reautenticação recente", _m005_admin_audit),
+    Migration(6, "provedor de IA em chat_log", _m006_chat_provider),
 ]
 LATEST = MIGRATIONS[-1].version
 assert [m.version for m in MIGRATIONS] == list(range(1, LATEST + 1)), "migrações devem ser 1..N em ordem"

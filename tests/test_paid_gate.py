@@ -210,9 +210,9 @@ def test_staging_default_keeps_chat_without_ai(settings, monkeypatch):
 def test_agent_and_platform_caps_block_chat(settings, monkeypatch):
     db = Database(settings.db_path)
     model = Model()
-    monkeypatch.setenv("STUDIO_AGENT_DAILY_CAP_USD", "0.001")
+    monkeypatch.setenv("STUDIO_AGENT_DAILY_CAP_USD", "0.01")
     db.conn.execute("INSERT INTO chat_log(user_id, workspace_id, agent, at, source, cost_usd) VALUES "
-                    "('u0', 'ws_1', 'theo', ?, 'llm', 0.001)", (time.time(),))
+                    "('u0', 'ws_1', 'theo', ?, 'llm', 0.01)", (time.time(),))
     assert _chat(db, model, agent="theo")["reply"] == FALLBACK["paused"] and not model.calls
     assert _chat(db, model, agent="iris")["source"] == "llm"          # outro agente tem o próprio teto
     monkeypatch.setenv("STUDIO_MONTHLY_CAP_USD", "0.0005")              # plataforma já passou do teto

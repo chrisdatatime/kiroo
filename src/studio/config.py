@@ -87,6 +87,9 @@ class Settings:
         return secret_values(extra=[self.gemini_api_key])
 
 
+# Modelo de texto padrão do projeto (Direção/Conferência e conversa com os agentes).
+DEFAULT_TEXT_MODEL = "gemini-3.8-flash"
+
 # Variáveis cujo VALOR é segredo (o nome pode aparecer; o valor nunca). MP_* entra inteiro (Mercado Pago).
 SECRET_VARS = ("GEMINI_API_KEY", "GOOGLE_API_KEY", "ANTHROPIC_API_KEY", "STUDIO_GOOGLE_CLIENT_SECRET", "STUDIO_TURNSTILE_SECRET_KEY",
                "STUDIO_SMTP_PASSWORD", "BACKUP_R2_ACCESS_KEY_ID", "BACKUP_R2_SECRET_ACCESS_KEY",
@@ -123,7 +126,7 @@ def load_settings(env_file: Path | None = None, **overrides) -> Settings:
         profiles_dir=_path(env("STUDIO_PROFILES_DIR"), PROJECT_ROOT / "profiles"),
         mode=(env("STUDIO_MODE") or "simulated").strip().lower(),
         allow_paid_calls=_bool(env("STUDIO_ALLOW_PAID_CALLS")),
-        planner_model=env("STUDIO_PLANNER_MODEL") or "gemini-3.8-flash",
+        planner_model=env("STUDIO_PLANNER_MODEL") or DEFAULT_TEXT_MODEL,
         reviewer_model=env("STUDIO_REVIEWER_MODEL") or "gemini-3.8-flash",
         image_model=env("STUDIO_IMAGE_MODEL") or "gemini-nano-banana-2.1",
         image_size=env("STUDIO_IMAGE_SIZE") or "2K",

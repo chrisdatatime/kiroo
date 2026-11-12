@@ -114,14 +114,16 @@ def internal_metrics(db: Database, days: int = 30) -> dict:
     extra: dict[str, dict] = {}
     if _has(db, "chat_log"):
         cw, ca = ("WHERE source='llm' AND at >= ?", (datetime.fromisoformat(since).timestamp(),)) if since else ("WHERE source='llm'", ())
-        r = db.conn.execute(f"SELECT COUNT(*) n, COALESCE(SUM(cost_usd),0) usd FROM chat_log {cw}", ca).fetchone()
-        extra["chat"] = {"provider": "anthropic", "calls": r["n"], "usd": _r(r["usd"])}
+        rows = db.conn.execute(f"SELECT COALESCE(NULLIF(provider,''),'anthropic') p, COUNT(*) n, COALESCE(SUM(cost_usd),0) usd "
+                               f"FROM chat_log {cw} GROUP BY p ORDER BY p", ca).fetchall()
+        for r in rows or [{"p": "gemini", "n": 0, "usd": 0}]:
+            extra["chat" if len(rows) <= 1 else f"chat:{r['p']}"] = {"provider": r["p"], "calls": r["n"], "usd": _r(r["usd"])}
     if _has(db, "training_tests"):
         tw = "WHERE executed=1 AND simulated=0" + (" AND created_at >= ?" if since else "")
         r = db.conn.execute(f"SELECT COUNT(*) n, COALESCE(SUM(cost_usd),0) usd FROM training_tests {tw}",
                             (since,) if since else ()).fetchone()
         extra["training_test"] = {"provider": "não registrado", "calls": r["n"], "usd": _r(r["usd"])}
-    out["outside_productions"] = [{"key": k, "label": OPERATIONS[k], **v, "avg_usd": _avg(v["usd"], v["calls"])}
+    out["outside_productions"] = [{"key": k, "label": OPERATIONS.get(k.split(":")[0], k) if k.startswith("chat") else OPERATIONS[k], **v, "avg_usd": _avg(v["usd"], v["calls"])}
                                   for k, v in extra.items()]
     return out
 

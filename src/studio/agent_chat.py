@@ -2,8 +2,9 @@
 
 Tudo é decidido aqui, no servidor (a chave nunca vai para o navegador):
 - Atalho sem LLM: perguntas comuns (papel, estado da missão, o que aprovar, oi) viram resposta por modelo com dados reais.
-- Só o que sobra vai ao modelo pequeno (claude-haiku-5-5), com max_tokens baixo, esforço baixo, system enxuto por
-  agente (com cache_control) e contexto mínimo; só as últimas 4 trocas entram no pedido.
+- Só o que sobra vai ao modelo pequeno (padrão: Gemini Flash de texto, o mesmo de Direção/Conferência; opção: Claude
+  Haiku via STUDIO_CHAT_PROVIDER=anthropic), com max_tokens baixo, system enxuto por agente e contexto mínimo; só as
+  últimas 4 trocas entram no pedido.
 - Entrada limitada (tamanho, vazio, repetida), 1 pedido em voo por usuário, cooldown, cotas por hora/dia por usuário e
   cota global diária de tokens. STUDIO_CHAT_ENABLED=0 é o kill switch: desliga o modelo e fica só o modo "sem IA".
 - Falha segura: erro, timeout ou cota estourada => resposta pronta em personagem; nunca re-tenta em loop.
@@ -13,18 +14,32 @@ Tudo é decidido aqui, no servidor (a chave nunca vai para o navegador):
 
 from __future__ import annotations
 
+import json
+import logging
 import os
 import re
 import threading
 import time
 import unicodedata
+import urllib.error
+import urllib.parse
+import urllib.request
 from collections import deque
 from dataclasses import dataclass
 from types import SimpleNamespace
 from datetime import datetime
 from typing import Callable
 
-from . import migrations
+from . import migrations, pricing
+from .config import DEFAULT_TEXT_MODEL
+
+log = logging.getLogger("studio.chat")
+
+PROVIDERS = ("gemini", "anthropic")
+ANTHROPIC_DEFAULT_MODEL = "claude-haiku-5-5"
+# Preço padrão da Anthropic (US$ por 1M tokens, Claude Haiku 5.5, tabela de 2026-10). O do Gemini vem de pricing.LLM_PRICES.
+ANTHROPIC_PRICE_IN, ANTHROPIC_PRICE_OUT = 0.10, 0.50
+GEMINI_DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com"
 
 AGENTS = {
     "nina": ("Nina", "Preparação",
@@ -77,10 +92,16 @@ def _env(name: str, default: str) -> str:
     return v if v not in (None, "") else default
 
 
+def _opt_float(name: str) -> float | None:
+    v = os.environ.get(name)
+    return float(v) if v not in (None, "") else None
+
+
 @dataclass(frozen=True)
 class ChatConfig:
     enabled: bool = True                 # kill switch (STUDIO_CHAT_ENABLED=0 desliga o modelo; atalhos continuam)
-    model: str = "claude-haiku-5-5"
+    provider: str = "gemini"             # gemini | anthropic (STUDIO_CHAT_PROVIDER)
+    model: str = ""                      # vazio = padrão do provedor (Gemini: STUDIO_PLANNER_MODEL ou o modelo de texto do projeto)
     max_tokens: int = 150
     max_chars: int = 300
     per_day: int = 20                    # mensagens por usuário por dia (atalhos contam também)
@@ -89,14 +110,42 @@ class ChatConfig:
     global_daily_tokens: int = 200_000   # entrada + saída, todos os usuários; passou disso a IA fica "sem IA" até amanhã
     timeout_s: float = 10.0
     history_turns: int = 4
-    price_in_per_mtok: float = 0.10      # US$ por 1M tokens (Claude Haiku 5.5, tabela de 2026-10)
-    price_out_per_mtok: float = 0.50
+    price_in_per_mtok: float | None = None   # US$ por 1M tokens; None = tabela do provedor/modelo
+    price_out_per_mtok: float | None = None
+    gemini_base_url: str = GEMINI_DEFAULT_BASE_URL
+    gemini_thinking_level: str = ""      # opcional (ex.: minimal); vazio = não envia
+
+    @property
+    def resolved_provider(self) -> str:
+        p = (self.provider or "gemini").strip().lower()
+        return p if p in PROVIDERS else "gemini"
+
+    @property
+    def resolved_model(self) -> str:
+        if self.model:
+            return self.model
+        if self.resolved_provider == "anthropic":
+            return ANTHROPIC_DEFAULT_MODEL
+        return os.environ.get("STUDIO_PLANNER_MODEL") or DEFAULT_TEXT_MODEL
+
+    def prices(self) -> tuple[float, float] | None:
+        """(entrada, saída) em US$ por 1M tokens, ou None se não houver preço conhecido (falha fechada: sem chamada paga)."""
+        if self.price_in_per_mtok is not None and self.price_out_per_mtok is not None:
+            return float(self.price_in_per_mtok), float(self.price_out_per_mtok)
+        if self.resolved_provider == "anthropic":
+            return (float(self.price_in_per_mtok if self.price_in_per_mtok is not None else ANTHROPIC_PRICE_IN),
+                    float(self.price_out_per_mtok if self.price_out_per_mtok is not None else ANTHROPIC_PRICE_OUT))
+        entry = pricing.LLM_PRICES.get(self.resolved_model)
+        return (entry[0], entry[1]) if entry else None
 
     @classmethod
     def from_env(cls) -> "ChatConfig":
         return cls(
             enabled=_env("STUDIO_CHAT_ENABLED", "1").strip().lower() in {"1", "true", "yes", "sim", "on"},
+            provider=_env("STUDIO_CHAT_PROVIDER", cls.provider).strip().lower(),
             model=_env("STUDIO_CHAT_MODEL", cls.model),
+            gemini_base_url=_env("STUDIO_CHAT_GEMINI_BASE_URL", cls.gemini_base_url),
+            gemini_thinking_level=_env("STUDIO_CHAT_GEMINI_THINKING_LEVEL", cls.gemini_thinking_level),
             max_tokens=int(_env("STUDIO_CHAT_MAX_TOKENS", str(cls.max_tokens))),
             max_chars=int(_env("STUDIO_CHAT_MAX_CHARS", str(cls.max_chars))),
             per_day=int(_env("STUDIO_CHAT_PER_DAY", str(cls.per_day))),
@@ -104,8 +153,8 @@ class ChatConfig:
             cooldown_s=float(_env("STUDIO_CHAT_COOLDOWN_S", str(cls.cooldown_s))),
             global_daily_tokens=int(_env("STUDIO_CHAT_GLOBAL_DAILY_TOKENS", str(cls.global_daily_tokens))),
             timeout_s=float(_env("STUDIO_CHAT_TIMEOUT_S", str(cls.timeout_s))),
-            price_in_per_mtok=float(_env("STUDIO_CHAT_PRICE_IN", str(cls.price_in_per_mtok))),
-            price_out_per_mtok=float(_env("STUDIO_CHAT_PRICE_OUT", str(cls.price_out_per_mtok))),
+            price_in_per_mtok=_opt_float("STUDIO_CHAT_PRICE_IN"),
+            price_out_per_mtok=_opt_float("STUDIO_CHAT_PRICE_OUT"),
         )
 
 
@@ -220,6 +269,83 @@ def anthropic_caller(request: dict, timeout: float) -> dict:
             "output_tokens": int(u.output_tokens or 0), "cache_read_tokens": int(getattr(u, "cache_read_input_tokens", 0) or 0)}
 
 
+class ChatProviderError(Exception):
+    """Falha do provedor de chat. `kind` é um rótulo curto e seguro (auth, rate, timeout, server...): nunca carrega
+    corpo de resposta, URL nem segredo."""
+
+    def __init__(self, kind: str):
+        super().__init__(f"chat provider: {kind}")
+        self.kind = kind
+
+
+def _gemini_base_ok(url: str) -> bool:
+    u = urllib.parse.urlsplit(url)
+    return bool(u.hostname) and (u.scheme == "https" or (u.scheme == "http" and u.hostname in {"127.0.0.1", "localhost", "::1"}))
+
+
+_BLOCKED_FINISH = {"SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST", "SPII", "RECITATION", "IMAGE_SAFETY"}
+
+
+def gemini_payload(request: dict, thinking_level: str = "") -> dict:
+    """Pedido neutro (build_request) -> corpo do generateContent do Gemini."""
+    contents = [{"role": "model" if m["role"] == "assistant" else "user", "parts": [{"text": m["content"]}]}
+                for m in request["messages"]]
+    gen: dict = {"maxOutputTokens": int(request["max_tokens"])}
+    if thinking_level:
+        gen["thinkingConfig"] = {"thinkingLevel": thinking_level}
+    return {"systemInstruction": {"parts": [{"text": "".join(b["text"] for b in request["system"])}]},
+            "contents": contents, "generationConfig": gen}
+
+
+def gemini_parse(data: dict) -> dict:
+    """Resposta do generateContent -> {"text", tokens}. Bloqueio de segurança ou resposta vazia => text vazio (tokens contam)."""
+    um = data.get("usageMetadata") or {}
+    cached = int(um.get("cachedContentTokenCount") or 0)
+    prompt = int(um.get("promptTokenCount") or 0)
+    out = int(um.get("candidatesTokenCount") or 0) + int(um.get("thoughtsTokenCount") or 0)   # raciocínio é cobrado como saída
+    text = ""
+    if not (data.get("promptFeedback") or {}).get("blockReason"):
+        cands = data.get("candidates") or []
+        if cands and str(cands[0].get("finishReason", "")).upper() not in _BLOCKED_FINISH:
+            text = "".join(p.get("text", "") for p in ((cands[0].get("content") or {}).get("parts") or [])
+                           if isinstance(p, dict) and not p.get("thought"))
+    return {"text": text, "input_tokens": max(0, prompt - cached), "output_tokens": out, "cache_read_tokens": cached}
+
+
+def gemini_caller(request: dict, timeout: float, *, cfg: ChatConfig | None = None) -> dict:
+    """Chamada real ao Gemini por HTTPS (urllib, sem SDK). A chave vai só no cabeçalho, nunca na URL, e não é registrada.
+    Sem retries: falhou, cai na resposta pronta."""
+    from . import paid_gate
+    paid_gate.check()   # trava final: kill switch / ambiente, antes de abrir conexão
+    cfg = cfg or ChatConfig.from_env()
+    key = os.environ.get("GEMINI_API_KEY") or ""
+    if not key:
+        raise ChatProviderError("no_key")
+    base = cfg.gemini_base_url.rstrip("/")
+    if not _gemini_base_ok(base):
+        raise ChatProviderError("bad_url")
+    url = f"{base}/v1beta/models/{urllib.parse.quote(request['model'], safe='.-_')}:generateContent"
+    body = json.dumps(gemini_payload(request, cfg.gemini_thinking_level)).encode("utf-8")
+    req = urllib.request.Request(url, data=body, method="POST",
+                                 headers={"Content-Type": "application/json", "x-goog-api-key": key})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:   # noqa: S310 — https (ou loopback em teste), validado acima
+            raw = resp.read(1_000_000)
+    except urllib.error.HTTPError as exc:
+        code = exc.code
+        kind = "auth" if code in (401, 403) else "rate" if code == 429 else "client" if 400 <= code < 500 else "server"
+        raise ChatProviderError(kind) from None
+    except TimeoutError:
+        raise ChatProviderError("timeout") from None
+    except (urllib.error.URLError, OSError) as exc:
+        raise ChatProviderError("timeout" if "timed out" in str(exc).lower() else "network") from None
+    try:
+        data = json.loads(raw.decode("utf-8", "replace"))
+    except ValueError:
+        raise ChatProviderError("bad_response") from None
+    return gemini_parse(data if isinstance(data, dict) else {})
+
+
 def fake_caller(request: dict, timeout: float) -> dict:
     """Modelo de mentira para desenvolvimento (STUDIO_CHAT_FAKE=1): não chama a rede nem gasta tokens."""
     time.sleep(0.8)
@@ -228,9 +354,14 @@ def fake_caller(request: dict, timeout: float) -> dict:
             "input_tokens": 0, "output_tokens": 0, "cache_read_tokens": 0}
 
 
-def default_caller() -> Caller | None:
+def default_caller(cfg: ChatConfig | None = None) -> Caller | None:
     if os.environ.get("STUDIO_CHAT_FAKE") == "1":
         return fake_caller
+    cfg = cfg or ChatConfig.from_env()
+    if cfg.resolved_provider == "gemini":
+        if not os.environ.get("GEMINI_API_KEY"):
+            return None
+        return lambda request, timeout: gemini_caller(request, timeout, cfg=cfg)
     if not os.environ.get("ANTHROPIC_API_KEY"):
         return None
     try:
@@ -255,8 +386,11 @@ def build_request(cfg: ChatConfig, agent: str, ctx: dict, history: list[tuple[st
     context = (f"<contexto>missão: {mission}; etapa: {STAGE_LABELS.get(ctx.get('stage') or '', 'sem missão')}; "
                f"seu estado: {ctx.get('status', 'idle')}</contexto>")
     messages.append({"role": "user", "content": f"{context}\n<mensagem_do_usuario>{_escape(text)}</mensagem_do_usuario>"})
+    if cfg.resolved_provider == "gemini":
+        return {"model": cfg.resolved_model, "max_tokens": cfg.max_tokens,
+                "system": [{"type": "text", "text": system}], "messages": messages}
     return {
-        "model": cfg.model, "max_tokens": cfg.max_tokens,
+        "model": cfg.resolved_model, "max_tokens": cfg.max_tokens,
         # Haiku 5.5 não aceita temperature fora do padrão (400); respostas curtas e diretas vêm de esforço baixo sem thinking
         "thinking": {"type": "disabled"}, "output_config": {"effort": "low"},
         "system": [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
@@ -288,7 +422,7 @@ class AgentChat:
 
     @property
     def caller(self) -> Caller | None:
-        return self._caller if self._caller or not self._use_default else default_caller()
+        return self._caller if self._caller or not self._use_default else default_caller(self.config)
 
     # ----- registro e cotas (no SQLite do estúdio)
     @staticmethod
@@ -314,7 +448,7 @@ class AgentChat:
         left_day, left_hour = max(0, cfg.per_day - u["day"]), max(0, cfg.per_hour - u["hour"])
         wait = max(0.0, cfg.cooldown_s - (now - u["last"])) if u["last"] else 0.0
         from . import paid_gate
-        ai = (cfg.enabled and u["global_tokens"] < cfg.global_daily_tokens and self.caller is not None
+        ai = (cfg.enabled and u["global_tokens"] < cfg.global_daily_tokens and self.caller is not None and cfg.prices() is not None
               and paid_gate.blocked_reason() is None)
         blocked = "quota_day" if left_day <= 0 else "quota_hour" if left_hour <= 0 else None
         return {"remaining": min(left_day, left_hour), "remaining_day": left_day, "remaining_hour": left_hour,
@@ -328,7 +462,8 @@ class AgentChat:
 
     def cost(self, cfg: ChatConfig, inp: int, out: int, cache: int = 0) -> float:
         # leitura de cache custa ~10% da entrada
-        return round((inp * cfg.price_in_per_mtok + cache * cfg.price_in_per_mtok * 0.1 + out * cfg.price_out_per_mtok) / 1e6, 8)
+        pin, pout = cfg.prices() or (0.0, 0.0)
+        return round((inp * pin + cache * pin * 0.1 + out * pout) / 1e6, 8)
 
     # ----- conversa
     def reply(self, conn, *, user_id: str, workspace_id: str | None, agent: str, text: str, ctx: dict) -> dict:
@@ -381,8 +516,8 @@ class AgentChat:
             else:
                 caller = self.caller
                 ai_on = cfg.enabled and caller is not None and u["global_tokens"] < cfg.global_daily_tokens
-                blocked = None
-                if ai_on:   # kill switch, ambiente, teto da plataforma e teto diário do agente (estimativa do pior caso)
+                blocked = "no_price" if ai_on and cfg.prices() is None else None   # sem preço não há como medir o gasto: falha fechada
+                if ai_on and not blocked:   # kill switch, ambiente, teto da plataforma e teto diário do agente (estimativa do pior caso)
                     from . import paid_gate
                     worst = self.cost(cfg, 2000, cfg.max_tokens)
                     try:
@@ -406,10 +541,14 @@ class AgentChat:
                         source = "llm"
                         if not answer:
                             answer, source = FALLBACK["error"], "llm"
-                    except Exception:  # noqa: BLE001 — erro, timeout ou SDK ausente: resposta pronta, sem retry
+                    except Exception as exc:  # noqa: BLE001 — erro, timeout ou SDK ausente: resposta pronta, sem retry
+                        from .logs import redact
+                        kind = exc.kind if isinstance(exc, ChatProviderError) else type(exc).__name__
+                        log.warning("chat: chamada ao modelo falhou (%s)", redact(kind))
                         answer, source = FALLBACK["error"], "falha"
-            conn.execute("UPDATE chat_log SET source=?, input_tokens=?, output_tokens=?, cache_read_tokens=?, cost_usd=? WHERE id=?",
-                         (source, inp, outp, cache, self.cost(cfg, inp, outp, cache), row_id))
+            provider = cfg.resolved_provider if source in ("llm", "falha") else ""
+            conn.execute("UPDATE chat_log SET source=?, input_tokens=?, output_tokens=?, cache_read_tokens=?, cost_usd=?, provider=? WHERE id=?",
+                         (source, inp, outp, cache, self.cost(cfg, inp, outp, cache), provider, row_id))
             conn.commit()
             self.history.setdefault(key, deque(maxlen=cfg.history_turns)).append((text, answer))
             return out(answer, source)

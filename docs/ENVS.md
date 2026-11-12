@@ -38,6 +38,29 @@ Como ler as colunas:
 > Em staging nunca coloque `GEMINI_API_KEY` nem `ANTHROPIC_API_KEY`. Sem chave o modo simulado funciona
 > normalmente e o chat cai no modo "sem IA". Chave que não existe é chave que não vaza.
 
+### Chat com os agentes (Gemini por padrão)
+
+O chat usa a mesma `GEMINI_API_KEY` do restante e passa pelo mesmo portão (`STUDIO_ALLOW_PAID_CALLS`, kill switch,
+tetos da plataforma, do estúdio e do agente). Sem chave, com o chat desligado ou com o portão fechado ele responde só
+o que não precisa de IA (papel, estado da missão, o que aprovar). Falha da chamada (401/403/429, timeout, resposta vazia
+ou bloqueada por segurança) vira uma resposta amigável, sem retry e sem detalhe técnico; a chave nunca entra em log nem
+em erro. Cada chamada fica em `chat_log` (provedor, tokens, custo) e entra no gasto e nas métricas.
+
+| Variável | Obrig. | Segredo | Quando | Valor no staging | Para que serve |
+|---|---|---|---|---|---|
+| `STUDIO_CHAT_PROVIDER` | não | não | execução | *(não definir)* | `gemini` (padrão) ou `anthropic` (continua disponível; exige `ANTHROPIC_API_KEY` e `pip install -e ".[chat]"`). Valor desconhecido = `gemini`. |
+| `STUDIO_CHAT_MODEL` | não | não | execução | *(não definir)* | Vazio = padrão do provedor. Gemini: `STUDIO_PLANNER_MODEL` ou, se ausente, `gemini-3.8-flash` (o mesmo modelo de texto de Direção/Conferência). Anthropic: `claude-haiku-5-5`. |
+| `STUDIO_CHAT_ENABLED` | não | não | execução | *(não definir; padrão `1`)* | `0` desliga a IA do chat (só respostas sem IA). |
+| `STUDIO_CHAT_MAX_TOKENS` / `_MAX_CHARS` | não | não | execução | *(padrão `150` / `300`)* | Tamanho máximo da resposta (tokens) e da mensagem do usuário (caracteres). |
+| `STUDIO_CHAT_PER_DAY` / `_PER_HOUR` | não | não | execução | *(padrão `20` / `8`)* | Mensagens por usuário por dia e por hora. |
+| `STUDIO_CHAT_COOLDOWN_S` | não | não | execução | *(padrão `3`)* | Espera mínima entre mensagens do mesmo usuário. |
+| `STUDIO_CHAT_GLOBAL_DAILY_TOKENS` | não | não | execução | *(padrão `200000`)* | Teto diário de tokens (entrada + saída, todos os usuários). `0` = IA sempre desligada. |
+| `STUDIO_CHAT_TIMEOUT_S` | não | não | execução | *(padrão `10`)* | Tempo máximo de uma chamada ao modelo. |
+| `STUDIO_CHAT_PRICE_IN` / `_PRICE_OUT` | não | não | execução | *(não definir)* | US$ por 1M tokens (entrada/saída) para o cálculo de custo. Vazios: Gemini usa a tabela `LLM_PRICES` de `src/studio/pricing.py` para o modelo; Anthropic usa `0.10`/`0.50`. **Modelo Gemini sem preço na tabela e sem estas variáveis = IA desligada (falha fechada).** |
+| `STUDIO_CHAT_GEMINI_BASE_URL` | não | não | execução | *(não definir)* | Endereço da API do Gemini (padrão oficial). Só `https://`, ou `http://` em `127.0.0.1`/`localhost` (servidor falso de teste). |
+| `STUDIO_CHAT_GEMINI_THINKING_LEVEL` | não | não | execução | *(não definir)* | Opcional (ex.: `minimal`): limita o raciocínio do modelo, que conta como saída. Vazio = não enviar. |
+| `STUDIO_CHAT_FAKE` | não | não | testes | *(não definir)* | `1` = respostas falsas, sem rede nem custo. |
+
 ## 2. Rede, host e cookie
 
 | Variável | Obrig. | Segredo | Quando | Valor no staging | Para que serve |
