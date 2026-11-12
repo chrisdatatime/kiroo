@@ -1,23 +1,12 @@
 import React from 'react';
 import Boneco from '../Boneco.jsx';
 
-// Interface discreta sobre o cenário: produção atual, gasto, atalhos, equipe e dicas de controle.
+// Interface discreta sobre o cenário: gasto, atalhos, equipe e dicas de controle.
 export default function Hud({ v }) {
   return (
     <>
       <div style={{ position: 'absolute', top: 14, left: 14, right: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap', pointerEvents: 'none', zIndex: 10 }}>
-        <div className="g-hud" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 10px 8px 8px', pointerEvents: 'auto', maxWidth: 'min(560px,100%)' }}>
-          <span aria-hidden="true" style={{ width: 40, height: 40, borderRadius: 10, background: '#0E0E10', display: 'grid', placeItems: 'center', flex: 'none' }}>
-            <svg width="22" height="22" viewBox="0 0 16 16" fill="none" stroke="#FF5B2E" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M3 8.5l3 3 7-7" /></svg>
-          </span>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-            <span style={{ font: '800 12px/1 Instrument Sans,sans-serif', color: '#77777C' }}>Produção atual</span>
-            <span className="fred" style={{ fontWeight: 600, fontSize: 16, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{v.prodName}</span>
-            <span style={{ font: '700 12.5px/1.2 Instrument Sans,sans-serif' }}>{v.stageLabel}</span>
-          </div>
-          {v.nextLabel && <button className="g-btn g-lime g-sm" onClick={v.goNext} style={{ marginLeft: 4 }}>{v.nextLabel}</button>}
-        </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', pointerEvents: 'auto', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', pointerEvents: 'auto', flexWrap: 'wrap', justifyContent: 'flex-end', marginLeft: 'auto' }}>
           {v.conn === 'erro' && <div className="g-hud" role="alert" style={{ padding: '0 12px', minHeight: 44, display: 'flex', alignItems: 'center', font: '800 13px/1.2 Instrument Sans,sans-serif', color: '#9A2E22' }}>Sem conexão com o estúdio</div>}
           {!v.shell && <div className="g-hud" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', minHeight: 44 }} title="Saldo de créditos do estúdio">
             <svg width="18" height="18" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8" fill="#F5C542" stroke="#0E0E10" strokeWidth="2" /><path d="M10 6v8M7.5 8.2h4a1.6 1.6 0 010 3.2h-3a1.6 1.6 0 000 3.2h4" fill="none" stroke="#0E0E10" strokeWidth="1.6" strokeLinecap="round" /></svg>

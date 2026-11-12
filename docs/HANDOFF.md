@@ -437,7 +437,7 @@ Tour guiado pós-login, igual nos dois renderizadores (canvas e `?world=phaser`)
 
 ### Pendências da Fase 5
 1. Com 1024 px o botão do Piloto fica escondido (`pv-hide-md`); o passo 6 recorta só o saldo e o texto cita "no topo ou no menu do logo".
-2. No passo do escritório o card cobre parte do botão "Abrir ficha" do HUD em telas de ~1000 px de largura.
+2. (Resolvida: o cartão "Produção atual" saiu do HUD do escritório; produção e próxima ação ficam na lateral.)
 3. "Pular" e "Concluir" usam a mesma marca (`done_at`); se um dia for preciso saber quem pulou, guardar o motivo numa coluna à parte.
 
 ## Fase 2 de deploy — servidor endurecido (2026-11-05, branch `deploy/endurecer-servidor`, sem merge)
