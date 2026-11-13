@@ -19,7 +19,7 @@ O servidor Python precisa estar no ar (`studio ui` na raiz do repositório). O p
 
 ## Shell (Fase 0 do plano em `../docs/VISAO_PRODUTO.md`)
 O produto abre na **Central**, não no mundo. `src/shell/`: `Shell.jsx` (lateral, barra superior, paleta Ctrl/⌘ K; `VIEWS`), `Central.jsx` (fila "precisa de você"),
-`MissionView.jsx` (fluxo objetivo → orquestrador → frentes → revisão → entrega com o estado real), `TeamView.jsx`, `pipeline.js` (derivação pura, `tests/pipeline.test.mjs`),
+`MissionView.jsx` (esteira de agentes como visão principal: `Conveyor.jsx` + `conveyor.js`, 6 estações derivadas de `buildPipeline().stations`, salto da tarefa só em CSS/transform, `prefers-reduced-motion` desliga; o fluxo objetivo → orquestrador → frentes → revisão → entrega fica em "Fluxo detalhado"; `tests/conveyor*.test.mjs`), `TeamView.jsx`, `pipeline.js` (derivação pura, `tests/pipeline.test.mjs`),
 `shell.css` (tokens `.pv`). O Escritório é a 4ª view e continua com o HUD de jogo. `App.state.view` (`bc.view`) escolhe a view; o mundo mede só a área útil (`stageEl`);
 WASD/E só valem na view `escritorio`. Estilo novo = classes `pv-*`; as `g-*` ficam no mundo e nas janelas antigas.
 Layout (Fase 4b, padrão de escritório virtual): trilho de ícones (menu do estúdio no logo, busca, views, Atividade em Popover, Preferências),

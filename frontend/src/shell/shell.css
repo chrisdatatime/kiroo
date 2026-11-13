@@ -209,6 +209,88 @@
 .pv-mini i { flex: 1; height: 6px; border-radius: 999px; background: #E7E7E4; }
 .pv-mini i[data-s="done"] { background: var(--ok); } .pv-mini i[data-s="work"] { background: #1F8FCB; } .pv-mini i[data-s="need"] { background: var(--lime); box-shadow: 0 0 0 1.5px #FF5B2E inset; }
 
+/* Esteira de agentes (visão principal da missão). Seis estações numa faixa; pixel art dos próprios sprites (Boneco),
+   tokens da marca, sombra "dura" de 3 px no estilo pixel. Animação só em transform/opacity; nada roda em missão encerrada. */
+.pv-sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.pv-belt { position: relative; padding: 18px 14px 14px; overflow: hidden; }
+.pv-belt-track { position: relative; list-style: none; margin: 0; padding: 10px 2px 4px; display: flex; align-items: stretch; gap: 0; overflow-x: auto; overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity; scrollbar-width: thin; }
+.pv-belt-track::before { content: ''; position: absolute; left: 8px; right: 8px; top: 64px; height: 6px; border-radius: 3px; background: repeating-linear-gradient(90deg, var(--line-2) 0 10px, #FFFFFF 10px 16px); z-index: 0; }
+.pv-station { position: relative; flex: 1 1 0; min-width: 136px; scroll-snap-align: center; display: flex; flex-direction: column; align-items: stretch; z-index: 1; padding: 0 6px; }
+.pv-station-btn { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; width: 100%; min-height: 168px; padding: 12px 8px 12px; border-radius: 10px;
+  border: 2px solid var(--line-2); background: #FFFFFF; color: var(--ink); font: inherit; text-align: center; cursor: pointer;
+  transition: border-color .25s var(--ease), box-shadow .25s var(--ease), background .25s var(--ease), opacity .25s var(--ease); }
+.pv-station-btn:hover { border-color: var(--ink); }
+.pv-station-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.pv-station-sprite { display: grid; place-items: end center; width: 56px; height: 56px; margin-top: 2px; border-radius: 8px; background: var(--primary-soft); overflow: hidden; }
+.pv-station-sprite canvas { image-rendering: pixelated; }
+.pv-station-name { margin-top: 8px; font-size: 13.5px; font-weight: 700; line-height: 1.2; }
+.pv-station-step { font: 500 10.5px/1.2 'Geist Mono', ui-monospace, monospace; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.pv-station-state { margin-top: 6px; font-size: 12px; font-weight: 700; line-height: 1.2; color: var(--ink-2); }
+.pv-station-now { margin-top: 2px; font-size: 12px; font-weight: 600; line-height: 1.3; color: var(--ink-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.pv-station-badge { position: absolute; top: -10px; right: -8px; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; border: 2px solid #FFFFFF; background: #F2F2EF; color: var(--ink); font: 800 13px/1 'Instrument Sans', sans-serif; }
+.pv-station-badge[data-k="done"] { background: var(--ok); color: #fff; }
+.pv-station-badge[data-k="need"] { background: var(--kiroo-attn); color: var(--ink); }
+.pv-station-badge[data-k="problem"] { background: var(--warn-soft); color: var(--warn); }
+.pv-station-badge[data-k="ended"] { background: #E7E7E4; color: #3A3A3F; }
+.pv-station-badge[data-k="active"] { background: var(--sky-soft); } .pv-station-badge[data-k="active"] i { width: 8px; height: 8px; border-radius: 50%; background: #1F8FCB; }
+/* estados */
+.pv-station[data-s="pending"] .pv-station-btn { opacity: .55; background: var(--canvas); }
+.pv-station[data-s="pending"] .pv-station-sprite { filter: grayscale(.7); }
+.pv-station[data-s="done"] .pv-station-btn { border-color: #BFE3C7; } .pv-station[data-s="done"] .pv-station-state { color: var(--ok); }
+.pv-station[data-s="active"] .pv-station-btn { border-color: #1F8FCB; box-shadow: 3px 3px 0 var(--sky-soft); }
+.pv-station[data-s="active"] .pv-station-state { color: #14577C; }
+.pv-station[data-s="active"] .pv-station-btn::after { content: ''; position: absolute; inset: -6px; border-radius: 14px; border: 2px solid #8ED8F8; pointer-events: none; animation: pv-station-pulse 1.4s ease-in-out infinite; }
+@keyframes pv-station-pulse { 0%, 100% { transform: scale(1); opacity: .9; } 50% { transform: scale(1.03); opacity: .25; } }
+.pv-station[data-s="need"] .pv-station-btn { border-color: var(--kiroo-attn); box-shadow: 3px 3px 0 var(--kiroo-attn); }
+.pv-station[data-s="need"] .pv-station-state { color: var(--ink); }
+.pv-station[data-s="problem"] .pv-station-btn { border-color: var(--warn); background: var(--warn-soft); } .pv-station[data-s="problem"] .pv-station-state { color: var(--warn); }
+.pv-station[data-s="ended"] .pv-station-btn, .pv-station[data-s="cancelled"] .pv-station-btn { background: #F2F2EF; border-color: var(--line-2); box-shadow: none; }
+.pv-station[data-s="ended"] .pv-station-sprite, .pv-station[data-s="cancelled"] .pv-station-sprite { filter: grayscale(1); opacity: .8; }
+.pv-station-seal { position: absolute; left: 50%; top: 44%; transform: translate(-50%, -50%) rotate(-10deg); padding: 3px 8px; border: 2px solid #3A3A3F; border-radius: 4px; background: #FFFFFF; color: #3A3A3F; font: 900 11px/1 'Instrument Sans', sans-serif; letter-spacing: .08em; text-transform: uppercase; pointer-events: none; }
+.pv-belt[data-ended] .pv-station-btn { transition: none; }
+.pv-belt[data-ended] .pv-station-btn::after { animation: none; display: none; }
+/* o destaque só chega na estação quando o ícone pousa */
+.pv-station[data-landing] .pv-station-btn { border-color: var(--line-2); box-shadow: none; }
+.pv-station[data-landing] .pv-station-btn::after { display: none; }
+/* ligação entre estações: acende quando a anterior concluiu */
+.pv-station-link { position: absolute; right: -8px; top: 64px; width: 16px; height: 6px; z-index: 2; background: var(--line-2); }
+.pv-station-link[data-on="1"] { background: var(--ok); }
+/* salto da tarefa: X linear na camada de fora, Y em arco na de dentro (só transform) */
+.pv-belt-hop { position: absolute; left: 0; top: 38px; width: 36px; height: 36px; margin-left: -18px; z-index: 5; pointer-events: none; will-change: transform;
+  animation: pv-hop-x var(--hop-ms, 900ms) cubic-bezier(.3, .1, .7, .9) forwards; }
+.pv-belt-hop-y { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 8px; border: 2px solid var(--ink); background: #FFFFFF; color: var(--ink); box-shadow: 2px 2px 0 var(--ink); overflow: hidden;
+  animation: pv-hop-y var(--hop-ms, 900ms) ease-in-out forwards; }
+.pv-belt-hop-y img, .pv-belt-hop-y video { display: block; width: 100%; height: 100%; object-fit: cover; }
+@keyframes pv-hop-x { from { transform: translateX(var(--x0)); } to { transform: translateX(var(--x1)); } }
+@keyframes pv-hop-y { 0% { transform: translateY(0) scale(.9); opacity: 0; } 12% { opacity: 1; } 50% { transform: translateY(-58px) scale(1.08); } 92% { opacity: 1; } 100% { transform: translateY(0) scale(.95); opacity: 0; } }
+/* créditos usados na etapa (só quando o dado existe), no hover e no foco */
+.pv-station-tip { position: absolute; left: 50%; bottom: calc(100% + 6px); transform: translateX(-50%); z-index: 6; padding: 6px 9px; border-radius: 8px; background: var(--ink); color: #FAFAF8; font: 500 11.5px/1.3 'Instrument Sans', sans-serif; white-space: nowrap;
+  opacity: 0; visibility: hidden; pointer-events: none; transition: opacity .15s var(--ease); }
+.pv-station-tip strong { font-weight: 700; }
+.pv-station:hover .pv-station-tip, .pv-station:focus-within .pv-station-tip { opacity: 1; visibility: visible; }
+/* cartões abaixo da esteira e fluxo detalhado (secundário) */
+.pv-mission-cards { align-items: start; }
+.pv-flow-details > summary { display: flex; align-items: center; gap: 10px; padding: 14px 18px; cursor: pointer; font-weight: 700; font-size: 14px; list-style: none; border-radius: var(--r); }
+.pv-flow-details > summary::-webkit-details-marker { display: none; }
+.pv-flow-details > summary .pv-meta { margin: 0; font-weight: 500; }
+.pv-flow-details > summary:hover { background: #F2F2EF; }
+.pv-flow-details > summary:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.pv-flow-details[open] > summary { border-bottom: 1px solid var(--line); border-radius: var(--r) var(--r) 0 0; }
+.pv-flow-details .pv-flow { border: 0; box-shadow: none; }
+/* movimento reduzido: sem salto nem pulso; só a troca de cor */
+.pv-belt[data-motion="reduced"] .pv-station-btn::after { animation: none; }
+.pv-belt[data-motion="reduced"] .pv-belt-hop { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .pv-station-btn, .pv-station-tip { transition: none; }
+  .pv-station-btn::after { animation: none !important; }
+  .pv-belt-hop { display: none; }
+}
+@media (max-width: 900px) {
+  .pv-belt { padding: 14px 8px 10px; }
+  .pv-station { min-width: 148px; flex: 0 0 auto; }
+}
+
 /* Paleta de comandos */
 .pv-scrim { position: fixed; inset: 0; background: rgba(10, 16, 40, .5); backdrop-filter: blur(4px); z-index: 100; display: grid; place-items: start center; padding-top: 12vh; }
 .pv-pal { width: min(600px, calc(100vw - 24px)); background: #fff; border: 1px solid rgba(255,255,255,.5); border-radius: 16px; box-shadow: 0 28px 90px rgba(10, 16, 40, .4); overflow: hidden; }
