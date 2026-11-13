@@ -998,14 +998,16 @@ export default class App extends React.Component {
     const pipeline = buildPipeline({ idx, statuses, hasProd: !!P, paused, ended, detail: {
       objetivo: P ? P.product.name : '', orquestrador: ended ? (ended === 'cancelled' ? 'Cancelada' : 'Falhou') + (P.reason ? ': ' + P.reason : '')
         : paused ? 'Pausada: ' + (P.reason || '') : P ? STAGE_LABELS[st] : '',
-      roteiro: rsOf(idx < 1 ? 'nina' : 'theo'), criativo: rsOf('iris'), video: rsOf('lia'), revisao: rsOf('rui'), entrega: rsOf('beto') } });
+      roteiro: rsOf(idx < 1 ? 'nina' : 'theo'), criativo: rsOf('iris'), video: rsOf('lia'), revisao: rsOf('rui'), entrega: rsOf('beto'),
+      // estações da esteira (um agente cada)
+      produto: rsOf('nina'), direcao: rsOf('theo'), imagens: rsOf('iris'), videos: rsOf('lia') } });
     const attn = P ? attention({ paused, ended, pauseReason: P.reason, rooms: ROOMS.filter((r) => r.agent && statuses[r.agent] === 'need').map((r) => ({ id: r.id, name: r.name, who: AGM[r.agent].name,
       status: this.roomStatus(r), need: true, look: AGM[r.agent].look, work: () => this.openRoomWork(r.id) })) }) : [];
 
     return {
       // shell
       view: s.view, setView: (id) => { if (s.ui.win === 'dialog') this.closeWin(); this.setState({ view: id }); }, shell: true,
-      pipeline, attn, statuses: P ? statuses : { ...statuses, nina: 'idle' }, hasProd: !!P, openStep: (tab) => this.openProd(tab),
+      pipeline, attn, statuses: P ? statuses : { ...statuses, nina: 'idle' }, hasProd: !!P, openStep: (tab) => this.openProd(tab), prodId: P ? P.id : null,
       // mundo
       scale, zoom, camX, camY, vw: s.vw, vh: s.vh, setup: su, desks, highlight, dest,
       openTour: () => this.openTour(), tourOpen: !!s.onb,
