@@ -19,10 +19,20 @@ export function hopBetween(prev, next) {
   return to && to.id !== from.id ? { from: from.id, to: to.id } : null;
 }
 
-// O salto só acontece com movimento permitido e com snapshot anterior da mesma missão.
-export function shouldHop({ reduced, prevKey, key, prev, next }) {
-  if (reduced || prevKey !== key) return null;
-  return hopBetween(prev, next);
+// Retrocesso: uma estação concluída que volta a pendente/viva. O motor passa por estados assim por um tique (ex.: ao
+// aprovar a direção o status volta a "recebido" antes de "em produção"); a esteira mostra o estado real, mas não salta.
+export function regressed(prev, next) {
+  const was = Object.fromEntries(prev.map((s) => [s.id, s.state]));
+  return next.some((s) => was[s.id] === 'done' && s.state !== 'done');
+}
+
+// Um tique da esteira: avança o snapshot de referência e decide o salto. Sem referência da mesma missão (primeiro
+// desenho ou outra missão) só registra; num retrocesso mantém a referência anterior (o salto certo sai no tique
+// seguinte, da estação de onde a bola realmente saiu); com movimento reduzido nunca salta.
+export function stepConveyor(ref, { key, stations, reduced = false }) {
+  if (!ref || ref.key !== key || !ref.stations) return { ref: { key, stations }, hop: null };
+  if (regressed(ref.stations, stations)) return { ref, hop: null };
+  return { ref: { key, stations }, hop: reduced ? null : hopBetween(ref.stations, stations) };
 }
 
 // Posição do salto: centro das duas estações em relação à faixa (px). Puro: recebe medidas, não o DOM.
@@ -34,9 +44,11 @@ export function hopGeometry(from, to) {
 // Ícone genérico da tarefa quando não há miniatura: o que cada estação entrega.
 export const TASK_ICON = { produto: 'box', direcao: 'edit', imagens: 'image', revisao: 'shield', videos: 'video', entrega: 'box' };
 
-// Miniatura da tarefa que sai da estação: a última imagem/take aprovado, quando existe. Senão null (ícone genérico).
+// Miniatura da tarefa que sai da estação: o material mais recente que existe (a imagem/take que acabou de ficar
+// pronto para o Rui, senão o último aprovado). Sem arquivo: null (ícone genérico).
 export function taskThumb(station, { imgSlots = [], vidSlots = [] } = {}) {
-  const last = (list) => list.filter((x) => x.status === 'aprovada' && x.url).slice(-1)[0];
+  const last = (list) => { const has = list.filter((x) => x.url && (x.status === 'pronta' || x.status === 'aprovada'));
+    return has.filter((x) => x.status === 'pronta').slice(-1)[0] || has.slice(-1)[0]; };
   if (station === 'imagens') { const s = last(imgSlots); return s ? { url: s.url, video: false } : null; }
   if (station === 'videos') { const s = last(vidSlots); return s ? { url: s.url, video: true } : null; }
   return null;

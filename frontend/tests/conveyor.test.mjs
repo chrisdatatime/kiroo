@@ -2,7 +2,7 @@
 // créditos por etapa e miniatura. Lógica pura; a renderização está em conveyor-render.test.mjs.
 import assert from 'node:assert/strict';
 import { buildPipeline, STATIONS, stationAt } from '../src/shell/pipeline.js';
-import { hopBetween, shouldHop, hopGeometry, creditsByStation, taskThumb, stationAria, TASK_ICON } from '../src/shell/conveyor.js';
+import { hopBetween, stepConveyor, regressed, hopGeometry, creditsByStation, taskThumb, stationAria, TASK_ICON } from '../src/shell/conveyor.js';
 
 const states = (p) => Object.fromEntries(p.stations.map((s) => [s.id, s.state]));
 const ids = STATIONS.map((s) => s.id);
@@ -90,12 +90,25 @@ assert.equal(hopBetween(null, S({ produto: 'done', direcao: 'done', imagens: 'ac
 // cancelada ou pausada: congelada, nunca salta
 assert.equal(hopBetween(S({ produto: 'done', direcao: 'need' }), S({ produto: 'done', direcao: 'cancelled', imagens: 'ended' })), null);
 assert.equal(hopBetween(S({ imagens: 'active' }), S({ imagens: 'problem' })), null);
-// shouldHop: movimento reduzido desliga o salto; missão diferente não compara
+// stepConveyor: movimento reduzido desliga o salto; missão diferente ou primeiro desenho só registra a referência
 const prev = S({ produto: 'done', direcao: 'need' }), next = S({ produto: 'done', direcao: 'done', imagens: 'need' });
-assert.deepEqual(shouldHop({ reduced: false, prevKey: 'p1', key: 'p1', prev, next }), { from: 'direcao', to: 'imagens' });
-assert.equal(shouldHop({ reduced: true, prevKey: 'p1', key: 'p1', prev, next }), null);
-assert.equal(shouldHop({ reduced: false, prevKey: 'p1', key: 'p2', prev, next }), null);
-assert.equal(shouldHop({ reduced: false, prevKey: 'p1', key: 'p1', prev: null, next }), null);
+assert.deepEqual(stepConveyor({ key: 'p1', stations: prev }, { key: 'p1', stations: next }), { ref: { key: 'p1', stations: next }, hop: { from: 'direcao', to: 'imagens' } });
+assert.equal(stepConveyor({ key: 'p1', stations: prev }, { key: 'p1', stations: next, reduced: true }).hop, null);
+assert.deepEqual(stepConveyor({ key: 'p1', stations: prev }, { key: 'p2', stations: next }), { ref: { key: 'p2', stations: next }, hop: null });
+assert.deepEqual(stepConveyor(null, { key: 'p1', stations: next }), { ref: { key: 'p1', stations: next }, hop: null });
+// retrocesso transitório (visto ao vivo: ao aprovar a direção, o motor volta a "recebido" por um tique e a Nina
+// reaparece esperando você): não salta para trás, mantém a referência e o salto certo (Theo → Iris) sai no tique seguinte
+const glitch = S({ produto: 'need', direcao: 'pending' });
+assert.equal(regressed(prev, glitch), true);
+assert.equal(regressed(prev, next), false);
+let step = stepConveyor({ key: 'p1', stations: prev }, { key: 'p1', stations: glitch });
+assert.equal(step.hop, null);
+assert.equal(step.ref.stations, prev);
+step = stepConveyor(step.ref, { key: 'p1', stations: next });
+assert.deepEqual(step.hop, { from: 'direcao', to: 'imagens' });
+// Rui reprova e a Iris refaz: Imagens nunca esteve concluída, então o salto para trás é legítimo
+const rui = S({ produto: 'done', direcao: 'done', revisao: 'need' }), redo = S({ produto: 'done', direcao: 'done', imagens: 'active' });
+assert.deepEqual(stepConveyor({ key: 'p1', stations: rui }, { key: 'p1', stations: redo }).hop, { from: 'revisao', to: 'imagens' });
 // geometria: centro das estações
 assert.deepEqual(hopGeometry({ left: 100, width: 140 }, { left: 400, width: 140 }), { x0: 170, x1: 470 });
 assert.equal(hopGeometry(null, { left: 0, width: 10 }), null);
@@ -104,6 +117,8 @@ assert.equal(hopGeometry(null, { left: 0, width: 10 }), null);
 const slots = { imgSlots: [{ status: 'aprovada', url: '/media/a.png' }, { status: 'aprovada', url: '/media/b.png' }, { status: 'gerando', url: null }],
   vidSlots: [{ status: 'aprovada', url: '/media/a.mp4' }] };
 assert.deepEqual(taskThumb('imagens', slots), { url: '/media/b.png', video: false });
+// a imagem que acabou de ficar pronta (indo para o Rui) vence a última aprovada
+assert.deepEqual(taskThumb('imagens', { imgSlots: [{ status: 'aprovada', url: '/media/a.png' }, { status: 'pronta', url: '/media/c.png' }] }), { url: '/media/c.png', video: false });
 assert.deepEqual(taskThumb('videos', slots), { url: '/media/a.mp4', video: true });
 assert.equal(taskThumb('imagens', { imgSlots: [{ status: 'gerando', url: null }] }), null);   // sem miniatura → ícone genérico
 assert.equal(taskThumb('direcao', slots), null);

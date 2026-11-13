@@ -2,7 +2,7 @@ import React from 'react';
 import { Ban } from 'lucide-react';
 import Boneco from '../Boneco.jsx';
 import Icon from './icons.jsx';
-import { HOP_MS, TASK_ICON, hopGeometry, shouldHop, stationAria } from './conveyor.js';
+import { HOP_MS, TASK_ICON, hopGeometry, stepConveyor, stationAria } from './conveyor.js';
 
 // Esteira de agentes: visão principal do progresso da missão. Seis estações (um agente cada) numa faixa horizontal;
 // o estado de cada uma vem de buildPipeline (pipeline.js, `stations`). Quando uma estação passa a bola, o ícone da
@@ -49,9 +49,8 @@ export default function Conveyor({ stations, team, ended = null, missionKey = nu
 
   // transição: compara com o snapshot anterior (mesma missão) e posiciona o salto pelas medidas reais das estações
   React.useEffect(() => {
-    const p = prev.current;
-    const h = shouldHop({ reduced: rm, prevKey: p.key, key: missionKey, prev: p.stations, next: stations });
-    prev.current = { key: missionKey, stations };
+    const { ref, hop: h } = stepConveyor(prev.current, { key: missionKey, stations, reduced: rm });
+    prev.current = ref;
     if (!h) return undefined;
     const a = refs.current[h.from], b = refs.current[h.to];
     const g = a && b ? hopGeometry({ left: a.offsetLeft, width: a.offsetWidth }, { left: b.offsetLeft, width: b.offsetWidth }) : null;
