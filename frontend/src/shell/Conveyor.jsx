@@ -40,7 +40,8 @@ function TaskIcon({ station, thumb }) {
   return <Icon name={TASK_ICON[station] || 'spark'} size={18} />;
 }
 
-export default function Conveyor({ stations, team, ended = null, missionKey = null, thumbs = {}, credits = {}, onOpen, reduced }) {
+// `stepFirst`: o nome da etapa vem em destaque, acima do agente (missão fal); sem `onOpen` a estação não abre nada.
+export default function Conveyor({ stations, team, ended = null, missionKey = null, thumbs = {}, credits = {}, onOpen, reduced, stepFirst = false }) {
   const rm = useReducedMotion(reduced);
   const prev = React.useRef({ key: missionKey, stations: null });
   const refs = React.useRef({});
@@ -76,7 +77,7 @@ export default function Conveyor({ stations, team, ended = null, missionKey = nu
 
   return (
     <section className="pv-belt pv-card" aria-label="Esteira de agentes" data-ended={ended || undefined} data-motion={rm ? 'reduced' : undefined}
-      data-inflight={hop ? '1' : undefined} data-testid="belt">
+      data-inflight={hop ? '1' : undefined} data-step-first={stepFirst ? '1' : undefined} data-testid="belt">
       <ol className="pv-belt-track" ref={trackRef}>
         {stations.map((s, i) => {
           const a = team.find((t) => t.id === s.agent);
@@ -85,12 +86,13 @@ export default function Conveyor({ stations, team, ended = null, missionKey = nu
           return (
             <li key={s.id} ref={(el) => { refs.current[s.id] = el; }} className="pv-station" data-s={s.state} data-current={s.current || undefined}
               data-landing={hop && hop.to === s.id ? '1' : undefined}>
+              {stepFirst ? <span className="pv-station-steptop" aria-hidden="true" style={{ display: 'block', textAlign: 'center', marginBottom: 8, font: "800 13px/1.2 'Instrument Sans', sans-serif", letterSpacing: '.06em', color: s.current ? '#0E0E10' : '#5B5B60' }}>{s.title}</span> : null}
               <button type="button" className="pv-station-btn" aria-current={s.current ? 'step' : undefined} aria-label={stationAria(s, nameOf(s))}
-                aria-describedby={tipId} onClick={() => onOpen && onOpen(s.tab)}>
+                aria-describedby={tipId} onClick={() => onOpen && s.tab && onOpen(s.tab)} style={!onOpen || !s.tab ? { cursor: 'default' } : undefined}>
                 <Badge state={s.state} />
                 <span className="pv-station-sprite" aria-hidden="true">{a ? <Boneco look={a.look} anim={ended || rm ? 'idle' : ANIM[s.state]} size={52} /> : null}</span>
-                <span className="pv-station-name">{nameOf(s)}</span>
-                <span className="pv-station-step">{s.title}</span>
+                <span className="pv-station-name" style={stepFirst ? { fontSize: 11, fontWeight: 500 } : undefined}>{nameOf(s)}</span>
+                {stepFirst ? null : <span className="pv-station-step">{s.title}</span>}
                 <span className="pv-station-state">{s.label}</span>
                 {showNow ? <span className="pv-station-now">{s.detail}</span> : null}
                 {s.state === 'cancelled' ? <span className="pv-station-seal" aria-hidden="true">Cancelada</span> : null}

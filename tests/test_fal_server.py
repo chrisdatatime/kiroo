@@ -51,6 +51,25 @@ def state(app, pid):
     return json.loads(get(app, f"/api/state?pid={pid}").body)
 
 
+def start(app, body=None):
+    """O que o botao "Criar video" faz: create -> confirm -> run, nessa ordem. Devolve o pid ja rodando."""
+    code, d = post(app, "/api/productions", body or BODY)
+    assert code == 200, d
+    pid = d["pid"]
+    assert post(app, f"/api/productions/{pid}/confirm", {})[0] == 200
+    code, r = post(app, f"/api/productions/{pid}/run", {})
+    assert code == 200 and r["started"] is True, r
+    return pid
+
+
+def attempts(app, pid):
+    s, db, _ = app._db()
+    try:
+        return db.conn.execute("SELECT COUNT(*) FROM attempts WHERE production_id=? AND kind='workflow'", (pid,)).fetchone()[0]
+    finally:
+        db.close()
+
+
 def test_engine_comes_from_the_global_setting_and_the_workspace_overrides_it(app):
     assert state(app, "prod_0000000000")["settings"]["video_engine"] == "fal"
     s, db, acc = app._db()
@@ -71,9 +90,7 @@ def test_engine_comes_from_the_global_setting_and_the_workspace_overrides_it(app
 
 @requires_ffmpeg
 def test_create_run_gallery_and_individual_downloads(app):
-    code, d = post(app, "/api/productions", BODY)
-    assert code == 200 and d["ok"] and d["duplicate"] is False
-    pid = d["pid"]
+    pid = start(app)
     wait_idle(app, pid)
     P = state(app, pid)["production"]
     assert P["engine"] == "fal" and P["style"] == "light" and P["status"] == "awaiting_final_review"
@@ -91,7 +108,7 @@ def test_create_run_gallery_and_individual_downloads(app):
 
 @requires_ffmpeg
 def test_download_is_denied_to_other_workspaces(app):
-    pid = post(app, "/api/productions", BODY)[1]["pid"]
+    pid = start(app)
     wait_idle(app, pid)
     url = f"/media/{pid}/delivery/product_image_01.jpg?download=1"
     assert get(app, url).status == 200
@@ -133,7 +150,6 @@ def test_only_the_light_style_is_offered_and_it_is_the_default(app):
     assert [x["id"] for x in state(app, "prod_0000000000")["settings"]["fal_styles"]] == ["light"]
     code, d = post(app, "/api/productions", {k: v for k, v in BODY.items() if k != "style"})      # sem estilo: Claro
     assert code == 200
-    wait_idle(app, d["pid"])
     assert state(app, d["pid"])["production"]["style"] == "light"
 
 
@@ -144,7 +160,6 @@ def test_dark_is_ready_but_off_until_the_flag_is_turned_on(app, monkeypatch):
     assert [x["id"] for x in state(app, "prod_0000000000")["settings"]["fal_styles"]] == ["dark", "light"]
     code, d = post(app, "/api/productions", {**BODY, "style": "dark", "client_request_id": "cliente-dark1"})
     assert code == 200
-    wait_idle(app, d["pid"])
     assert state(app, d["pid"])["production"]["style"] == "dark"
 
 
@@ -165,3 +180,45 @@ def test_gemini_workspace_keeps_the_old_creation_flow(app):
     assert code == 200 and "duplicate" not in d
     row = state(app, d["pid"])["production"]
     assert row["engine"] == "gemini" and row["fal"] is None
+
+
+# ================================================================= create -> confirm -> run e idempotencia
+def test_create_alone_starts_nothing(app):
+    code, d = post(app, "/api/productions", BODY)
+    assert code == 200
+    pid = d["pid"]
+    time.sleep(0.2)
+    P = state(app, pid)["production"]
+    assert P["status"] == "received" and P["running"] is False and attempts(app, pid) == 0      # nada "Preparando"
+
+
+@requires_ffmpeg
+def test_create_confirm_run_delivers_and_a_second_run_or_confirm_is_refused(app):
+    pid = start(app)
+    wait_idle(app, pid)
+    assert state(app, pid)["production"]["status"] == "awaiting_final_review" and attempts(app, pid) == 1
+    for action in ("run", "confirm", "run"):
+        code, d = post(app, f"/api/productions/{pid}/{action}", {})
+        assert code == 409 and d["code"] == "already_started" and "pronto" in d["error"]
+    assert attempts(app, pid) == 1                                          # nenhum segundo job
+
+
+@requires_ffmpeg
+def test_run_while_running_is_refused_and_never_sends_a_second_job(app):
+    app.sim_pacing = True                                                   # DEMO com ritmo: a execucao leva alguns segundos
+    pid = start(app)
+    code, d = post(app, f"/api/productions/{pid}/run", {})
+    assert code == 409 and d["code"] == "already_started"
+    code, d = post(app, f"/api/productions/{pid}/confirm", {})
+    assert code == 409 and d["code"] == "already_started"
+    wait_idle(app, pid)
+    assert state(app, pid)["production"]["status"] == "awaiting_final_review" and attempts(app, pid) == 1
+
+
+def test_state_offers_the_light_style_with_the_exact_button_price(app):
+    st = state(app, "prod_0000000000")["settings"]
+    assert st["fal_styles"] == [{"id": "light", "label": "Claro", "cc": 0, "credits": "0"}]          # DEMO: nada e cobrado
+    from studio import budget
+    from studio.credits import fmt
+    real = app._fal_offer(app.settings(), "real")
+    assert real[0]["cc"] == budget.estimate_workflow(app.settings(), "light")["cc"] == 972 and fmt(972) == "9,72"

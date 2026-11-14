@@ -679,3 +679,36 @@ def test_photo_recovery_refused_by_the_provider_ends_as_an_incomplete_delivery(s
     assert o.run(pid) == PS.PAUSED and o.db.production(pid)["pause_code"] == fp.INCOMPLETE       # manual: nada reenviado
     assert o.fal_gen.submit_count == 1 and any(e["type"] == "fal_recover" and "falhou" in e["message"] for e in o.db.events(pid))
     o.fal_gen.recover_artifact = orig
+
+
+# ================================================================= idempotencia de /confirm e /run (regras do servidor)
+def test_started_message_is_empty_before_the_submit_and_blocks_after(settings, tmp_path, photo_product):
+    o, wid = funded(settings, tmp_path)
+    pid = new(o, photo_product, wid=wid, confirm=False)
+    assert fp.started_message(o.db, pid) is None                     # ainda nao comecou: confirm/run liberados
+    o.confirm_cost(pid)
+    assert o.run(pid) == PS.AWAITING_FINAL_REVIEW
+    assert fp.started_message(o.db, pid) == fp.ALREADY_DONE
+    o.final_decision(pid, True)
+    assert fp.started_message(o.db, pid) == fp.ALREADY_DONE and o.fal_gen.submit_count == 1
+
+
+def test_started_message_for_a_sent_or_uncertain_submit(settings, tmp_path, photo_product):
+    o = make(settings, tmp_path, fal_script=FalSimScript(polls_before_done=9))
+    pid = new(o, photo_product)
+    o.run(pid, wait=False)
+    assert fp.started_message(o.db, pid) == fp.ALREADY_SENT          # tentativa ativa (submitted)
+    o2 = make(settings, tmp_path, fal_script=FalSimScript(submit_failures=["uncertain"]))
+    pid2 = new(o2, photo_product, crid="incerto-01")
+    o2.run(pid2)
+    assert fp.started_message(o2.db, pid2) == fp.ALREADY_SENT        # envio incerto tambem conta: nunca reenviar
+
+
+def test_spend_block_message_reports_the_monthly_limit_without_pausing(settings, tmp_path, photo_product):
+    o, wid = funded(settings, tmp_path)
+    pid = new(o, photo_product, wid=wid)
+    assert o.spend_block_message(pid, 0.60) is None
+    Accounts(o.db).set_workspace(wid, monthly_cap_usd=0.10)
+    msg = o.spend_block_message(pid, 0.60)
+    assert msg == "Seu limite mensal foi atingido. Nada foi cobrado."
+    assert status(o, pid) != PS.PAUSED and o.fal_gen.submit_count == 0     # so informa: nada pausado nem enviado

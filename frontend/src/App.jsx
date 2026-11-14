@@ -34,7 +34,7 @@ class TourBoundary extends React.Component {
 import { deriveStage, sceneView, toCredits, creditsToUsd, endedOf, stoppedAt } from './engine/adapter.js';
 import { adjustmentGate, pauseKind } from './ui/pause.js';
 import { balanceLabel, needsConfirmation, usedLabel } from './ui/nextVideo.js';
-import { falActive, falView, endedLabel as falEndedLabel, availableStyles as falStyles, effectiveStyle as falStyleOf, gallery as falGallery, draftErrors as falDraftErrors, createPayload as falCreatePayload, newRequestId, IMAGE_EXT } from './ui/falFlow.js';
+import { falActive, falStatus, falStations, falAgentStatus, startFal, continueFal, offerFor, createLabel, endedLabel as falEndedLabel, availableStyles as falStyles, effectiveStyle as falStyleOf, gallery as falGallery, draftErrors as falDraftErrors, createPayload as falCreatePayload, newRequestId, IMAGE_EXT } from './ui/falFlow.js';
 import { adjustFunds, noBalanceFromError, noBalanceNotice } from './ui/credits.js';
 import Shell, { VIEWS } from './shell/Shell.jsx';
 import Central from './shell/Central.jsx';
@@ -108,7 +108,7 @@ export default class App extends React.Component {
       // sem sessão: home pública (null) ou tela de acesso ('login' | 'signup'); ?entrar abre direto o login
       entry: new URLSearchParams(window.location.search).has('entrar') ? 'login' : null,
       draft: Object.assign({}, EMPTY_DRAFT, LS.get('bc.draft', {})), files: [],
-      fal: { style: null, file: null, name: '', reqId: null, busy: false, tab: 'criar' },   // fluxo foto + estilo (só com o motor novo)
+      fal: { style: null, file: null, name: '', reqId: null, busy: false, error: null },   // fluxo foto + estilo (só com o motor novo)
       opts: null, creative: null, preview: null, reqText: '', caption: null, pilot: LS.get('bc.autonomy', 'assistido'),
       ui: { win: null, who: null, tab: 'produto', dirSub: 'dir', ctab: 'personagem', revSel: 1, revView: 'scene', adjust: false, issues: [], adjText: '', toast: null, tut: !LS.get('bc.tutDone', false), playing: false, budgetHit: false },
       cenario: normalizeTheme(LS.get(THEME_KEY, DEFAULT_THEME)),
@@ -239,6 +239,7 @@ export default class App extends React.Component {
   statusOf(id) {
     const P = this.prodP(), st = this.stage(), sc = this.scenes();
     if (this.ended()) return 'idle';
+    if (P && P.engine === 'fal') return falAgentStatus(P)[id] || 'idle';   // missão fal: só o agente da etapa atual trabalha
     const imgGen = sc.some((x) => x.img === 'gerando' || x.img === 'fila');
     const vidGen = sc.some((x) => x.vid === 'gerando' || x.vid === 'fila');
     if (id === 'nina') return this.state.busy === 'produto' ? 'work' : (st === 'produto' ? 'need' : 'idle');
@@ -519,6 +520,8 @@ export default class App extends React.Component {
   toast(text) { const id = Date.now() + Math.random(); this.setUI({ toast: { text, id } }); this.later(() => { if (this.state.ui.toast && this.state.ui.toast.id === id) this.setUI({ toast: null }); }, 3800); }
 
   openProd(tab) {
+    const P0 = this.prodP();
+    if (P0 && P0.engine === 'fal') { this.setState({ view: 'missao' }); if (this.state.ui.win === 'prod') this.closeWin(); return; }
     const sc = this.scenes(); const kind = this.revKind();
     const first = sc.find((x) => x[kind] === 'pronta' || x[kind] === 'falhou');
     this.setUI({ win: 'prod', tab, adjust: false, issues: [], adjText: '', revSel: first ? first.idx : this.state.ui.revSel, revView: 'scene' });
@@ -723,52 +726,71 @@ export default class App extends React.Component {
   setFal(patch) { this.setState((s) => ({ fal: { ...s.fal, ...patch } })); }
   async falPick(e) {
     const f = e.target.files && e.target.files[0]; e.target.value = '';
-    if (!f) return;
-    if (!IMAGE_EXT.test(f.name)) { this.toast('Use uma foto JPG, PNG ou WEBP.'); return; }
-    try { this.setFal({ file: { name: f.name, size: f.size, data: await readFile(f) }, reqId: null }); } catch (er) { this.toast(er.message); }
+    if (f) await this.falPickFile(f);
   }
-  // O botão fica desabilitado até a resposta; o MESMO client_request_id é reaproveitado em um reenvio (servidor devolve a produção que já existe).
+  async falPickFile(f) {
+    if (!IMAGE_EXT.test(f.name)) { this.setFal({ error: 'Use uma foto JPG, PNG ou WEBP.' }); return; }
+    try { this.setFal({ file: { name: f.name, size: f.size, data: await readFile(f) }, reqId: null, error: null }); } catch (er) { this.setFal({ error: er.message }); }
+  }
+  // "Criar vídeo · N créditos": clicar = consentimento. create → confirm → run em sequência; qualquer falha deixa o modal
+  // aberto com a mensagem do servidor. O MESMO client_request_id é reaproveitado num reenvio (o servidor devolve a produção
+  // que já existe e o /confirm//run recusam um segundo envio). Só depois do /run aceito o modal fecha e abre a Missão.
   async falCreate() {
     const f = this.state.fal;
     if (f.busy) return;
     const style = falStyleOf(this.state.S, f.style);          // só o Claro liberado: sempre ele, sem seletor
     const errs = falDraftErrors({ ...f, style });
-    if (errs.length) { this.toast('Falta ' + errs.join(', ') + '.'); return; }
+    if (errs.length) { this.setFal({ error: 'Falta ' + errs.join(', ') + '.' }); return; }
     const reqId = f.reqId || newRequestId();
-    this.setFal({ busy: true, reqId });
-    try {
-      const r = await post('/api/productions', falCreatePayload({ style, file: f.file, requestId: reqId, name: f.name }));
-      this.setState({ pid: r.pid, draftMode: false, caption: null });
-      this.setFal({ busy: false, reqId: null, file: null, name: '', style: null, tab: 'acompanhar' });
-      await this.refresh();
-      const P = this.prodP();
-      if (P && needsConfirmation(P)) this.setFal({ tab: 'criar' });
-      else this.toast('Recebemos a sua foto. Avisamos quando o pacote estiver pronto.');
-    } catch (e) { this.setFal({ busy: false }); this.toast('Não deu certo: ' + e.message); }
+    this.setFal({ busy: true, reqId, error: null });
+    const body = falCreatePayload({ style, file: f.file, requestId: reqId, name: f.name });
+    const r = await startFal(post, { body, cc: offerFor(this.state.S, style).cc });
+    if (!r.ok) { this.setFal({ busy: false, error: r.error }); return; }
+    this.setFal({ busy: false, reqId: null, file: null, name: '', style: null, error: null });
+    this.setState({ pid: r.pid, draftMode: false, caption: null, view: 'missao' });
+    this.closeWin();
+    await this.refresh();
   }
-  falConfirm() {
-    const P = this.prodP(); if (!P || !needsConfirmation(P)) return;
-    const total = P.confirmation.summary.total_cc;
-    this.setFal({ tab: 'acompanhar' });
-    this.act('confirmar', async () => { await post(`/api/productions/${P.id}/confirm`, { total_cc: total }); await post(`/api/productions/${P.id}/run`); }, 'Confirmado. O Kiroo começou.');
+  // Missão parada em "Aguardando você" (ex.: o /run falhou antes): o mesmo confirm → run, com o custo reservado à vista.
+  async falStart() {
+    const P = this.prodP(); if (!P || this.state.fal.busy) return;
+    const cc = P.confirmation && P.confirmation.summary ? P.confirmation.summary.total_cc : 0;
+    this.setFal({ busy: true, error: null });
+    const r = await continueFal(post, P.id, cc);
+    this.setFal({ busy: false, error: r.ok ? null : r.error });
+    await this.refresh();
   }
+  // Modal "Nova produção" (só envio).
   falModel(P) {
     const s = this.state;
     if (!falActive(s.S, P, s.draftMode)) return null;
     const f = s.fal;
-    return { P: P && P.engine === 'fal' ? P : null, view: falView(P), gallery: falGallery(P), tab: f.tab, setTab: (tab) => this.setFal({ tab }),
-      style: falStyleOf(s.S, f.style), styles: falStyles(s.S), setStyle: (style) => this.setFal({ style }), file: f.file, name: f.name, setName: (e) => this.setFal({ name: e.target.value }),
-      clearFile: () => this.setFal({ file: null, reqId: null }), pick: (e) => this.falPick(e), errors: falDraftErrors({ ...f, style: falStyleOf(s.S, f.style) }),
-      busy: f.busy || !!s.busy, create: () => this.falCreate(), confirm: () => this.falConfirm(), goTrack: () => this.setFal({ tab: 'acompanhar' }),
-      mode: s.S ? s.S.settings.mode : '', exportVideo: () => this.exportVideo(), cancel: () => this.cancelProd(),
-      confirmCancel: !!s.ui.confirmCancel, canCancel: !!(P && !endedOf(P) && P.status !== 'completed') };
+    const style = falStyleOf(s.S, f.style);
+    const demo = !!(s.S && s.S.settings.mode !== 'real');
+    return { P: P && P.engine === 'fal' ? P : null, draft: !!s.draftMode,
+      style, styles: falStyles(s.S), setStyle: (st) => this.setFal({ style: st }), file: f.file, name: f.name, setName: (e) => this.setFal({ name: e.target.value }),
+      clearFile: () => this.setFal({ file: null, reqId: null }), pick: (e) => this.falPick(e), pickFile: (file) => this.falPickFile(file),
+      errors: falDraftErrors({ ...f, style }), error: f.error || null, busy: f.busy, demo,
+      label: createLabel(offerFor(s.S, style), demo), create: () => this.falCreate(),
+      close: () => { if (!f.busy) { this.setFal({ error: null }); this.closeWin(); } } };
+  }
+  // Missão fal (status real + esteira estimada + entrega).
+  falMission(P) {
+    if (!P || P.engine !== 'fal') return null;
+    const s = this.state;
+    const belt = falStations(P);
+    const cc = P.confirmation && P.confirmation.summary ? P.confirmation.summary.total_cc : 0;
+    const credits = P.confirmation && P.confirmation.summary ? P.confirmation.summary.total_credits : null;
+    return { P, status: belt.status, stations: belt.stations, progress: belt.progress, gallery: falGallery(P),
+      start: () => this.falStart(), startLabel: cc > 0 && credits ? `Criar vídeo · ${credits} créditos` : 'Criar vídeo',
+      busy: s.fal.busy || !!s.busy, error: s.fal.error, exportVideo: () => this.exportVideo() };
   }
   exportVideo() {
     const P = this.prodP(); if (!P) return;
     this.act('exportar', () => post(`/api/productions/${P.id}/final`, { decision: 'approve', note: 'exportado pelo estúdio' }), 'Exportado! Baixe os arquivos e publique pelo app da Shopee.');
   }
   newProduction() {
-    this.setFal({ style: null, file: null, name: '', reqId: null, busy: false, tab: 'criar' });
+    this.setFal({ style: null, file: null, name: '', reqId: null, busy: false, error: null });
     this.setState({ pid: null, draftMode: true, files: [], creative: null, preview: null, opts: null, caption: null, draft: Object.assign({}, EMPTY_DRAFT) });
     this.setUI({ win: 'prod', tab: 'produto' });
     this.toast('Nova produção! A Nina está esperando o produto.');
@@ -877,7 +899,14 @@ export default class App extends React.Component {
     let nextLabel = '', nextLong = '', goNext = () => {};
     const endedText = !P || !ended ? '' : ended === 'cancelled' ? 'Nada mais é gerado nem cobrado; o que já foi gerado continua no histórico.'
       : 'Motivo: ' + (P.reason || 'veja o histórico') + '. Nada mais é gerado nem cobrado.';
-    if (P && ended) { nextLabel = 'Nova missão'; goNext = () => this.newProduction();
+    const falSt = P && P.engine === 'fal' ? falStatus(P) : null;
+    if (falSt && !ended) {
+      nextLong = falSt.label + '. ' + falSt.text;
+      if (falSt.action === 'start') { nextLabel = 'Criar vídeo'; goNext = () => this.falStart(); }
+      else if (falSt.kind === 'done' && P.status === 'awaiting_final_review') { nextLabel = 'Ver entrega'; goNext = () => this.setState({ view: 'missao' }); }
+      else if (P.status === 'completed') { nextLabel = 'Nova produção'; goNext = () => this.newProduction(); }
+    }
+    else if (P && ended) { nextLabel = 'Nova missão'; goNext = () => this.newProduction();
       nextLong = (ended === 'cancelled' ? (falEndedLabel(P) || 'Missão cancelada') + '. ' : 'A missão falhou. ') + endedText; }
     else if (P && P.status === 'paused') { nextLabel = 'Ver pausa'; nextLong = 'Produção pausada: ' + (P.reason || ''); goNext = () => { this.setUI({ budgetHit: true, budgetDismissed: null }); this.openProd('revisao'); }; }
     else if (needA) { nextLabel = { nina: 'Abrir ficha', theo: 'Ver proposta', iris: 'Liberar imagens', rui: 'Revisar agora', lia: 'Liberar vídeos', beto: 'Ver vídeo' }[needA.id]; nextLong = needA.name + ' precisa de você.'; goNext = () => this.openProd(tabOf(needA.id)); }
@@ -1048,13 +1077,15 @@ export default class App extends React.Component {
       roteiro: rsOf(idx < 1 ? 'nina' : 'theo'), criativo: rsOf('iris'), video: rsOf('lia'), revisao: rsOf('rui'), entrega: rsOf('beto'),
       // estações da esteira (um agente cada)
       produto: rsOf('nina'), direcao: rsOf('theo'), imagens: rsOf('iris'), videos: rsOf('lia') } });
+    const falM = this.falMission(P);
+    if (falM) { pipeline.stations = falM.stations; pipeline.progress = falM.progress; pipeline.current = falM.stations.find((x) => x.current) ? falM.stations.find((x) => x.current).id : null; }
     const attn = P ? attention({ paused, ended, pauseReason: P.reason, rooms: ROOMS.filter((r) => r.agent && statuses[r.agent] === 'need').map((r) => ({ id: r.id, name: r.name, who: AGM[r.agent].name,
       status: this.roomStatus(r), need: true, look: AGM[r.agent].look, work: () => this.openRoomWork(r.id) })) }) : [];
 
     return {
       // shell
       view: s.view, setView: (id) => { if (s.ui.win === 'dialog') this.closeWin(); this.setState({ view: id }); }, shell: true,
-      pipeline, attn, statuses: P ? statuses : { ...statuses, nina: 'idle' }, hasProd: !!P, openStep: (tab) => this.openProd(tab), prodId: P ? P.id : null,
+      pipeline, attn, falMission: falM, statuses: P ? statuses : { ...statuses, nina: 'idle' }, hasProd: !!P, openStep: (tab) => this.openProd(tab), prodId: P ? P.id : null,
       // mundo
       scale, zoom, camX, camY, vw: s.vw, vh: s.vh, setup: su, desks, highlight, dest,
       openTour: () => this.openTour(), tourOpen: !!s.onb,
@@ -1099,7 +1130,7 @@ export default class App extends React.Component {
       celebrate: st === 'exportado', confetti: CONFETTI,
       // HUD
       mode, conn: s.conn, connErr: s.err, busy: s.busy,
-      prodName: P ? P.product.name : (s.draft.name || 'Nova produção'), stageLabel: P && P.status === 'paused' ? 'Pausada' : STAGE_LABELS[st],
+      prodName: P ? P.product.name : (s.draft.name || 'Nova produção'), stageLabel: falM && falM.status ? falM.status.label : P && P.status === 'paused' ? 'Pausada' : STAGE_LABELS[st],
       nextLabel, nextLong: nextLong || 'Nada pendente agora.', goNext,
       // Cabeçalho: só um indicador discreto do saldo; o destaque é o produto e as cenas. Nunca "X de Y créditos".
       spentText: balanceLabel(s.S ? s.S.credits : null) || usedLabel(credits), usedText: usedLabel(credits),

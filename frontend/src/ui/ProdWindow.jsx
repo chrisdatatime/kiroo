@@ -513,7 +513,7 @@ function TabEntrega({ v }) {
 }
 
 export default function ProdWindow({ v }) {
-  if (v.fal) return <FalWindow v={v} />;   // motor novo (foto + estilo): janela própria, só com a flag ligada
+  if (v.fal) return v.fal.draft ? <FalWindow v={v} /> : null;   // motor novo: só o modal "Nova produção"; o resto fica na Missão
   return (
     <section role="dialog" aria-labelledby="prod-h" className="g-panel pop" style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', zIndex: 20, width: 'min(1000px,calc(100vw - 24px))', height: 'min(680px,calc(100vh - 24px))', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <div style={{ padding: '12px 14px 0', background: '#F2F2EF', borderBottom: '1px solid #E7E7E4', display: 'flex', flexDirection: 'column', gap: 10 }}>

@@ -99,6 +99,31 @@ def create_production(o, product: ProductInput, *, style: str, workspace_id: str
     return pid, False
 
 
+ALREADY_SENT = "Este vídeo já foi enviado para criação. Nada foi cobrado de novo."
+ALREADY_DONE = "Este vídeo já está pronto."
+
+
+def started_message(db, pid: str) -> str | None:
+    """Idempotencia de /confirm e /run: mensagem (409) se a producao JA tem tentativa ativa ou concluida no workflow;
+    None se ainda nao comecou. Nunca se submete um segundo job a fal.ai para a mesma producao sem cancelamento
+    explicito (o `resubmit` do administrador e o unico caminho, e nao passa por aqui)."""
+    row = db.production(pid)
+    if row is None or engine_of(row) != "fal":
+        return None
+    if PS(row["status"]) in {PS.EDITING, PS.AWAITING_FINAL_REVIEW, PS.COMPLETED}:
+        return ALREADY_DONE
+    att = db.conn.execute("SELECT * FROM attempts WHERE production_id=? AND kind='workflow' AND superseded=0 "
+                          "ORDER BY created_at DESC, rowid DESC LIMIT 1", (pid,)).fetchone()
+    if att is None:
+        return None
+    stage = json.loads(att["remote_meta_json"] or "{}").get("stage")
+    if att["status"] == "succeeded":
+        return ALREADY_DONE
+    if att["status"] == "submitted" or att["submitted_at"] or stage in ("submitting", "uncertain", "submitted"):
+        return ALREADY_SENT
+    return None
+
+
 # =================================================================== execucao
 class FalRunner:
     def __init__(self, orch):

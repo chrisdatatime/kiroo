@@ -21,6 +21,13 @@ Sem mixagem, trilha, ducking, loudnorm ou `atempo`. So:
 
 Codigo: `src/studio/providers/fal.py` (REST), `fal_contract.py` (pacote canonico), `fal_pipeline.py` (execucao), `agents/composer.py` (FFmpeg), `package_files.py` (validacao pelos bytes), `providers/simulated_fal.py` (DEMO e testes).
 
+## Fluxo na interface
+* **Nova produção** (modal so de envio): foto (solte ou escolha), nome opcional, estilo (Claro; Escuro so com `STUDIO_FAL_DARK_ENABLED`) e UM botao **"Criar video · N creditos"** (o mesmo pre-orcamento reservado e conferido no `/confirm`). Clicar = consentimento: o frontend faz `create -> confirm -> run` com `await`; se um passo falha, o modal fica aberto com a mensagem do servidor. So depois do `/run` aceito ele fecha e abre a Missao.
+* **A criacao nao inicia nada** (antes ela disparava o laco, que parava em `validated` e a tela dizia "Preparando"). Quem inicia e o `/run`.
+* **Idempotencia:** `/confirm` e `/run` devolvem **409 `already_started`** se a producao ja tem tentativa ativa/concluida ou execucao em andamento (`fal_pipeline.started_message`). `/run` tambem recusa sem a confirmacao do custo (`needs_confirmation`) e quando o limite de gastos barraria o envio (`spend_limit`, "Seu limite mensal foi atingido"), sem pausar nada. Nunca ha segundo job para a mesma producao sem `studio fal resubmit`.
+* **Missao:** esteira de 6 etapas (PLANEJAMENTO, ROTEIRO, IMAGENS, VIDEOS, REVISAO, EDICAO) com o avanco **estimado pelo tempo** desde o envio (`EST_WORKFLOW_S` = 180 s em `frontend/src/ui/falFlow.js`; a fal so informa fila/andamento/concluido). EDICAO so conclui com a entrega validada. Status sempre do servidor: "Aguardando voce", etapa estimada, "Pausada: limite mensal atingido", "Nao deu certo. Nada foi cobrado.", "Pronto" + entrega na propria Missao.
+* **Preco:** `workflow_light` = US$ 0,60 (medido 0,514894 + folga) = **9,72 creditos** com a politica atual.
+
 ## Garantias
 * **Nunca reenvia sozinho.** A tentativa e gravada antes do envio; envio sem resposta fica `fal_submit_uncertain` e pausa. Nova execucao so por `studio fal resubmit <pid>` (passa pelo paid_gate e pelo orcamento operacional).
 * **Duplo clique:** `client_request_id` unico por workspace (indice unico no SQLite): a segunda criacao devolve a producao existente e nao reserva de novo.

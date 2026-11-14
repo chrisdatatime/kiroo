@@ -854,7 +854,7 @@ class App:
             finally:
                 db.close()
             data["settings"]["video_engine"] = self._engine_for(ctx["ws"], s)   # a interface so mostra o fluxo fal.ai com "fal"
-            data["settings"]["fal_styles"] = [{"id": k, "label": fal_contract.STYLE_LABELS[k]} for k in fal_contract.enabled_styles(s)]
+            data["settings"]["fal_styles"] = self._fal_offer(s, data["settings"].get("mode"))
             return _json(200, data)
         if path.startswith("/media/"):
             return self._media(path, ctx, url.query)
@@ -1102,6 +1102,47 @@ class App:
         own = ws["video_engine"] if ws is not None and "video_engine" in ws.keys() else None
         return own if own in ("gemini", "fal") else s.video_engine
 
+    @staticmethod
+    def _fal_offer(s, mode) -> list[dict]:
+        """Estilos liberados com o preco EXATO do botao "Criar video · N creditos" (o mesmo pre-orcamento reservado na
+        criacao e conferido no /confirm). No DEMO nada e cobrado: cc 0."""
+        from .. import budget as budget_mod
+        from ..credits import fmt as fmt_cc
+        out = []
+        for k in fal_contract.enabled_styles(s):
+            cc = budget_mod.estimate_workflow(s, k)["cc"] if mode == "real" else 0
+            out.append({"id": k, "label": fal_contract.STYLE_LABELS[k], "cc": cc, "credits": fmt_cc(cc)})
+        return out
+
+    def _fal_guard(self, pid: str, action: str, s) -> Response | None:
+        """/confirm e /run do motor fal.ai: 409 se ja ha tentativa ativa/concluida ou execucao em andamento (nunca um
+        segundo job); /run tambem recusa sem a confirmacao do custo e quando o limite de gastos ja barraria o envio."""
+        from .. import budget as budget_mod, fal_pipeline
+        db = Database(s.db_path)
+        try:
+            row = db.production(pid)
+            if row is None or fal_pipeline.engine_of(row) != "fal":
+                return None
+            msg = fal_pipeline.started_message(db, pid)
+            if msg is None and self.is_running(pid):
+                msg = "Este vídeo já está sendo criado."
+            if msg is not None:
+                return _json(409, {"error": msg, "code": "already_started"})
+        finally:
+            db.close()
+        if action != "run":
+            return None
+        orch = self.orch_for(pid)
+        try:
+            if orch.needs_confirmation(pid):
+                return _json(409, {"error": "Confirme o custo antes de começar.", "code": "needs_confirmation"})
+            limit = orch.spend_block_message(pid, budget_mod.estimate_workflow(s, row["style"])["usd"])
+            if limit:
+                return _json(409, {"error": limit, "code": "spend_limit"})
+        finally:
+            orch.db.close()
+        return None
+
     def _create_fal(self, payload: dict, ctx) -> Response:
         """Criacao do motor fal.ai: UMA foto, o estilo (Escuro/Claro) e um id do cliente (anti duplo clique)."""
         s = ctx["s"]
@@ -1154,8 +1195,8 @@ class App:
             return self._no_credits(exc)
         finally:
             orch.db.close()
-        if not dup:
-            self.start_run(pid)
+        # NAO inicia aqui: quem inicia e o /run, depois do /confirm (clique = consentimento). Antes, a criacao ja
+        # disparava o laco, que parava em `validated` esperando a confirmacao e a tela mostrava "Preparando" a toa.
         return _json(200, {"ok": True, "pid": pid, "mode": s.mode, "duplicate": dup})
 
     def _create(self, payload: dict, ctx) -> Response:
@@ -1238,6 +1279,10 @@ class App:
                 what = "cancelada" if status == PS.CANCELLED else "encerrada com falha"
                 return _json(409, {"error": f"Esta missão foi {what}: nada mais é gerado nem cobrado nela. "
                                             "Comece uma nova missão.", "ended": status})
+        if action in ("run", "confirm"):
+            blocked = self._fal_guard(pid, action, s)
+            if blocked is not None:
+                return blocked
         if action == "run":
             self.orch_for(pid).db.close()  # valida se a produção pode rodar no modo atual
             return _json(200, {"ok": True, "started": self.start_run(pid)})

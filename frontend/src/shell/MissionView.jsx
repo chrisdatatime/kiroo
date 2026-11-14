@@ -5,6 +5,7 @@ import CancelMission from './CancelMission.jsx';
 import Conveyor from './Conveyor.jsx';
 import { creditsByStation, taskThumb } from './conveyor.js';
 import { getJSON } from '../engine/api.js';
+import { FalStatusCard, FalDelivery } from '../ui/FalMission.jsx';
 
 const ICON = { objetivo: 'chat', orquestrador: 'brain', roteiro: 'edit', criativo: 'image', video: 'video', revisao: 'shield', entrega: 'box' };
 const SUB = { objetivo: 'Defina o produto', orquestrador: 'Interpreta, planeja, delega e acompanha', revisao: 'Valida qualidade e solicita decisões necessárias', entrega: 'Arquivos, histórico, custos e resultado' };
@@ -67,6 +68,25 @@ function Flow({ v }) {
   );
 }
 
+// Missão do fluxo foto + estilo: esteira das 6 etapas (nome da etapa em destaque, agente pequeno), status real do
+// servidor e, quando pronta, a entrega. Sem janelas por etapa nem "Fluxo detalhado": o cliente só acompanha.
+function FalMissionView({ v, m }) {
+  return (
+    <div className="pv-scroll"><div className="pv-wrap">
+      <Conveyor stations={m.stations} team={v.team} ended={v.ended} missionKey={v.prodId} stepFirst onOpen={null} />
+      <div className="pv-grid pv-mission-cards">
+        <FalStatusCard m={m} />
+        <section className="pv-card" style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 8 }} aria-label="Custo">
+          <div className="pv-h2" style={{ margin: 0 }}>{v.prodName || 'Seu vídeo'}</div>
+          {v.balanceText && <div className="pv-meta">{v.balanceText}</div>}
+          <CancelMission v={v} />
+        </section>
+      </div>
+      <FalDelivery m={m} />
+    </div></div>
+  );
+}
+
 // Missão: a esteira de agentes (visão principal) com o estado REAL de cada estação; abaixo, próxima ação, custo e o
 // fluxo detalhado. O mapa do escritório segue como visão secundária (view `escritorio`).
 export default function MissionView({ v }) {
@@ -83,6 +103,7 @@ export default function MissionView({ v }) {
       </div></div>
     );
   }
+  if (v.falMission) return <FalMissionView v={v} m={v.falMission} />;
   const thumbs = { imagens: taskThumb('imagens', v), videos: taskThumb('videos', v) };
   return (
     <div className="pv-scroll"><div className="pv-wrap">

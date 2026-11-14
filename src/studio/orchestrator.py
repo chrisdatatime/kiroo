@@ -672,6 +672,27 @@ class Orchestrator:
         self.db.set_production_status(pid, PS.PAUSED, reason)
         self.db.update_production(pid, pause_code=code)
 
+    def spend_block_message(self, pid: str, estimate: float) -> str | None:
+        """Mesmas barreiras de `_check_budget` (portao, teto da plataforma, teto mensal da conta), mas SEM pausar nem
+        gravar nada: usada antes de comecar (botao "Criar video"), para o cliente ver o motivo na hora. None = liberado."""
+        prod = self.db.production(pid)
+        if prod["mode"] != "real" or estimate <= 0:
+            return None
+        from . import paid_gate
+        from .spend import month_real_spend
+        wid = prod["workspace_id"] if "workspace_id" in prod.keys() else None
+        try:
+            paid_gate.check_spend(self.db, estimate, workspace_id=wid)
+        except paid_gate.PaidCallsBlocked as exc:
+            if exc.reason == "platform_cap":
+                return "Seu limite mensal foi atingido. Nada foi cobrado."
+            return str(exc)
+        ws = self.db.conn.execute("SELECT * FROM workspaces WHERE id=?", (wid,)).fetchone() if wid else None
+        cap = paid_gate.effective_cap(ws["monthly_cap_usd"] if ws else self.s.monthly_cap_usd)
+        if cap <= 0 or month_real_spend(self.db, workspace_id=wid) + estimate > cap + 1e-9:
+            return "Seu limite mensal foi atingido. Nada foi cobrado."
+        return None
+
     def _check_budget(self, pid: str, estimate: float, what: str, stage: str | None = None) -> None:
         """Freios independentes, nesta ordem (o primeiro que bloquear pausa; nada é chamado nem cobrado):
         1. portão de chamadas pagas e teto mensal (conta/plataforma; teto 0 nunca gasta) — só modo real;

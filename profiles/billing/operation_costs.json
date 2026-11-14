@@ -1,6 +1,6 @@
 {
   "_nota": "Custo estimado (US$) por operação, usado no PRÉ-ORÇAMENTO da produção (reserva do saldo do cliente antes de começar) e nas reservas de conferência/roteiro. usd null = usa a tabela de preços do modelo configurado (src/studio/pricing.py). Troque o arquivo inteiro com STUDIO_OPERATION_COSTS_FILE.",
-  "workflow_nota": "PLACEHOLDER: workflow_dark/workflow_light (US$ por execução do pacote: vídeo com narração + 1 foto + legenda) são valores de referência até a medição real na Fase 5. Não são preço da fal.ai.",
+  "workflow_nota": "workflow_light = 0,60 US$ por execução do pacote (vídeo com narração + 1 foto + legenda): custo real medido 0,514894 US$ (studio fal reconcile, prod_6ea2bc1fd9) + folga. workflow_dark segue PLACEHOLDER até medir. Não são preço da fal.ai.",
   "version": 1,
   "retrieved_on": "2026-10-26",
   "operations": {
@@ -11,6 +11,6 @@
     "video":        {"usd": null, "per": "take",    "label": "Vídeo"},
     "review_video": {"usd": 0.01, "per": "chamada", "label": "Conferência do take"},
     "workflow_dark":  {"usd": 2.00, "per": "execução", "label": "Pacote completo (Escuro)", "placeholder": true},
-    "workflow_light": {"usd": 2.00, "per": "execução", "label": "Pacote completo (Claro)", "placeholder": true}
+    "workflow_light": {"usd": 0.60, "per": "execução", "label": "Pacote completo (Claro)", "measured_usd": 0.514894, "measured_on": "staging, prod_6ea2bc1fd9 (studio fal reconcile)"}
   }
 }
