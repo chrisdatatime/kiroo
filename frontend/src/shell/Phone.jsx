@@ -6,8 +6,8 @@ import CancelMission from './CancelMission.jsx';
 import { useReducedMotion } from './Conveyor.jsx';
 import { stationAria } from './conveyor.js';
 import { usePhone } from '../hooks/use-phone.js';
-import { FAL_STEP_BOUNDS } from '../ui/falFlow.js';
-import { missionWord, stepFills, canShareFile, shareSupported, shareFallback, shareName } from '../ui/mobile.js';
+import { useFalBelt } from '../ui/FalMission.jsx';
+import { missionWord, canShareFile, shareSupported, shareFallback, shareName } from '../ui/mobile.js';
 
 // Celular (<= 640 px): telas pensadas para o polegar, uma ação principal por tela (fixa no rodapé, acima da barra
 // inferior). Os dados são os mesmos do desktop (viewModel do App); só a forma muda. CSS em shell.css (.pv-ph-*).
@@ -68,12 +68,13 @@ export function PhoneMissions({ v }) {
 const titleCase = (t) => (t ? t.charAt(0) + t.slice(1).toLowerCase() : '');
 
 // Uma linha por etapa: nome da etapa em destaque, agente pequeno e a barra na largura toda. Altura fixa por linha
-// (textos numa linha só, barra sempre presente): nada pula de lugar entre um poll e outro.
-export function BeltVertical({ stations, progress, bounds = null, team, ended = null, missionKey = null, autoScroll = true }) {
+// (textos numa linha só, barra sempre presente): nada pula de lugar entre um poll e outro. A barra de cada etapa é o
+// `level` da estação (falBelt.js, a mesma fonte da esteira do desktop).
+const fillOf = (s) => (s.state === 'need' && s.current ? 100 : typeof s.level === 'number' ? s.level : s.state === 'done' ? 100 : 0);   // aguardando você: barra cheia na cor de atenção
+export function BeltVertical({ stations, team, ended = null, missionKey = null, autoScroll = true }) {
   const rm = useReducedMotion();
   const refs = React.useRef({});
   const scrolled = React.useRef({});
-  const fills = stepFills(stations, progress, bounds);
   const current = stations.find((s) => s.current);
   const curId = current ? current.id : null;
   const nameOf = (s) => { const a = team.find((t) => t.id === s.agent); return a ? a.name : s.agent; };
@@ -91,17 +92,17 @@ export function BeltVertical({ stations, progress, bounds = null, team, ended = 
   return (
     <section className="pv-vbelt pv-card" aria-label="Esteira de agentes" data-ended={ended || undefined} data-motion={rm ? 'reduced' : undefined} data-testid="belt-vertical">
       <ol>
-        {stations.map((s, k) => {
+        {stations.map((s) => {
           const a = team.find((t) => t.id === s.agent);
           return (
-            <li key={s.id} ref={(el) => { refs.current[s.id] = el; }} className="pv-vrow" data-s={s.state} data-current={s.current || undefined}
+            <li key={s.id} ref={(el) => { refs.current[s.id] = el; }} className="pv-vrow" data-s={s.state} data-fail={s.fail || undefined} data-current={s.current || undefined}
               aria-current={s.current ? 'step' : undefined} aria-label={stationAria(s, nameOf(s))}>
               <span className="pv-vrow-top">
                 <strong className="pv-vstep">{titleCase(s.title)}</strong>
                 <span className="pv-vstate">{s.state === 'done' ? <Check size={15} strokeWidth={2.6} aria-hidden="true" /> : null}{s.label}</span>
               </span>
               <span className="pv-vagent">{a ? <Avatar look={a.look} size={24} /> : null}<span>{nameOf(s)}{s.detail ? ` · ${s.detail}` : ''}</span></span>
-              <span className="pv-vbar" aria-hidden="true"><i style={{ transform: `scaleX(${fills[k] / 100})` }} /></span>
+              <span className="pv-vbar" aria-hidden="true"><i style={{ transform: `scaleX(${fillOf(s) / 100})` }} /></span>
             </li>
           );
         })}
@@ -181,21 +182,23 @@ function PhoneDelivery({ m, product }) {
 }
 
 // ---------------------------------------------------------------- missão (fluxo foto + estilo)
-export function PhoneFalMission({ v, m }) {
+export function PhoneFalMission({ v, m: m0 }) {
+  const belt = useFalBelt(m0.P);       // esteira animada: mesma fonte (falBelt) e mesmo estado do desktop
+  const m = { ...m0, status: belt.status, stations: belt.stations, progress: belt.progress };
   const st = m.status || {};
-  const done = !!(m.gallery && m.gallery.video);
+  const done = !!(m.gallery && m.gallery.video) && belt.allDone;   // a entrega sobe só depois das 6 etapas cheias
   const ended = ['failed', 'cancelled', 'partial'].includes(st.kind);
   return (
     <div className="pv-scroll"><div className="pv-wrap pv-ph">
       {done && <PhoneDelivery m={m} product={v.prodName} />}
       {!done && (
         <section className="pv-ph-status" role="status" data-kind={st.kind}>
-          <strong>{st.label}{st.kind === 'running' && st.estimated ? <span> · estimada</span> : null}</strong>
+          <strong>{st.label}</strong>
           <p>{st.text}</p>
           {st.kind === 'running' && <span className="pv-ph-pct">{m.progress}%</span>}
         </section>
       )}
-      <BeltVertical stations={m.stations} progress={m.progress} bounds={FAL_STEP_BOUNDS} team={v.team} ended={v.ended} missionKey={v.prodId} autoScroll={!done} />
+      <BeltVertical stations={m.stations} team={v.team} ended={v.ended} missionKey={v.prodId} autoScroll={!done} />
       {(v.balanceText || v.canCancel) && (
         <section className="pv-ph-foot" aria-label="Custo">
           {v.balanceText && <span>{v.balanceText}</span>}

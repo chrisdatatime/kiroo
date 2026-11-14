@@ -18,6 +18,8 @@ export const effectiveStyle = (S, chosen) => {
 export const FINAL_FINALIZING = 'Estamos finalizando o seu pacote. Avisaremos quando estiver pronto.';
 export const IMAGE_EXT = /\.(jpe?g|png|webp)$/i;
 
+import { EST_WORKFLOW_S, EST_CAP, falFacts, stepBelt, currentStep, overallProgress } from './falBelt.js';
+
 export const isFalProduction = (P) => !!(P && P.engine === 'fal');
 const incompleteDelivery = (P) => ['incomplete', 'partial'].includes((P.fal && P.fal.delivery_status) || P.delivery_status);
 // O fluxo fal.ai vale para a missão nova (motor da conta) e para qualquer produção que já seja fal.
@@ -79,10 +81,10 @@ export function offerFor(S, styleId) {
 export const createLabel = (offer, demo) => (demo || !offer.cc ? 'Criar vídeo' : `Criar vídeo · ${offer.credits} créditos`);
 export const RECEIVE_LINE = 'Você recebe: vídeo ~15 s com narração, 1 foto, título e legenda. Se falhar por erro técnico, não é cobrado.';
 
-// ---------------------------------------------------------------- esteira (ESTIMATIVA por tempo)
-// A fal só informa IN_QUEUE / IN_PROGRESS / COMPLETED. O avanço por etapa abaixo é uma ESTIMATIVA pelo tempo decorrido
-// desde o envio (EST_WORKFLOW_S), só para a esteira ter vida. Nunca passa de REVISÃO enquanto o workflow roda, e
-// EDIÇÃO só fica concluída com a entrega baixada e validada (servidor em awaiting_final_review/completed).
+// ---------------------------------------------------------------- esteira (ESTIMATIVA por tempo + etapas reais do servidor)
+// Os níveis por etapa vêm de falBelt.js (leia o comentário lá): PLANEJAMENTO..VÍDEOS são ESTIMADOS pelo tempo desde o envio
+// (a fal só diz IN_QUEUE / IN_PROGRESS / COMPLETED); REVISÃO e EDIÇÃO são etapas reais do servidor. `view` (opcional) é o
+// estado animado mantido pela tela (useFalBelt); sem ele, usa-se o estado "assentado" (sem animação).
 export const FAL_STEPS = [
   { id: 'planejamento', title: 'PLANEJAMENTO', label: 'Planejamento', agent: 'nina' },
   { id: 'roteiro', title: 'ROTEIRO', label: 'Roteiro', agent: 'theo' },
@@ -91,51 +93,48 @@ export const FAL_STEPS = [
   { id: 'revisao', title: 'REVISÃO', label: 'Revisão', agent: 'rui' },
   { id: 'edicao', title: 'EDIÇÃO', label: 'Edição', agent: 'beto' },
 ];
-export const EST_WORKFLOW_S = 180;          // ESTIMATIVA da duração do workflow (não vem da fal)
-const EST_CUTS = [0.12, 0.35, 0.85];         // ESTIMATIVA: roteiro → imagens → vídeos → revisão (fração de EST_WORKFLOW_S)
+export { EST_WORKFLOW_S };
 
 const isRunning = (P) => !!P.running || ['producing', 'editing'].includes(P.status);
 const notStarted = (P) => ['received', 'awaiting_references', 'validated', 'scripted'].includes(P.status) && !P.running;
 
-// Índice da etapa atual (0..5), 6 = tudo pronto, null = ainda não começou. `now` em ms (testável).
+// Estado exibido sem animação (primeiro desenho / testes).
+export const settledBelt = (P, now = Date.now()) => stepBelt(null, falFacts(P, now), now);
+
+// Níveis + etapa atual + progresso geral a partir de um estado da esteira (animado ou assentado).
+export function beltLevels(st) {
+  const cur = currentStep(st.levels, st.phase);
+  const allDone = st.levels.every((l) => l >= 100);
+  return { levels: st.levels, phase: st.phase, cur, allDone, progress: overallProgress(st.levels),
+    finalizing: st.phase === 'running' && cur === 3 && st.levels[3] >= EST_CAP };   // fal passou da estimativa: VÍDEOS em 95%
+}
+
+// Índice da etapa atual (0..5), 6 = tudo pronto, null = ainda não começou.
 export function falStepIndex(P, now = Date.now()) {
   if (!isFalProduction(P)) return null;
-  if (P.status === 'awaiting_final_review' || P.status === 'completed') return 6;
-  if (P.status === 'editing') return 5;
-  const f = P.fal || {};
-  if (notStarted(P) && !f.submitted_at) return null;
-  const sent = f.submitted_at ? Date.parse(f.submitted_at) : NaN;
-  if (!Number.isFinite(sent) || f.remote_status === 'IN_QUEUE') return 0;
-  const frac = Math.max(0, (now - sent) / 1000) / EST_WORKFLOW_S;
-  return 1 + EST_CUTS.filter((c) => frac >= c).length;          // 1..4: nunca EDIÇÃO só pelo tempo
+  return beltLevels(settledBelt(P, now)).cur;
 }
+export const falProgress = (P, now = Date.now()) => (isFalProduction(P) ? beltLevels(settledBelt(P, now)).progress : 0);
 
-export function falProgress(P, now = Date.now()) {
-  const i = falStepIndex(P, now);
-  if (i === null) return 0;
-  if (i >= 6) return 100;
-  if (i === 5) return 95;
-  if (i === 0) return 4;
-  const f = P.fal || {};
-  const frac = Math.max(0, (now - Date.parse(f.submitted_at)) / 1000) / EST_WORKFLOW_S;
-  return Math.round(8 + Math.min(frac, 1) * 82);                // até 90%: o resto é a entrega validada
-}
-
-// Faixa do progresso geral (falProgress) em que cada etapa fica: a mesma conta, usada pela esteira vertical do celular
-// para encher a barra da etapa atual (fila 0–8, depois os cortes de EST_CUTS até 90, EDIÇÃO 90–100).
-const pctAt = (frac) => Math.round((8 + frac * 82) * 10) / 10;
-export const FAL_STEP_BOUNDS = [[0, 8], [8, pctAt(EST_CUTS[0])], [pctAt(EST_CUTS[0]), pctAt(EST_CUTS[1])], [pctAt(EST_CUTS[1]), pctAt(EST_CUTS[2])], [pctAt(EST_CUTS[2]), 90], [90, 100]];
+const runningStatus = (b) => {
+  const step = FAL_STEPS[Math.min(b.cur === null ? 0 : b.cur, 5)];
+  return { kind: 'running', label: step.label, step: step.id,
+    text: b.finalizing ? 'Finalizando…' : 'Estamos criando seu vídeo. Pode sair desta tela: avisamos quando terminar.' };
+};
 
 // Estado mostrado ao cliente, SEMPRE derivado do servidor. Nada de "Preparando"/"Criando" antes do /run aceito.
+// "Pronto" só aparece depois que a esteira terminou de preencher as seis etapas (quando `view` é dado).
 // kind: waiting | running | limit | finalizing | paused | failed | cancelled | partial | done
-export function falStatus(P, now = Date.now()) {
+export function falStatus(P, now = Date.now(), view = null) {
   if (!isFalProduction(P)) return null;
   const f = P.fal || {};
   const ended = endedOfStatus(P);
+  const b = beltLevels(view || settledBelt(P, now));
   if (ended === 'failed') return { kind: 'failed', label: 'Não deu certo', text: 'Não deu certo. Nada foi cobrado.' };
   if (ended === 'cancelled') return incompleteDelivery(P)
     ? { kind: 'partial', label: 'Entrega parcial', text: 'A foto não ficou pronta e a missão foi encerrada. Nada mais é cobrado.' }
     : { kind: 'cancelled', label: 'Cancelada', text: 'Missão cancelada. Nada mais é gerado nem cobrado.' };
+  if (view && ['awaiting_final_review', 'completed'].includes(P.status) && !b.allDone) return runningStatus(b);   // não pular: anima até 100%
   if (P.status === 'completed') return { kind: 'done', label: 'Pronto', text: 'Pronto e exportado.' };
   if (P.status === 'awaiting_final_review') return { kind: 'done', label: 'Pronto', text: 'Seu vídeo está pronto.' };
   if (P.status === 'paused') {
@@ -148,37 +147,35 @@ export function falStatus(P, now = Date.now()) {
   }
   if (P.status === 'awaiting_references') return { kind: 'waiting', label: 'Aguardando você', text: P.reason || 'Envie outra foto do produto.', action: null };
   if (notStarted(P)) return { kind: 'waiting', label: 'Aguardando você', text: 'O vídeo ainda não começou. Nada foi cobrado.', action: 'start' };
-  if (isRunning(P)) {
-    const i = falStepIndex(P, now);
-    const step = FAL_STEPS[Math.min(i === null ? 0 : i, 5)];
-    return { kind: 'running', label: step.label, step: step.id, estimated: i !== 5,
-      text: 'Estamos criando seu vídeo. Pode sair desta tela: avisamos quando terminar.' };
-  }
+  if (isRunning(P)) return runningStatus(b);
   return { kind: 'waiting', label: 'Aguardando você', text: 'O vídeo ainda não começou. Nada foi cobrado.', action: 'start' };
 }
 
-// Estações da esteira (mesmo formato que o Conveyor desenha). `tab` vazio: a missão fal não tem janelas por etapa.
-export function falStations(P, now = Date.now()) {
-  const st = falStatus(P, now);
-  const i = falStepIndex(P, now);
-  const where = i === null ? -1 : Math.min(i, 6);
+// Estações da esteira (mesmo formato que o Conveyor desenha), cada uma com `level` (0..100) para a barra do cartão.
+// `tab` vazio: a missão fal não tem janelas por etapa. `view`: estado animado da tela (opcional).
+export function falStations(P, now = Date.now(), view = null) {
+  const vw = view || settledBelt(P, now);
+  const b = beltLevels(vw);
+  const st = falStatus(P, now, vw);
+  const where = b.cur === null ? -1 : b.cur;
+  const queued = vw.phase === 'queued';
   const stations = FAL_STEPS.map((s, k) => {
-    let state = k < where ? 'done' : k === where ? 'active' : 'pending';
-    if (where === 6) state = 'done';
-    return { id: s.id, agent: s.agent, title: s.title, tab: null, state, detail: '', current: false };
+    const level = vw.levels[k];
+    const state = level >= 100 ? 'done' : k === where ? 'active' : 'pending';   // só UMA em andamento
+    return { id: s.id, agent: s.agent, title: s.title, tab: null, state, detail: '', current: false, level };
   });
   const at = stations[Math.max(0, Math.min(where, 5))];
   if (st && (st.kind === 'failed' || st.kind === 'cancelled' || st.kind === 'partial')) {
     stations.forEach((s) => { if (s.state === 'active') s.state = 'pending'; });
-    if (at.state !== 'done') at.state = st.kind === 'failed' ? 'problem' : 'cancelled';
+    if (at.state !== 'done') { at.state = st.kind === 'failed' ? 'problem' : 'cancelled'; if (st.kind === 'failed') at.fail = true; }
   } else if (st && ['limit', 'finalizing', 'paused'].includes(st.kind) && at.state !== 'done') at.state = 'problem';
-  else if (st && st.kind === 'waiting') { stations.forEach((s) => { s.state = 'pending'; }); stations[0].state = 'need'; }
-  const LBL = { pending: 'Pendente', active: 'Em andamento', need: 'Aguardando você', done: 'Concluída', problem: st && st.kind === 'failed' ? 'Falhou' : 'Pausada', cancelled: 'Cancelada', ended: 'Interrompida' };
-  stations.forEach((s) => { s.label = LBL[s.state]; });
-  if (at.state === 'active' && st && st.estimated) at.detail = 'etapa estimada';
-  const cur = stations.find((s) => ['active', 'need', 'problem', 'cancelled'].includes(s.state));
+  else if (st && st.kind === 'waiting') { stations.forEach((s) => { s.state = 'pending'; s.level = 0; }); stations[0].state = 'need'; }
+  const LBL = { pending: 'Pendente', active: 'Em andamento', need: 'Aguardando você', done: 'Concluída', problem: st && st.kind === 'failed' ? 'Não deu certo' : 'Pausada', cancelled: 'Cancelada', ended: 'Interrompida' };
+  stations.forEach((s) => { s.label = s.state === 'active' && s === at && b.finalizing ? 'Finalizando…' : (s.state === 'active' && queued && s === at ? 'Na fila' : LBL[s.state]); });
+  const cur = stations.find((s) => ['active', 'need', 'problem', 'cancelled'].includes(s.state) && s === at)
+    || stations.find((s) => ['need', 'problem', 'cancelled'].includes(s.state));
   if (cur) cur.current = true;
-  return { stations, progress: falProgress(P, now), current: cur ? cur.id : null, status: st };
+  return { stations, progress: b.progress, current: cur ? cur.id : null, status: st, allDone: b.allDone };
 }
 
 // Status por agente para o Escritório e a equipe (o agente da etapa atual trabalha; "Aguardando você" chama a Nina).

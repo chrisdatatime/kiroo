@@ -31,7 +31,7 @@ antigas exportam só o conteúdo (`AccountContent`, `PilotContent`, `CreditsCont
 `usePhone()` (`src/hooks/use-phone.js`, limite `PHONE_MQ` de `ui/mobile.js`) troca o layout no próprio componente; nada muda acima de 640 px.
 Shell: sem trilho/painel; cabeçalho com voltar + saldo e **barra inferior** (Missões, Escritório, Créditos, Conta). Telas em `shell/Phone.jsx`
 (CSS `shell/phone.css`): Central → lista de missões em cards (`missionWord`: status em uma palavra), Missão fal → entrega no topo + esteira
-vertical (`BeltVertical`; barra por etapa = `stepFills` sobre o mesmo progresso, com `FAL_STEP_BOUNDS`), Escritório → `PhoneOffice` (sem o mapa).
+vertical (`BeltVertical`; barra por etapa = `level` da estação, calculado em `ui/falBelt.js`, a mesma fonte da esteira do desktop), Escritório → `PhoneOffice` (sem o mapa).
 Nova produção fal = `PhoneSheet` em `ui/FalWindow.jsx` (tela cheia, `accept="image/*"` sem `capture`). Uma ação principal por tela no `Dock`
 (sticky, acima da barra inferior). Baixar vídeo/foto usa Web Share com arquivo quando `navigator.canShare` aceita (o arquivo é buscado antes do toque),
 senão o link `?download=1`. Regras: alvos >= 44 px, corpo >= 15 px, rótulos >= 13 px, sem rolagem horizontal. Lógica pura em `tests/mobile.test.mjs`.

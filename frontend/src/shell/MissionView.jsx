@@ -5,7 +5,7 @@ import CancelMission from './CancelMission.jsx';
 import Conveyor from './Conveyor.jsx';
 import { creditsByStation, taskThumb } from './conveyor.js';
 import { getJSON } from '../engine/api.js';
-import { FalStatusCard, FalDelivery } from '../ui/FalMission.jsx';
+import { FalStatusCard, FalDelivery, useFalBelt } from '../ui/FalMission.jsx';
 import { usePhone } from '../hooks/use-phone.js';
 import { PhoneFalMission } from './Phone.jsx';
 
@@ -73,18 +73,20 @@ function Flow({ v }) {
 // Missão do fluxo foto + estilo: esteira das 6 etapas (nome da etapa em destaque, agente pequeno), status real do
 // servidor e, quando pronta, a entrega. Sem janelas por etapa nem "Fluxo detalhado": o cliente só acompanha.
 function FalMissionView({ v, m }) {
+  const belt = useFalBelt(m.P);       // esteira animada (estimativa + etapas reais), sem saltos entre polls
+  const mm = { ...m, status: belt.status, stations: belt.stations, progress: belt.progress };
   return (
     <div className="pv-scroll"><div className="pv-wrap">
-      <Conveyor stations={m.stations} team={v.team} ended={v.ended} missionKey={v.prodId} stepFirst onOpen={null} />
+      <Conveyor stations={mm.stations} team={v.team} ended={v.ended} missionKey={v.prodId} stepFirst onOpen={null} />
       <div className="pv-grid pv-mission-cards">
-        <FalStatusCard m={m} />
+        <FalStatusCard m={mm} />
         <section className="pv-card" style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 8 }} aria-label="Custo">
           <div className="pv-h2" style={{ margin: 0 }}>{v.prodName || 'Seu vídeo'}</div>
           {v.balanceText && <div className="pv-meta">{v.balanceText}</div>}
           <CancelMission v={v} />
         </section>
       </div>
-      <FalDelivery m={m} />
+      {belt.allDone ? <FalDelivery m={m} /> : null}
     </div></div>
   );
 }

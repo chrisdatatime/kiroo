@@ -64,9 +64,9 @@
 
 /* missão: status, esteira vertical e rodapé */
 .pv-ph-status { position: relative; display: flex; flex-direction: column; gap: 4px; padding: 16px; border-radius: 16px; border: 1px solid var(--line); background: #fff; }
-.pv-ph-status strong { font-size: 18px; font-weight: 700; padding-right: 56px; }
+.pv-ph-status strong { font-size: 18px; line-height: 24px; height: 24px; font-weight: 700; padding-right: 56px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pv-ph-status strong span { font-size: 13px; font-weight: 500; color: var(--ink-2); }
-.pv-ph-status p { margin: 0; font-size: 15px; line-height: 1.45; color: var(--ink); }
+.pv-ph-status p { margin: 0; font-size: 15px; line-height: 22px; height: 44px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; color: var(--ink); }   /* altura fixa: nada pula quando o status muda */
 .pv-ph-pct { position: absolute; top: 16px; right: 16px; font: 700 17px/1 'Instrument Sans', sans-serif; font-variant-numeric: tabular-nums; }
 .pv-ph-status[data-kind="failed"] { background: #FFF1EE; border-color: #F3C4BA; }
 .pv-ph-status[data-kind="limit"], .pv-ph-status[data-kind="paused"], .pv-ph-status[data-kind="partial"] { background: #FFF6E5; border-color: #EBCB94; }
@@ -86,7 +86,7 @@
 .pv-vagent > span:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pv-vagent .pv-avatar { border-radius: 50%; border: 0; }
 .pv-vbar { display: block; height: 6px; border-radius: 999px; background: #ECECE8; overflow: hidden; }
-.pv-vbar > i { display: block; height: 100%; border-radius: 999px; background: var(--ink); transform-origin: left center; transition: transform .5s var(--ease); }
+.pv-vbar > i { display: block; height: 100%; border-radius: 999px; background: var(--ink); transform-origin: left center; transition: transform .35s linear; }
 .pv-vrow[data-s="pending"] .pv-vstep, .pv-vrow[data-s="pending"] .pv-vagent { opacity: .6; }
 .pv-vrow[data-s="done"] .pv-vstate { color: var(--ok); } .pv-vrow[data-s="done"] .pv-vbar > i { background: var(--ok); }
 .pv-vrow[data-s="active"] .pv-vstate { color: #14577C; } .pv-vrow[data-s="active"] .pv-vbar > i { background: #1F8FCB; }
@@ -173,3 +173,5 @@
 .pv-sheet-foot { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); background: #fff; border-top: 1px solid var(--line); }
 @media (prefers-reduced-motion: reduce) { .pv-sheet { animation: none; } }
 /* Preferências (Créditos e Conta) no celular: em styles.css, logo depois das regras base de .pref (a ordem importa). */
+/* falha: etapa atual em vermelho ("Não deu certo"), seguintes pendentes */
+.pv-vrow[data-fail] .pv-vstate { color: #A42A20; } .pv-vrow[data-fail] .pv-vbar > i { background: #C7362B; }

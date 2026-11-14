@@ -68,22 +68,37 @@ assert.deepEqual(belt({ fal: sent }, 0).map((x) => x.title), ['PLANEJAMENTO', 'R
 assert.deepEqual(belt({ fal: sent }, 0).map((x) => x.agent), ['nina', 'theo', 'iris', 'lia', 'rui', 'beto']);
 assert.equal(belt({ fal: { submitted_at: sent.submitted_at, remote_status: 'IN_QUEUE' } }, 10).find((x) => x.current).id, 'planejamento');
 assert.equal(belt({ fal: {} }, 0).find((x) => x.current).id, 'planejamento');                        // rodando, ainda sem envio
-assert.equal(belt({ fal: sent }, 10).find((x) => x.current).id, 'roteiro');
-assert.equal(belt({ fal: sent }, EST_WORKFLOW_S * 0.2).find((x) => x.current).id, 'imagens');
+assert.equal(belt({ fal: sent }, 20).find((x) => x.current).id, 'roteiro');
+assert.equal(belt({ fal: sent }, 50).find((x) => x.current).id, 'imagens');
 assert.equal(belt({ fal: sent }, EST_WORKFLOW_S * 0.5).find((x) => x.current).id, 'videos');
-assert.equal(belt({ fal: sent }, EST_WORKFLOW_S * 0.9).find((x) => x.current).id, 'revisao');
-const late = falStations(P({ fal: sent }), at(EST_WORKFLOW_S * 50));                                  // demorou muito mais
-assert.equal(late.current, 'revisao'); assert.equal(late.stations[5].state, 'pending'); assert.ok(late.progress <= 90);
-assert.equal(falStatus(P({ fal: sent }), at(10)).estimated, true);
+assert.equal(belt({ fal: sent }, EST_WORKFLOW_S * 0.9).find((x) => x.current).id, 'videos');
+// etapas que a estimativa já passou: "Concluída", 100%; só UMA em andamento
+const mid = belt({ fal: sent }, 50);
+assert.deepEqual(mid.map((x) => x.state), ['done', 'done', 'active', 'pending', 'pending', 'pending']);
+assert.deepEqual(mid.slice(0, 2).map((x) => [x.label, x.level]), [['Concluída', 100], ['Concluída', 100]]);
+assert.ok(mid[2].level > 0 && mid[2].level <= 95); assert.equal(mid[2].label, 'Em andamento');
+for (let s = 0; s <= EST_WORKFLOW_S * 2; s += 3) {
+  const b = belt({ fal: sent }, s);
+  assert.equal(b.filter((x) => x.state === 'active').length, 1, 'uma em andamento em ' + s + 's');
+  b.filter((x) => x.state !== 'done').forEach((x) => assert.ok(x.level <= 95, 'acima de 95 por estimativa em ' + s + 's'));
+}
+const late = falStations(P({ fal: sent }), at(EST_WORKFLOW_S * 50));                                  // demorou muito mais: VÍDEOS em 95% "Finalizando…"
+assert.equal(late.current, 'videos'); assert.deepEqual(late.stations.map((x) => x.level), [100, 100, 100, 95, 0, 0]);
+assert.deepEqual(late.stations.map((x) => x.state), ['done', 'done', 'done', 'active', 'pending', 'pending']);
+assert.equal(late.stations[3].label, 'Finalizando…'); assert.equal(late.status.text, 'Finalizando…'); assert.equal(late.stations[4].state, 'pending');
+assert.ok(belt({ fal: sent }, 10).every((x) => typeof x.level === 'number'));                           // toda estação tem barra
 const edit = falStations(P({ status: 'editing', fal: sent }), at(60));
 assert.equal(edit.current, 'edicao'); assert.equal(edit.stations[5].state, 'active'); assert.ok(edit.progress < 100);
+const rev = falStations(P({ fal: { ...sent, stage: 'ingesting' } }), at(60));                          // REVISÃO é etapa real do servidor
+assert.equal(rev.current, 'revisao'); assert.deepEqual(rev.stations.slice(0, 4).map((x) => x.state), ['done', 'done', 'done', 'done']);
 const ready = falStations(P({ status: 'awaiting_final_review', fal: sent }), at(60));
-assert.ok(ready.stations.every((x) => x.state === 'done')); assert.equal(ready.progress, 100);
+assert.ok(ready.stations.every((x) => x.state === 'done' && x.level === 100)); assert.equal(ready.progress, 100);
 const wait2 = falStations(P({ status: 'validated', running: false }), at(0));
 assert.equal(wait2.stations[0].state, 'need'); assert.ok(wait2.stations.slice(1).every((x) => x.state === 'pending'));
-assert.equal(falStations(P({ status: 'paused', pause_code: 'monthly_cap', running: false, fal: sent }), at(10)).stations[1].state, 'problem');
+assert.equal(falStations(P({ status: 'paused', pause_code: 'monthly_cap', running: false, fal: sent }), at(20)).stations[1].state, 'problem');
 const failed = falStations(P({ status: 'failed', ended: 'failed', running: false, fal: sent }), at(EST_WORKFLOW_S * 0.5));
-assert.equal(failed.stations[3].state, 'problem'); assert.equal(failed.stations[3].label, 'Falhou');
+assert.equal(failed.stations[3].state, 'problem'); assert.equal(failed.stations[3].label, 'Não deu certo'); assert.equal(failed.stations[3].fail, true);
+assert.deepEqual(failed.stations.map((x) => x.state), ['done', 'done', 'done', 'problem', 'pending', 'pending']);   // falha: atual vermelha, seguintes pendentes
 // Escritório: só o agente da etapa atual trabalha
 assert.deepEqual(Object.entries(falAgentStatus(P({ fal: sent }), at(EST_WORKFLOW_S * 0.5))).filter(([, v]) => v !== 'idle'), [['lia', 'work']]);
 assert.equal(falAgentStatus(P({ status: 'validated', running: false }), at(0)).nina, 'need');

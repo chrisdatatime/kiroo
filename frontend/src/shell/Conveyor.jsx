@@ -50,7 +50,7 @@ export default function Conveyor({ stations, team, ended = null, missionKey = nu
 
   // transição: compara com o snapshot anterior (mesma missão) e posiciona o salto pelas medidas reais das estações
   React.useEffect(() => {
-    const { ref, hop: h } = stepConveyor(prev.current, { key: missionKey, stations, reduced: rm });
+    const { ref, hop: h } = stepConveyor(prev.current, { key: missionKey, stations, reduced: rm || stepFirst });   // missão fal: sem salto (nada se move)
     prev.current = ref;
     if (!h) return undefined;
     const a = refs.current[h.from], b = refs.current[h.to];
@@ -59,7 +59,7 @@ export default function Conveyor({ stations, team, ended = null, missionKey = nu
     setHop({ ...h, ...g, key: Date.now() });
     const t = setTimeout(() => setHop(null), HOP_MS + 250);   // garantia caso animationend não dispare
     return () => clearTimeout(t);
-  }, [stations, missionKey, rm]);
+  }, [stations, missionKey, rm, stepFirst]);
 
   // estação atual sempre visível na faixa rolável (celular), sem mexer na rolagem da página
   const current = stations.find((s) => s.current);
@@ -67,6 +67,8 @@ export default function Conveyor({ stations, team, ended = null, missionKey = nu
   React.useEffect(() => {
     const track = trackRef.current, el = curId ? refs.current[curId] : null;
     if (!track || !el || track.scrollWidth <= track.clientWidth + 1) return;
+    // só rola se a estação atual estiver cortada: com ela visível, a esteira não se mexe (sem "balanço" a cada etapa)
+    if (el.offsetLeft >= track.scrollLeft && el.offsetLeft + el.offsetWidth <= track.scrollLeft + track.clientWidth) return;
     const left = el.offsetLeft - (track.clientWidth - el.offsetWidth) / 2;
     if (typeof track.scrollTo === 'function') track.scrollTo({ left: Math.max(0, left), behavior: rm ? 'auto' : 'smooth' });
   }, [curId, rm]);
@@ -84,9 +86,9 @@ export default function Conveyor({ stations, team, ended = null, missionKey = nu
           const showNow = (s.state === 'active' || s.state === 'need' || s.state === 'problem') && s.detail && s.detail !== s.label;
           const tipId = credits[s.id] ? `pv-belt-cr-${s.id}` : undefined;
           return (
-            <li key={s.id} ref={(el) => { refs.current[s.id] = el; }} className="pv-station" data-s={s.state} data-current={s.current || undefined}
+            <li key={s.id} ref={(el) => { refs.current[s.id] = el; }} className="pv-station" data-s={s.state} data-fail={s.fail || undefined} data-current={s.current || undefined}
               data-landing={hop && hop.to === s.id ? '1' : undefined}>
-              {stepFirst ? <span className="pv-station-steptop" aria-hidden="true" style={{ display: 'block', textAlign: 'center', marginBottom: 8, font: "800 13px/1.2 'Instrument Sans', sans-serif", letterSpacing: '.06em', color: s.current ? '#0E0E10' : '#5B5B60' }}>{s.title}</span> : null}
+              {stepFirst ? <span className="pv-station-steptop" aria-hidden="true" style={{ display: 'block', height: 16, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis', textAlign: 'center', marginBottom: 8, font: "800 13px/1.2 'Instrument Sans', sans-serif", letterSpacing: '.06em', color: s.current ? '#0E0E10' : '#5B5B60' }}>{s.title}</span> : null}
               <button type="button" className="pv-station-btn" aria-current={s.current ? 'step' : undefined} aria-label={stationAria(s, nameOf(s))}
                 aria-describedby={tipId} onClick={() => onOpen && s.tab && onOpen(s.tab)} style={!onOpen || !s.tab ? { cursor: 'default' } : undefined}>
                 <Badge state={s.state} />
@@ -95,6 +97,9 @@ export default function Conveyor({ stations, team, ended = null, missionKey = nu
                 {stepFirst ? null : <span className="pv-station-step">{s.title}</span>}
                 <span className="pv-station-state">{s.label}</span>
                 {showNow ? <span className="pv-station-now">{s.detail}</span> : null}
+                {typeof s.level === 'number' ? (
+                  <span className="pv-station-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={s.level} aria-label={'Progresso de ' + s.title.toLowerCase()}><i style={{ width: s.level + '%' }} /></span>
+                ) : null}
                 {s.state === 'cancelled' ? <span className="pv-station-seal" aria-hidden="true">Cancelada</span> : null}
               </button>
               {tipId ? <span className="pv-station-tip" role="tooltip" id={tipId}>Créditos usados nesta etapa: <strong>{credits[s.id]}</strong></span> : null}

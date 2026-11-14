@@ -1,4 +1,6 @@
 import React from 'react';
+import { falFacts, stepBelt } from './falBelt.js';
+import { falStations } from './falFlow.js';
 
 // Missão do fluxo foto + estilo: o cartão de status (sempre o estado REAL do servidor) e, quando pronta, a entrega
 // (vídeo + 1 foto + título e legenda copiáveis). Fica na própria tela da Missão, abaixo da esteira.
@@ -23,16 +25,48 @@ function CopyField({ label, text }) {
 
 const TONE = { failed: '#FFE1DA', limit: '#FFE7C2', paused: '#FFE7C2', finalizing: '#F2F2EF', done: '#E3F5DC', partial: '#FFE7C2' };
 
+// Estado animado da esteira. O servidor só muda a cada poll (1,5 s) e pode pular etapas (a fal termina de uma vez);
+// aqui o estado exibido anda em direção ao real sem saltos (falBelt.stepBelt). É estimativa: ver falBelt.js.
+export function useFalBelt(P) {
+  const pid = P && P.id;
+  const first = () => { const now = Date.now(); return { key: pid, st: stepBelt(null, falFacts(P, now), now) }; };
+  const [view, setView] = React.useState(first);
+  const pRef = React.useRef(P);
+  pRef.current = P;
+  React.useEffect(() => {
+    const tick = () => setView((v) => {
+      const p = pRef.current, now = Date.now();
+      const prev = v.key === p.id ? v.st : null;
+      const nx = stepBelt(prev, falFacts(p, now), now);
+      return nx === prev ? v : { key: p.id, st: nx };
+    });
+    tick();
+    const id = setInterval(tick, 120);
+    return () => clearInterval(id);
+  }, [pid]);
+  // o poll chegou entre dois tiques: aplica o estado novo já neste desenho (sem um quadro com a esteira atrasada)
+  const now = Date.now();
+  const st = stepBelt(view.key === pid ? view.st : null, falFacts(P, now), now);
+  return falStations(P, now, st);
+}
+
+// Tamanho fixo em todos os estados (nada muda de altura entre polls): título e texto com altura reservada e reticências,
+// barra geral sempre presente e vaga reservada para o botão.
+const clip = (h, lines = 1) => ({ height: h, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: lines, WebkitBoxOrient: 'vertical' });
+
 export function FalStatusCard({ m }) {
   const st = m.status;
   if (!st) return null;
+  const pct = st.kind === 'running' || st.kind === 'done' ? m.progress : 0;
   return (
-    <section className="pv-card" aria-label="Status" role="status" style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 10, background: TONE[st.kind] }}>
-      <div className="pv-title" style={{ fontSize: 18 }}>{st.label}{st.kind === 'running' && st.estimated ? <span className="pv-meta" style={{ fontSize: 12, marginLeft: 8 }}>etapa estimada</span> : null}</div>
-      <div style={{ fontSize: 14, lineHeight: 1.45 }}>{st.text}</div>
-      {st.kind === 'running' && <div className="pv-bar" role="img" aria-label={'Progresso estimado: ' + m.progress + '%'}><i style={{ width: m.progress + '%' }} /></div>}
-      {st.action === 'start' && <button className="pv-btn pv-btn-lime" onClick={m.start} disabled={m.busy} style={{ alignSelf: 'flex-start' }}>{m.busy ? 'Começando…' : m.startLabel}</button>}
-      {m.error && <div role="alert" style={{ fontSize: 14, fontWeight: 700 }}>{m.error}</div>}
+    <section className="pv-card" aria-label="Status" role="status" style={{ padding: 18, height: 190, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 10, background: TONE[st.kind], overflow: 'hidden' }}>
+      <div className="pv-title" style={{ fontSize: 18, lineHeight: '24px', ...clip(24) }}>{st.label}</div>
+      <div style={{ fontSize: 14, lineHeight: '20px', ...clip(40, 2) }}>{st.text}</div>
+      <div className="pv-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label={'Progresso estimado: ' + pct + '%'} style={{ flex: 'none' }}><i style={{ width: pct + '%' }} /></div>
+      <div style={{ height: 40, flex: 'none', display: 'flex', alignItems: 'center' }}>
+        {m.error ? <div role="alert" style={{ fontSize: 14, fontWeight: 700, ...clip(40, 2) }}>{m.error}</div>
+          : st.action === 'start' ? <button className="pv-btn pv-btn-lime" onClick={m.start} disabled={m.busy}>{m.busy ? 'Começando…' : m.startLabel}</button> : null}
+      </div>
     </section>
   );
 }

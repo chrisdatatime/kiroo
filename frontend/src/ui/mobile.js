@@ -26,24 +26,6 @@ export function missionWord(p, live = null) {
   return w ? { word: w[0], tone: w[1] } : { word: 'Aguardando', tone: 'need' };
 }
 
-// Preenchimento (0..100) da barra de cada etapa na esteira vertical, a partir do MESMO progresso geral da esteira do
-// desktop (pipeline.progress / falProgress): concluída = 100, pendente = 0, atual = a fatia do progresso geral que cai
-// no trecho dela, presa entre 6 e 94 para nunca parecer vazia nem pronta antes da hora. `bounds` = [[de, até], ...] por
-// etapa (fal: FAL_STEP_BOUNDS, a mesma curva de falProgress); sem ele, trechos iguais.
-export function stepFills(stations, progress, bounds = null) {
-  const n = stations.length || 1;
-  const p = Math.max(0, Math.min(100, Number(progress) || 0));
-  return stations.map((s, k) => {
-    if (s.state === 'done') return 100;
-    if (s.state === 'pending') return 0;
-    if (s.state === 'active') {
-      const [lo, hi] = bounds && bounds[k] ? bounds[k] : [(k * 100) / n, ((k + 1) * 100) / n];
-      return Math.round(Math.max(6, Math.min(94, ((p - lo) / (hi - lo)) * 100)));
-    }
-    return s.current ? 100 : 0;   // aguardando você / pausada / cancelada: barra cheia na cor do estado (só a atual)
-  });
-}
-
 // Foto vinda da câmera/galeria do celular: alguns aparelhos entregam o arquivo sem extensão. Se o tipo é JPG/PNG/WEBP,
 // completa o nome; senão devolve o nome como veio (a validação de sempre recusa).
 const EXT_OF = { 'image/jpeg': '.jpg', 'image/jpg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' };
