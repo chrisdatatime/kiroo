@@ -105,6 +105,13 @@ class FFmpeg:
         self.run(["-ss", f"{t:.3f}", "-i", str(video), "-frames:v", "1", "-q:v", "2", str(out)])
         return out
 
+    def fit_image(self, src: Path, dst: Path, max_px: int = 2048) -> Path:
+        """Copia a foto como JPG com no máximo `max_px` no lado maior (nunca amplia). Aplica a rotação EXIF."""
+        vf = f"scale=w='min({max_px}\\,iw)':h='min({max_px}\\,ih)':force_original_aspect_ratio=decrease"
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        self.run(["-i", str(src), "-vf", vf, "-frames:v", "1", "-q:v", "2", str(dst)])
+        return dst
+
     # ------------------------------------------------------------- geração
     def still_to_clip(self, image: Path, out: Path, seconds: float, width: int, height: int, fps: int = 30,
                       tone: bool = False) -> Path:
