@@ -34,7 +34,7 @@ class TourBoundary extends React.Component {
 import { deriveStage, sceneView, toCredits, creditsToUsd, endedOf, stoppedAt } from './engine/adapter.js';
 import { adjustmentGate, pauseKind } from './ui/pause.js';
 import { balanceLabel, needsConfirmation, usedLabel } from './ui/nextVideo.js';
-import { falActive, falView, gallery as falGallery, draftErrors as falDraftErrors, createPayload as falCreatePayload, newRequestId, IMAGE_EXT } from './ui/falFlow.js';
+import { falActive, falView, endedLabel as falEndedLabel, gallery as falGallery, draftErrors as falDraftErrors, createPayload as falCreatePayload, newRequestId, IMAGE_EXT } from './ui/falFlow.js';
 import { adjustFunds, noBalanceFromError, noBalanceNotice } from './ui/credits.js';
 import Shell, { VIEWS } from './shell/Shell.jsx';
 import Central from './shell/Central.jsx';
@@ -497,7 +497,7 @@ export default class App extends React.Component {
     const P = this.prodP(), st = this.stage(), sc = this.scenes(), idx = this.stageIdx();
     const running = (k) => sc.find((x) => x[k] === 'gerando');
     if (!r.agent) return P ? STAGE_LABELS[st] : 'Nenhuma produção aberta';
-    if (P && this.ended()) return this.ended() === 'cancelled' ? 'Missão cancelada' : 'Missão falhou';
+    if (P && this.ended()) return this.ended() === 'cancelled' ? (falEndedLabel(P) || 'Missão cancelada') : 'Missão falhou';
     if (!P && r.agent !== 'nina') return 'Sem tarefa agora';
     const status = this.statusOf(r.agent);
     switch (r.agent) {
@@ -877,7 +877,7 @@ export default class App extends React.Component {
     const endedText = !P || !ended ? '' : ended === 'cancelled' ? 'Nada mais é gerado nem cobrado; o que já foi gerado continua no histórico.'
       : 'Motivo: ' + (P.reason || 'veja o histórico') + '. Nada mais é gerado nem cobrado.';
     if (P && ended) { nextLabel = 'Nova missão'; goNext = () => this.newProduction();
-      nextLong = (ended === 'cancelled' ? 'Missão cancelada. ' : 'A missão falhou. ') + endedText; }
+      nextLong = (ended === 'cancelled' ? (falEndedLabel(P) || 'Missão cancelada') + '. ' : 'A missão falhou. ') + endedText; }
     else if (P && P.status === 'paused') { nextLabel = 'Ver pausa'; nextLong = 'Produção pausada: ' + (P.reason || ''); goNext = () => { this.setUI({ budgetHit: true, budgetDismissed: null }); this.openProd('revisao'); }; }
     else if (needA) { nextLabel = { nina: 'Abrir ficha', theo: 'Ver proposta', iris: 'Liberar imagens', rui: 'Revisar agora', lia: 'Liberar vídeos', beto: 'Ver vídeo' }[needA.id]; nextLong = needA.name + ' precisa de você.'; goNext = () => this.openProd(tabOf(needA.id)); }
     else if (workA) { nextLabel = 'Acompanhar'; nextLong = workA.name + ' está trabalhando. Você pode circular.'; goNext = () => this.openProd(tabOf(workA.id)); }

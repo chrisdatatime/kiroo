@@ -56,7 +56,7 @@ function TabCriar({ f }) {
             </button>
           ))}
         </div>
-        <span className="g-muted" style={{ fontSize: 12.5 }}>Você recebe um vídeo de ~15 s com narração e trilha, mais 3 fotos publicitárias (Hero Shot, Lifestyle e Detalhes).</span>
+        <span className="g-muted" style={{ fontSize: 12.5 }}>Você recebe um vídeo de ~15 s com narração, uma foto publicitária (Hero Shot) e o título e a legenda para copiar.</span>
         {f.mode === 'simulated' && <span className="g-sim" style={{ alignSelf: 'flex-start' }}>modo DEMO: nada é cobrado</span>}
         <button className="g-btn g-lime" onClick={f.create} disabled={f.busy || f.errors.length > 0}>{f.busy ? 'Enviando…' : 'Criar meu vídeo'}</button>
         {f.errors.length > 0 && <span className="g-muted" style={{ fontSize: 12.5 }}>Falta: {f.errors.join(', ')}.</span>}
@@ -70,10 +70,11 @@ function TabAcompanhar({ f }) {
   if (!w) return <div className="g-card" style={card}>Nada em andamento. Crie um vídeo na aba Criar.</div>;
   const msg = {
     creating: 'Preparando a sua foto.', queued: 'Sua missão está na fila' + (w.queuePosition ? ` (posição ${w.queuePosition + 1})` : '') + '.',
-    working: 'Estamos criando o vídeo, a narração, a trilha e as 3 fotos. Pode circular pelo estúdio: avisamos quando terminar.',
-    composing: 'Tudo recebido. Montando o vídeo final com narração e trilha.', ready: 'Seu pacote está pronto. Veja na aba Entrega.',
+    working: 'Estamos criando o vídeo com narração, a foto, o título e a legenda. Pode circular pelo estúdio: avisamos quando terminar.',
+    composing: 'Tudo recebido. Conferindo o vídeo final.', ready: 'Seu pacote está pronto. Veja na aba Entrega.',
     done: 'Pacote exportado.', finalizing: FINAL_FINALIZING, paused: 'A missão está pausada.',
     failed: f.P.reason || 'Não foi possível gerar o seu vídeo desta vez. Nada foi cobrado.', cancelled: 'Missão cancelada. Nada mais é gerado nem cobrado.',
+    partial: 'Entrega parcial: a foto não ficou pronta e a missão foi encerrada. Nada mais é gerado nem cobrado.',
   }[w.phase];
   return (
     <div role="status" className="g-card" style={{ ...card, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
@@ -91,6 +92,25 @@ function Item({ label, children }) {
   return <figure style={{ margin: 0, display: 'flex', flexDirection: 'column', gap: 6, width: 190 }}><div style={{ position: 'relative' }}>{children}</div><figcaption className="g-label">{label}</figcaption></figure>;
 }
 
+// Campo de texto com botão "Copiar" (área de transferência; sem ela, seleciona o texto para copiar à mão).
+function CopyField({ label, text }) {
+  const [copied, setCopied] = React.useState(false);
+  const ref = React.useRef(null);
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch (e) {
+      const sel = window.getSelection && window.getSelection();
+      if (sel && ref.current) { const r = document.createRange(); r.selectNodeContents(ref.current); sel.removeAllRanges(); sel.addRange(r); }
+    }
+  };
+  return (
+    <div className="g-card" style={card}>
+      <span className="g-label">{label}</span>
+      <span ref={ref} style={{ fontSize: 14, lineHeight: 1.5, whiteSpace: 'pre-wrap', userSelect: 'text' }}>{text}</span>
+      <button className="g-btn g-sm" onClick={copy} aria-label={'Copiar ' + label.toLowerCase()} style={{ alignSelf: 'flex-start' }}>{copied ? 'Copiado!' : 'Copiar'}</button>
+    </div>
+  );
+}
+
 function TabEntrega({ f }) {
   const g = f.gallery;
   if (!g || !g.video) {
@@ -103,20 +123,23 @@ function TabEntrega({ f }) {
           <video src={g.video.url} controls muted loop playsInline preload="metadata" aria-label="Vídeo final" style={{ width: 190, height: 338, objectFit: 'cover', borderRadius: 14, background: '#0F1730' }} />
           <a className="g-btn g-sm" href={g.video.download} download style={{ marginTop: 6 }}>Baixar vídeo (MP4)</a>
         </Item>
-        {g.images.map((i) => (
-          <Item key={i.role} label={i.label}>
-            {i.url ? <><img src={i.url} alt={i.label} style={{ width: 190, height: 338, objectFit: 'cover', borderRadius: 14, border: '1px solid #E7E7E4' }} />
-              <a className="g-btn g-sm" href={i.download} download style={{ marginTop: 6 }}>Baixar {i.label}</a></>
+        {g.image && (
+          <Item label={g.image.label}>
+            {g.image.url ? <><img src={g.image.url} alt={g.image.label} style={{ width: 190, height: 338, objectFit: 'cover', borderRadius: 14, border: '1px solid #E7E7E4' }} />
+              <a className="g-btn g-sm" href={g.image.download} download style={{ marginTop: 6 }}>Baixar {g.image.label}</a></>
               : <div className="g-card" style={{ width: 190, height: 338, display: 'grid', placeItems: 'center', textAlign: 'center', padding: 12, fontSize: 13 }}>Em finalização</div>}
           </Item>
-        ))}
+        )}
+        <div style={{ flex: '1 1 280px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {g.title && <CopyField label="Título" text={g.title} />}
+          {g.caption && <CopyField label="Legenda" text={g.caption} />}
+          {g.textMissing && <div role="status" className="g-card" style={{ ...card, fontSize: 13.5 }}>O vídeo não trouxe título nem legenda. Escreva os seus antes de publicar.</div>}
+        </div>
       </div>
-      {g.partial && <div role="status" className="g-card" style={{ ...card, background: '#FFE7C2', border: '2px solid #7A4300', fontSize: 13.5 }}>Parte das fotos ainda não ficou pronta. O que já está aqui pode ser baixado.</div>}
-      {g.description && <div className="g-card" style={card}><span className="g-label">Descrição do produto</span><span style={{ fontSize: 14, lineHeight: 1.5 }}>{g.description}</span></div>}
-      {g.narrationText && <div className="g-card" style={card}><span className="g-label">Texto da narração</span><span style={{ fontSize: 14, lineHeight: 1.5 }}>{g.narrationText}</span></div>}
+      {g.partial && <div role="status" className="g-card" style={{ ...card, background: '#FFE7C2', border: '2px solid #7A4300', fontSize: 13.5 }}>Entrega parcial: a foto ainda não ficou pronta. O que já está aqui pode ser baixado.</div>}
       <div className="g-card" style={{ ...card, fontSize: 13, lineHeight: 1.45 }}>
-        O vídeo não leva aviso na tela: a identificação de publicidade e de imagens geradas por IA está na legenda. Ao publicar, marque também o conteúdo como publicidade na Shopee e confira as regras atuais.
-        {g.caption && <a className="g-btn g-sm" href={g.caption.download} download style={{ alignSelf: 'flex-start' }}>Baixar legenda</a>}
+        O vídeo não leva aviso na tela: a identificação de publicidade e de imagens geradas por IA está no arquivo da legenda. Ao publicar, marque também o conteúdo como publicidade na Shopee e confira as regras atuais.
+        {g.captionFile && <a className="g-btn g-sm" href={g.captionFile.download} download style={{ alignSelf: 'flex-start' }}>Baixar legenda completa (TXT)</a>}
       </div>
       {f.P && f.P.status === 'awaiting_final_review' && <div><button className="g-btn g-lime" onClick={f.exportVideo} disabled={f.busy}>Exportar</button></div>}
       {f.P && f.P.status === 'completed' && <div role="status" style={{ padding: 12, borderRadius: 12, background: '#E3F5DC', border: '2px solid #2D7A3E', fontSize: 13.5 }}><strong style={{ color: '#205C2E' }}>Exportado.</strong> A publicação na Shopee Vídeo é manual: baixe os arquivos e envie pelo app.</div>}

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { STYLES, draftErrors, createPayload, falActive, falView, gallery, newRequestId, downloadUrl, falSummaryRows } from '../src/ui/falFlow.js';
+import { STYLES, draftErrors, createPayload, falActive, falView, endedLabel, gallery, newRequestId, downloadUrl, falSummaryRows } from '../src/ui/falFlow.js';
 import { deriveStage } from '../src/engine/adapter.js';
 import { summaryRows, credits } from '../src/ui/nextVideo.js';
 
@@ -37,6 +37,14 @@ assert.equal(falView(P({ status: 'awaiting_final_review' })).phase, 'ready');
 assert.equal(falView(P({ status: 'completed' })).phase, 'done');
 assert.equal(falView(P({ status: 'failed', ended: 'failed' })).phase, 'failed');
 assert.equal(falView(P({ status: 'cancelled', ended: 'cancelled' })).phase, 'cancelled');
+// missão encerrada com a entrega incompleta: "Entrega parcial" em vez de "Missão cancelada"
+const part = falView(P({ status: 'cancelled', ended: 'cancelled', fal: { delivery_status: 'incomplete' } }));
+assert.equal(part.phase, 'partial'); assert.equal(part.label, 'Entrega parcial'); assert.equal(part.busy, false);
+assert.equal(falView(P({ status: 'cancelled', delivery_status: 'incomplete' })).label, 'Entrega parcial');
+assert.equal(endedLabel(P({ status: 'cancelled', ended: 'cancelled', fal: { delivery_status: 'incomplete' } })), 'Entrega parcial');
+assert.equal(endedLabel(P({ status: 'cancelled', ended: 'cancelled' })), null);                        // cancelada sem entrega: segue "Missão cancelada"
+assert.equal(endedLabel(P({ status: 'failed', ended: 'failed', fal: { delivery_status: 'incomplete' } })), null);
+assert.equal(endedLabel({ engine: 'gemini', ended: 'cancelled', delivery_status: 'incomplete' }), null);
 
 // a esteira existente entende a produção fal (sem cenas): mesmas etapas de entrega
 assert.equal(deriveStage(P({ status: 'producing' })), 'img_gerando');
@@ -46,33 +54,36 @@ assert.equal(deriveStage(P({ status: 'completed' })), 'exportado');
 assert.equal(deriveStage(P({ status: 'paused', fal: { finalizing: true } })), 'img_gerando');
 assert.equal(deriveStage(P({ status: 'cancelled', ended: 'cancelled' })), 'cancelada');
 
-// galeria: vídeo + 3 fotos com rótulo e download individual (?download=1)
+// entrega: vídeo + 1 foto (hero) + título e legenda, com download individual (?download=1)
 const done = P({ status: 'awaiting_final_review', delivery: { 'final.mp4': '/media/p/delivery/final.mp4', 'cover.jpg': '/media/p/delivery/cover.jpg', 'caption.txt': '/media/p/delivery/caption.txt' },
-  fal: { delivery_status: 'complete', description: 'Desc', narration_text: 'Texto', images: [
-    { role: 'hero', label: 'Hero Shot', file: 'product_image_01.jpg', url: '/media/p/delivery/product_image_01.jpg' },
-    { role: 'lifestyle', label: 'Lifestyle', file: 'product_image_02.jpg', url: '/media/p/delivery/product_image_02.jpg' },
-    { role: 'details', label: 'Detalhes', file: 'product_image_03.jpg', url: '/media/p/delivery/product_image_03.jpg' }] } });
+  fal: { delivery_status: 'complete', title: 'Copo azul', caption: 'Mantém gelado.',
+    image: { role: 'hero', label: 'Hero Shot', file: 'product_image_01.jpg', url: '/media/p/delivery/product_image_01.jpg' } } });
 const g = gallery(done);
-assert.deepEqual(g.images.map((i) => i.label), ['Hero Shot', 'Lifestyle', 'Detalhes']);
-assert.equal(g.images[1].download, '/media/p/delivery/product_image_02.jpg?download=1');
+assert.equal(g.image.label, 'Hero Shot'); assert.ok(!('images' in g));                                  // sem galeria de 3 fotos
+assert.equal(g.image.download, '/media/p/delivery/product_image_01.jpg?download=1');
 assert.equal(g.video.download, '/media/p/delivery/final.mp4?download=1');
-assert.equal(g.description, 'Desc'); assert.equal(g.narrationText, 'Texto'); assert.equal(g.partial, false);
+assert.equal(g.captionFile.download, '/media/p/delivery/caption.txt?download=1');
+assert.equal(g.title, 'Copo azul'); assert.equal(g.caption, 'Mantém gelado.'); assert.equal(g.textMissing, false); assert.equal(g.partial, false);
+// sem título e legenda (o fluxo entrega com aviso): a tela avisa, nunca inventa texto
+const notext = gallery(P({ status: 'awaiting_final_review', delivery: { 'final.mp4': '/m/final.mp4' }, fal: { delivery_status: 'complete', title: '', caption: '' } }));
+assert.equal(notext.textMissing, true); assert.equal(notext.title, ''); assert.equal(notext.caption, '');
 assert.equal(downloadUrl('/m?x=1'), '/m?x=1&download=1'); assert.equal(downloadUrl(null), null);
 assert.equal(gallery({ engine: 'gemini' }), null);
 // entrega incompleta não publica nada: sem links
-const inc = gallery(P({ status: 'paused', fal: { finalizing: true, missing_images: ['details'], delivery_status: 'incomplete', images: [{ role: 'hero', label: 'Hero Shot', file: 'x', url: null }] } }));
-assert.equal(inc.video, null); assert.equal(inc.images[0].download, null);
+const inc = gallery(P({ status: 'paused', fal: { finalizing: true, missing_images: ['hero'], delivery_status: 'incomplete', image: { role: 'hero', label: 'Hero Shot', file: 'x', url: null } } }));
+assert.equal(inc.video, null); assert.equal(inc.image.download, null);
 
 // "Seu próximo vídeo" no motor fal.ai: estilo e o que vem no pacote, sem cenas nem ajustes
 const sm = { engine: 'fal', style: 'light', product: '', total_credits: '32,4', total_brl: null, balance: '500', balance_after: '467,6', exempt: false };
 const rows = Object.fromEntries(falSummaryRows(sm, credits));
 assert.equal(rows['Estilo'], 'Claro'); assert.ok(!('Cenas' in rows) && !('Ajustes incluídos por cena' in rows));
-assert.match(rows['O que você recebe'], /3 fotos publicitárias/);
+assert.match(rows['O que você recebe'], /1 foto publicitária/); assert.ok(!/trilha|3 fotos/i.test(rows['O que você recebe']));
 assert.equal(rows['Custo total autorizado'], '32,4 créditos');
 assert.ok(Object.fromEntries(summaryRows({ ...sm, format: '9:16', scenes: 3, included_adjustments_per_scene: 1, product: 'X' }))['Estilo'] === 'Claro');
 
 // o cliente nunca vê modelo, fila técnica ou "fal.ai" nas telas do fluxo
 const read = (f) => readFileSync(new URL('../src/' + f, import.meta.url), 'utf8');
 const ui = read('ui/FalWindow.jsx');
+assert.ok(!/galeria|Lifestyle|Detalhes|trilha|Texto da narração/i.test(ui.replace(/\/\/.*$/gm, '')), 'a tela ainda cita o escopo antigo');
 assert.ok(!/fal\.ai|workflow|queue\.fal/i.test(ui.replace(/\/\/.*$/gm, '')), 'a tela do fluxo cita o fornecedor');
 console.log('falflow.test ok');
