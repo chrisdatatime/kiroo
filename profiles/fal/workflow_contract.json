@@ -3,10 +3,12 @@
   "version": 4,
   "status": "CONFIRMADO: entrada e saidas (envio liberado). A CONFIRMAR (so bloqueia a recuperacao de foto): recover.hero e request_id por no no envelope",
   "envelope": true,
+  "_nota_early_access": "early_access_plan: plano minimo que ve o estilo (\"escala\" = vantagem Novos estilos antes de todos). null = todos. Nenhum estilo marcado hoje.",
   "styles": {
     "dark": {
       "status": "CONFIRMADO: entrada e saidas (wf01 Claro; o wf02 Escuro tem a mesma estrutura, a confirmar na rodada dele). A CONFIRMAR (so recuperacao de foto): recover.hero e request_id por no",
       "workflow_env": "WORKFLOW_ID_DARK",
+      "early_access_plan": null,
       "input": {
         "image_field": "image_url",
         "extra": {}
@@ -32,6 +34,7 @@
     "light": {
       "status": "CONFIRMADO: entrada e saidas (wf01 Claro; o wf02 Escuro tem a mesma estrutura, a confirmar na rodada dele). A CONFIRMAR (so recuperacao de foto): recover.hero e request_id por no",
       "workflow_env": "WORKFLOW_ID_LIGHT",
+      "early_access_plan": null,
       "input": {
         "image_field": "image_url",
         "extra": {}

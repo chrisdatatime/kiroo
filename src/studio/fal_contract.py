@@ -105,6 +105,26 @@ def enabled_styles(settings) -> tuple[str, ...]:
     return tuple(s for s in STYLES if s == "light" or (s == "dark" and getattr(settings, "fal_dark_enabled", False)))
 
 
+def early_access_plan(contract: dict | None, style: str) -> str | None:
+    """`early_access_plan` do estilo no contrato ("escala"): o estilo só aparece para contas com esse plano ou maior
+    (vantagem "Novos estilos antes de todos"). Sem o campo (hoje, nenhum estilo), vale para todos."""
+    cfg = ((contract or {}).get("styles") or {}).get(style) or {}
+    v = cfg.get("early_access_plan")
+    return v if isinstance(v, str) and v else None
+
+
+def styles_for_plan(settings, plan: str, contract: dict | None = None) -> tuple[str, ...]:
+    """Estilos liberados (`enabled_styles`) que ESTE plano vê: os de acesso antecipado só a partir do plano marcado."""
+    from .plans import at_least
+    if contract is None:
+        try:
+            contract = load_contract(settings.profiles_dir)
+        except ContractError:
+            contract = {}
+    return tuple(s for s in enabled_styles(settings)
+                 if (tier := early_access_plan(contract, s)) is None or at_least(plan, tier))
+
+
 def placeholders(contract: dict, style: str, include_recover: bool = True) -> list[str]:
     """Pendencias do estilo (A CONFIRMAR). Com `include_recover=False` so as que BLOQUEIAM O ENVIO (input, output e
     `pending`); `recover` e `pending_recover` bloqueiam apenas a recuperacao de foto pelo no (ver `recover_pending`)."""

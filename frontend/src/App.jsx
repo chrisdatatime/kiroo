@@ -14,7 +14,7 @@ import { Tutorial, DialogWindow, BoardWindow, CustomWindow } from './ui/Windows.
 import ProdWindow from './ui/ProdWindow.jsx';
 import GamesWindow from './ui/Games.jsx';
 import { PILOT } from './ui/Pilot.jsx';
-import { me, auth, authConfig, setLoggedOutHandler, AuthRequired, getJSON, post, readFile } from './engine/api.js';
+import { me, auth, authConfig, setLoggedOutHandler, AuthRequired, getJSON, post, readFile, deviceId } from './engine/api.js';
 import AuthScreen from './ui/Auth.jsx';
 const Landing = lazyChunk(() => import('./landing/Landing.jsx'));
 // Conta, Piloto, Créditos e Sobre vivem no modal de Preferências (carregado ao abrir)
@@ -34,6 +34,7 @@ class TourBoundary extends React.Component {
 import { deriveStage, sceneView, toCredits, creditsToUsd, endedOf, stoppedAt } from './engine/adapter.js';
 import { adjustmentGate, pauseKind } from './ui/pause.js';
 import { balanceLabel, needsConfirmation, usedLabel } from './ui/nextVideo.js';
+import { NO_BALANCE_CREATE, emptyMissionsCopy, firstVideoCopy } from './ui/welcome.js';
 import { falActive, falStatus, falStations, falAgentStatus, startFal, continueFal, offerFor, createLabel, endedLabel as falEndedLabel, availableStyles as falStyles, effectiveStyle as falStyleOf, gallery as falGallery, draftErrors as falDraftErrors, createPayload as falCreatePayload, newRequestId, IMAGE_EXT } from './ui/falFlow.js';
 import { adjustFunds, noBalanceFromError, noBalanceNotice } from './ui/credits.js';
 import Shell, { VIEWS } from './shell/Shell.jsx';
@@ -121,6 +122,7 @@ export default class App extends React.Component {
 
   // ---------- ciclo de vida ----------
   componentDidMount() {
+    deviceId();   // cookie do dispositivo antes de qualquer cadastro ou retorno do Google (bônus de boas-vindas)
     this.measure = () => { const el = this.stageEl || this.rootEl; if (!el) return; const w = el.clientWidth, h = el.clientHeight; if (w !== this.state.vw || h !== this.state.vh) this.setState({ vw: w, vh: h }); };
     this.measure();
     window.addEventListener('resize', this.measure);
@@ -747,10 +749,10 @@ export default class App extends React.Component {
     const errs = falDraftErrors({ ...f, style });
     if (errs.length) { this.setFal({ error: 'Falta ' + errs.join(', ') + '.' }); return; }
     const reqId = f.reqId || newRequestId();
-    this.setFal({ busy: true, reqId, error: null });
+    this.setFal({ busy: true, reqId, error: null, noFunds: false });
     const body = falCreatePayload({ style, file: f.file, requestId: reqId, name: f.name });
     const r = await startFal(post, { body, cc: offerFor(this.state.S, style).cc });
-    if (!r.ok) { this.setFal({ busy: false, error: r.error }); return; }
+    if (!r.ok) { this.setFal({ busy: false, error: r.noFunds ? NO_BALANCE_CREATE : r.error, noFunds: !!r.noFunds }); return; }
     this.setFal({ busy: false, reqId: null, file: null, name: '', style: null, error: null });
     this.setState({ pid: r.pid, draftMode: false, caption: null, view: 'missao' });
     this.closeWin();
@@ -775,7 +777,8 @@ export default class App extends React.Component {
     return { P: P && P.engine === 'fal' ? P : null, draft: !!s.draftMode,
       style, styles: falStyles(s.S), setStyle: (st) => this.setFal({ style: st }), file: f.file, name: f.name, setName: (e) => this.setFal({ name: e.target.value }),
       clearFile: () => this.setFal({ file: null, reqId: null }), pick: (e) => this.falPick(e), pickFile: (file) => this.falPickFile(file),
-      errors: falDraftErrors({ ...f, style }), error: f.error || null, busy: f.busy, demo,
+      errors: falDraftErrors({ ...f, style }), error: f.error || null, noFunds: !!f.noFunds, busy: f.busy, demo,
+      openBuy: () => { this.setFal({ error: null, noFunds: false }); this.setUI({ win: s.account && s.account.payments && s.account.payments.online ? 'buy' : 'credits' }); },
       label: createLabel(offerFor(s.S, style), demo), create: () => this.falCreate(),
       close: () => { if (!f.busy) { this.setFal({ error: null }); this.closeWin(); } } };
   }
@@ -1129,6 +1132,7 @@ export default class App extends React.Component {
       goMine: (e) => { e.stopPropagation(); this.goInteract({ type: 'mine' }); },
       goGames: (e) => { e.stopPropagation(); this.goInteract({ type: 'games' }); }, games, pilot,
       account: s.account, logout: () => this.logout(), openAccount: () => { this.dismissTut(); this.setUI({ win: 'account' }); },
+      welcomeEmpty: emptyMissionsCopy(s.account, productions), firstVideo: firstVideoCopy({ P, productions, wallet: s.S ? s.S.credits : null }),
       wallet: s.S ? s.S.credits : null, openCredits: () => { this.dismissTut(); this.setUI({ win: 'credits' }); },
       openBuy: () => { this.dismissTut(); this.setUI({ win: s.account && s.account.payments && s.account.payments.online ? 'buy' : 'credits' }); },
       openProduction: (id) => { this.setState({ pid: id, draftMode: false }); this.closeWin(); },

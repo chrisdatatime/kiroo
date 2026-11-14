@@ -19,6 +19,7 @@ export const FINAL_FINALIZING = 'Estamos finalizando o seu pacote. Avisaremos qu
 export const IMAGE_EXT = /\.(jpe?g|png|webp)$/i;
 
 import { EST_WORKFLOW_S, EST_CAP, falFacts, stepBelt, currentStep, overallProgress } from './falBelt.js';
+import { isNoFunds } from './welcome.js';
 
 export const isFalProduction = (P) => !!(P && P.engine === 'fal');
 const incompleteDelivery = (P) => ['incomplete', 'partial'].includes((P.fal && P.fal.delivery_status) || P.delivery_status);
@@ -50,6 +51,9 @@ export function createPayload({ style, file, requestId, name }) {
 // e mostra a mensagem do servidor (em português). 409 `already_started` no confirm/run = a mesma produção já começou
 // (ex.: reenvio depois de uma resposta perdida): é sucesso, nunca um segundo envio.
 export const FRIENDLY_FALLBACK = 'Não deu certo agora. Tente de novo em instantes.';
+
+const noFunds = (e) => (isNoFunds(e) ? { noFunds: true } : {});   // 402 de saldo: a tela troca o texto e oferece os pacotes
+
 const friendly = (e) => {
   const m = (e && e.message) || '';
   return !m || /^HTTP \d+/.test(m) || /failed to fetch|network/i.test(m) ? FRIENDLY_FALLBACK : m;
@@ -58,18 +62,18 @@ const friendly = (e) => {
 export async function continueFal(post, pid, cc) {
   try { await post(`/api/productions/${pid}/confirm`, cc > 0 ? { total_cc: cc } : {}); } catch (e) {
     if (e && e.code === 'already_started') return { ok: true, pid, already: true };
-    return { ok: false, pid, step: 'confirm', error: friendly(e) };
+    return { ok: false, pid, step: 'confirm', error: friendly(e), ...noFunds(e) };
   }
   try { await post(`/api/productions/${pid}/run`, {}); } catch (e) {
     if (e && e.code === 'already_started') return { ok: true, pid, already: true };
-    return { ok: false, pid, step: 'run', error: friendly(e) };
+    return { ok: false, pid, step: 'run', error: friendly(e), ...noFunds(e) };
   }
   return { ok: true, pid };
 }
 
 export async function startFal(post, { body, cc }) {
   let pid;
-  try { pid = (await post('/api/productions', body)).pid; } catch (e) { return { ok: false, pid: null, step: 'create', error: friendly(e) }; }
+  try { pid = (await post('/api/productions', body)).pid; } catch (e) { return { ok: false, pid: null, step: 'create', error: friendly(e), ...noFunds(e) }; }
   return continueFal(post, pid, cc);
 }
 

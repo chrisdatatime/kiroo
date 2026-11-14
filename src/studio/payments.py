@@ -30,7 +30,7 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
 
 from . import asaas, catalog
-from .credits import Ledger, fmt
+from .credits import Ledger, fmt, fmt_balance
 from .db import Database, new_id, now
 
 log = logging.getLogger("studio.payments")
@@ -158,7 +158,7 @@ def negative_balance_block(db: Database, wid: str) -> str | None:
     bal = led.balance(wid)
     if bal >= 0:
         return None
-    return (f"Seu saldo está negativo ({fmt(bal)} créditos) por causa de um estorno ou contestação de compra. "
+    return (f"Seu saldo está negativo ({fmt_balance(bal)} créditos) por causa de um estorno ou contestação de compra. "
             "Novas produções ficam bloqueadas até regularizar: compre créditos para cobrir o saldo (o que você já "
             "produziu continua disponível).")
 
@@ -375,7 +375,7 @@ def poll(db: Database, client, row) -> dict:
             row = get(db, row["id"])
     out = view(row)
     if row["status"] == "paid":
-        out["balance"] = fmt(Ledger(db).balance(row["account_id"]))
+        out["balance"] = fmt_balance(Ledger(db).balance(row["account_id"]))
     return out
 
 

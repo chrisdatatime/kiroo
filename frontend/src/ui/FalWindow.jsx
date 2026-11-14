@@ -3,6 +3,7 @@ import { CloseButton } from './bits.jsx';
 import { AlertCircle, Camera, RefreshCw, X } from 'lucide-react';
 import { RECEIVE_LINE } from './falFlow.js';
 import { usePhone } from '../hooks/use-phone.js';
+import { SEE_PACKS } from './welcome.js';
 
 // "Nova produção" no fluxo foto + estilo: SÓ o envio. Foto (solte ou escolha), nome opcional, estilo (só aparece com
 // mais de um liberado) e UM botão "Criar vídeo · N créditos". Clicar = consentimento: o App faz create → confirm → run;
@@ -62,6 +63,7 @@ function PhoneSheet({ f }) {
       </div>
       <footer className="pv-sheet-foot">
         {f.error && <div role="alert" className="pv-dock-err"><AlertCircle size={18} aria-hidden="true" />{f.error}</div>}
+        {f.noFunds && <button type="button" className="pv-act pv-act-wide" onClick={f.openBuy}>{SEE_PACKS}</button>}
         <button type="button" className="pv-dock-btn" onClick={f.file ? f.create : () => pickRef.current && pickRef.current.click()} disabled={f.busy || (!!f.file && f.errors.length > 0)}>
           {f.busy ? 'Começando…' : f.file ? f.label : 'Escolher foto'}
         </button>
@@ -95,6 +97,7 @@ export default function FalWindow({ v }) {
           </div>
         ) : <span className="g-muted" style={{ fontSize: 13 }}>Estilo: <strong style={{ color: '#0E0E10' }}>{f.styles[0].label}</strong></span>}
         {f.error && <div role="alert" className="g-card" style={{ ...card, padding: 12, background: '#FFE7C2', border: '2px solid #7A4300', fontSize: 14 }}>{f.error}</div>}
+        {f.noFunds && <button className="g-btn" onClick={f.openBuy} style={{ minHeight: 44 }}>{SEE_PACKS}</button>}
         <button className="g-btn g-lime" onClick={f.create} disabled={f.busy || f.errors.length > 0} style={{ minHeight: 48, fontSize: 16 }}>
           {f.busy ? 'Começando…' : f.label}
         </button>

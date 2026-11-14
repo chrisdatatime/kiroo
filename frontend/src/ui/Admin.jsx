@@ -330,6 +330,20 @@ function Metrics() {
       {!m ? <Spinner /> : m.error ? <div className="adm-alert">Não foi possível carregar as métricas.</div> : (
         <>
           {[['real', 'Real'], ['simulated', 'DEMO (custo equivalente estimado)']].map(([k, title]) => <MetricBlock key={k} title={title} b={m[k]} />)}
+          {m.welcome && (
+            <div className="g-card adm-acc-body">
+              <h4>Bônus de boas-vindas ({m.welcome.credits} créditos)</h4>
+              <div className="adm-kpis">
+                <div><span className="g-label">Concedidos hoje</span><strong>{m.welcome.granted_today}</strong>
+                  <span className="g-muted">teto {m.welcome.daily_cap}{m.welcome.cap_reached_today ? ' · atingido' : ''}</span></div>
+                <div><span className="g-label">Concedidos no mês</span><strong>{m.welcome.granted_month}</strong>
+                  <span className="g-muted">{m.welcome.converted_month} viraram compra</span></div>
+                <div><span className="g-label">Desde o início</span><strong>{m.welcome.granted_total}</strong>
+                  <span className="g-muted">{m.welcome.converted_total} viraram compra</span></div>
+              </div>
+              <p className="g-muted" style={{ margin: 0, fontSize: 12 }}>Recusas hoje: {Object.entries(m.welcome.denied_today || {}).map(([k, n]) => `${k}: ${n}`).join(' · ') || 'nenhuma'}</p>
+            </div>
+          )}
           {m.outside_productions.length > 0 && (
             <div className="g-card adm-acc-body">
               <h4>Fora das produções</h4>

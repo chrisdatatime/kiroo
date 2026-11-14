@@ -81,6 +81,19 @@ def savings_pct(credits: int, price_cents: int, unit_cents: int) -> int:
     return math.floor((full - price_cents) * 100 / full)
 
 
+def per_credit_cents(price_cents: int, credits: int) -> int:
+    """Preço por crédito, em centavos, arredondado ao centavo (7990/200 → 40; 54990/2000 → 27)."""
+    return math.floor(price_cents / credits + 0.5) if credits > 0 else 0
+
+
+def _free_view(c: dict) -> dict:
+    """Card "Free" (conta sem compra paga): os créditos são o bônus de boas-vindas (STUDIO_WELCOME_CREDITS)."""
+    from .welcome import credits as welcome_credits
+    f = c.get("free") or {}
+    return {"name": f.get("name") or "Free", "credits": welcome_credits(), "tagline": f.get("tagline") or "",
+            "price_note": f.get("price_note") or "", "missing": [str(x) for x in f.get("missing") or []]}
+
+
 def package(code: str) -> dict:
     for p in load()["packages"]:
         if p["code"] == code:
@@ -120,7 +133,12 @@ def public_view() -> dict:
         "currency": c.get("currency", "BRL"), "video_price_credits": per_video, "unit_price_cents": unit,
         "packages": [{"code": p["code"], "name": p["name"], "credits": p["credits"], "price_cents": p["price_cents"],
                       "highlight": bool(p.get("highlight")), "videos": p["credits"] // per_video,
-                      "savings_pct": savings_pct(p["credits"], p["price_cents"], unit)} for p in c["packages"]],
+                      "savings_pct": savings_pct(p["credits"], p["price_cents"], unit),
+                      "per_credit_cents": per_credit_cents(p["price_cents"], p["credits"]),
+                      "per_video_cents": p["price_cents"] * per_video // p["credits"],
+                      "features": [{"text": str(f.get("text") or ""), "strong": bool(f.get("strong"))}
+                                   for f in p.get("features") or []]} for p in c["packages"]],
+        "free": _free_view(c),
         "custom": {k: c["custom"][k] for k in ("unit_price_cents", "min_credits", "step_credits", "max_credits")}
         | {"shortcuts": list(c["custom"].get("shortcuts") or []),
            "hint_from_credits": c["custom"].get("hint_from_credits"), "hint_package": c["custom"].get("hint_package")},

@@ -13,6 +13,13 @@ export function fmtCc(cc) {
   return (cc < 0 ? '−' : '') + s;
 }
 
+// Saldo para EXIBIÇÃO: crédito inteiro, arredondado para baixo (1999 → "19"; −40 → "−1"; 200000 → "2.000").
+// O livro segue em centésimos; só o texto muda (mesma regra de credits.fmt_balance no servidor).
+export function fmtBalance(cc) {
+  const n = Math.floor((Number(cc) || 0) / 100);
+  return (n < 0 ? '−' : '') + Math.abs(n).toLocaleString('pt-BR');
+}
+
 // Dá para pagar um ajuste extra com o saldo livre? Conta isenta nunca fica sem saldo. Nunca devolve "faltam" negativo.
 export function adjustFunds({ costCc, balanceCc, exempt }) {
   const cost = Math.max(Number(costCc) || 0, 0), bal = Number(balanceCc) || 0;
@@ -24,7 +31,7 @@ export function adjustFunds({ costCc, balanceCc, exempt }) {
 export function noBalanceNotice({ scene, costCc, balanceCc, topup }) {
   const missing = Math.max(costCc - balanceCc, 0);
   return { scene, balance_cc: balanceCc, cost_cc: costCc, missing_cc: missing,
-    balance: fmtCc(balanceCc), cost: fmtCc(costCc), missing: fmtCc(missing), topup: topup || null };
+    balance: fmtBalance(balanceCc), cost: fmtCc(costCc), missing: fmtCc(missing), topup: topup || null };
 }
 
 // ...ou aproveita a resposta 402 do servidor (a fonte da verdade quando as duas contas divergem).

@@ -330,3 +330,11 @@
 @media (max-width: 640px) { .pv-belt[data-step-first] .pv-station { min-width: 120px; flex: 0 0 auto; } }
 .pv-station[data-fail] .pv-station-btn { border-color: #C7362B; background: #FFE1DA; } .pv-station[data-fail] .pv-station-state { color: #A42A20; }
 .pv-station[data-fail] .pv-station-bar > i { background: #C7362B; }
+
+/* convite para os pacotes depois do primeiro vídeo (ui/UpsellNote.jsx) */
+.pv-upsell { display: flex; align-items: center; justify-content: space-between; gap: 12px 16px; flex-wrap: wrap; padding: 16px 18px; border: 1px solid var(--line);
+  border-radius: var(--r); background: var(--card); }
+.pv-upsell p { margin: 0; flex: 1 1 280px; font-size: 15px; line-height: 1.45; color: var(--ink); }
+.pv-upsell-btn { min-height: 44px; padding: 0 18px; border: 0; border-radius: 12px; background: var(--ink); color: #fff; font-size: 15px; font-weight: 600; font-family: inherit; cursor: pointer; }
+.pv-upsell-btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+@media (max-width: 640px) { .pv-upsell-btn { width: 100%; } }

@@ -169,6 +169,8 @@ def internal_metrics(db: Database, days: int = 30) -> dict:
         extra["training_test"] = {"provider": "não registrado", "calls": r["n"], "usd": _r(r["usd"])}
     from .payments import month_metrics
     out["payments"] = month_metrics(db)
+    from .welcome import metrics as welcome_metrics
+    out["welcome"] = welcome_metrics(db)
     out["outside_productions"] = [{"key": k, "label": OPERATIONS.get(k.split(":")[0], k) if k.startswith("chat") else OPERATIONS[k], **v, "avg_usd": _avg(v["usd"], v["calls"])}
                                   for k, v in extra.items()]
     return out
@@ -213,6 +215,14 @@ def format_text(m: dict) -> str:
                   "  compras por meio: " + " | ".join(f"{'Pix' if k == 'pix' else 'cartão'}: {v['purchases']} "
                                                       f"({brl(v['revenue_cents'])})" for k, v in pm["by_method"].items()),
                   f"  créditos vendidos: {pm['credits_sold']} | créditos consumidos: {pm['credits_consumed']:g}"]
+    wm = m.get("welcome")
+    if wm:
+        lines += ["", "[bônus de boas-vindas]",
+                  f"  concedidos hoje: {wm['granted_today']} (teto {wm['daily_cap']}"
+                  f"{', ATINGIDO' if wm['cap_reached_today'] else ''}) | no mês: {wm['granted_month']} | "
+                  f"viraram compra no mês: {wm['converted_month']}",
+                  f"  desde o início: {wm['granted_total']} concedidos, {wm['converted_total']} viraram compra",
+                  "  recusas hoje: " + (", ".join(f"{k}: {v}" for k, v in sorted(wm["denied_today"].items())) or "nenhuma")]
     lines += ["", "[fora das produções]"]
     lines += [f"  {r['label']:26} {r['provider']:15} {r['calls']:5} chamadas  {usd(r['usd'])}" for r in m["outside_productions"]] or ["  (nada)"]
     return "\n".join(lines)

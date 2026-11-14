@@ -27,11 +27,14 @@ _LOCK = threading.RLock()
 
 # O schema vive em migrations.py (PRAGMA user_version).
 
-KINDS_IN = {"grant", "purchase", "adjust"}  # entradas manuais/compras
+KINDS_IN = {"grant", "purchase", "adjust", "welcome_bonus"}  # entradas manuais/compras/bônus de boas-vindas
+# "welcome_bonus": 20 créditos uma vez por pessoa (welcome.py). Não é compra: não dá plano nem entra na receita, e
+# nada o estorna (não reembolsável).
 # Compras pelo Asaas: "purchase" (crédito) e "reversal" (estorno/contestação; negativo, pode deixar o saldo negativo).
 # Os dois levam payment_id e são escritos só por payments.py (Ledger.payment_entry).
 LABELS = {"grant": "Créditos liberados", "purchase": "Compra", "adjust": "Ajuste", "reserve": "Reserva",
-          "release": "Reserva devolvida", "debit": "Uso", "reversal": "Estorno de compra"}
+          "release": "Reserva devolvida", "debit": "Uso", "reversal": "Estorno de compra",
+          "welcome_bonus": "Bônus de boas-vindas"}
 STAGES = {"image": "Imagens", "video": "Vídeos", "review_image": "Conferência das imagens",
           "review_video": "Conferência dos takes", "plan": "Direção (roteiro)",
           "workflow": "Pacote de vídeo e fotos"}
@@ -51,6 +54,14 @@ def to_cc(usd: float) -> int:
     from .billing import policy  # import tardio: billing importa o orquestrador
     p = policy()
     return math.ceil(usd * p.fx_brl_per_usd * p.margin / p.credit_price_brl * 100 - 1e-9)
+
+
+def fmt_balance(cc: int) -> str:
+    """Saldo para EXIBIÇÃO: crédito inteiro, arredondado para baixo (19,6 → 19; −0,4 → −1). O livro segue em
+    centésimos; só o texto muda. Separador de milhar pt-BR (2.000)."""
+    n = math.floor(int(cc) / 100)
+    s = f"{abs(n):,}".replace(",", ".")
+    return ("−" if n < 0 else "") + s
 
 
 def fmt(cc: int) -> str:
@@ -107,13 +118,13 @@ class Ledger:
     def summary(self, wid: str) -> dict:
         bal, held = self.balance(wid), self.held(wid)
         return {"balance_cc": bal, "held_cc": held, "available_cc": bal, "exempt": self.exempt(wid),
-                "balance": fmt(bal), "held": fmt(held)}
+                "balance": fmt_balance(bal), "balance_exact": fmt(bal), "held": fmt(held)}
 
     def statement(self, wid: str, limit: int = 60) -> list[dict]:
         """Extrato: créditos que entraram e uso por tentativa (reserva+liberação+débito viram uma linha)."""
         rows = self.db.conn.execute(
             "SELECT e.*, p.product_json FROM credit_entries e LEFT JOIN productions p ON p.id=e.production_id"
-            " WHERE e.workspace_id=? AND e.kind IN ('grant','purchase','adjust','debit','release','reversal')"
+            " WHERE e.workspace_id=? AND e.kind IN ('grant','purchase','adjust','debit','release','reversal','welcome_bonus')"
             " ORDER BY e.created_at DESC, e.rowid DESC LIMIT ?", (wid, limit * 3)).fetchall()
         debited = {r["hold_id"] for r in rows if r["kind"] == "debit"}
         out = []

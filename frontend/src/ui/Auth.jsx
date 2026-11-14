@@ -245,10 +245,13 @@ export default function AuthScreen({ onDone, resetToken, initialMode, onBack, si
     });
   };
   const verify = async (code) => {
-    try { await auth('verify', { code }); }
+    let r;
+    try { r = await auth('verify', { code }); }
     catch (err) { setF((x) => ({ ...x, code: '' })); throw err; }  // campo limpo para digitar de novo
-    setMsg({ ok: true, text: 'E-mail confirmado. Abrindo seu estúdio…' });
-    setTimeout(enter, 650);
+    // bônus de boas-vindas concedido: a frase fica na tela um pouco mais antes de abrir o estúdio
+    const bonus = r && r.welcome && r.welcome.granted;
+    setMsg({ ok: true, text: bonus ? `${r.welcome.message} Abrindo seu estúdio…` : 'E-mail confirmado. Abrindo seu estúdio…' });
+    setTimeout(enter, bonus ? 2600 : 650);
   };
   const resend = () => run(async () => {
     const r = await auth('resend', { captcha });

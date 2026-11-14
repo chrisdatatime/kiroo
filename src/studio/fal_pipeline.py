@@ -32,6 +32,7 @@ from . import budget as budget_mod
 from . import fal_contract as fc
 from . import package_files as pf
 from . import paid_gate
+from . import plans
 from .agents import composer
 from .agents.product_prep import prepare_product
 from .db import now
@@ -263,7 +264,11 @@ class FalRunner:
             retry_at = _ts(att["next_retry_at"])
             if retry_at and retry_at > datetime.now(timezone.utc):
                 return "waiting"
-            return self._submit(pid, att)
+            q = plans.slot_queue(self.o.s.db_path)
+            with q.lock:   # novo envio da mesma tentativa tambem respeita o teto
+                if self._inflight() >= self.o.s.fal_max_inflight:
+                    return "waiting"
+                return self._submit(pid, att)
         if att["status"] == "submitted":
             retry_at = _ts(att["next_retry_at"])
             if retry_at and retry_at > datetime.now(timezone.utc):
@@ -297,9 +302,25 @@ class FalRunner:
                                       (pid,)).fetchone()[0]
         if unsent >= 2:   # envios transitorios que nunca chegaram: nao fica tentando para sempre
             return self._pause(pid, CLIENT_FINALIZING, REFUSED, "o envio ao workflow falhou varias vezes sem ser aceito")
-        inflight = self.db.conn.execute("SELECT COUNT(*) FROM attempts WHERE kind='workflow' AND status='submitted'").fetchone()[0]
-        if inflight >= o.s.fal_max_inflight:
-            return "waiting"
+        q = plans.slot_queue(o.s.db_path)
+        with q.lock:   # vaga lida e ocupada (tentativa `submitted`) sob o mesmo lock: o teto nunca e ultrapassado
+            if not self._admitted(pid, q):
+                return "waiting"
+            return self._start_admitted(pid, dj)
+
+    def _inflight(self) -> int:
+        return self.db.conn.execute("SELECT COUNT(*) FROM attempts WHERE kind='workflow' AND status='submitted'").fetchone()[0]
+
+    def _admitted(self, pid: str, q) -> bool:
+        """Fila prioritaria: pro/escala saem antes quando ha producoes esperando vaga; chegada dentro do nivel."""
+        row = self.db.production(pid)
+        level = plans.priority(plans.plan_of(self.db, row["workspace_id"]))
+        ttl = max(4 * self._interval(), 20.0)
+        return q.admit(pid, level=level, arrival=row["created_at"], inflight=self._inflight(),
+                       cap=self.o.s.fal_max_inflight, ttl=ttl)
+
+    def _start_admitted(self, pid: str, dj: dict) -> str:
+        o = self.o
         style = self._style(pid)
         try:
             photo, sha = self._photo(pid)

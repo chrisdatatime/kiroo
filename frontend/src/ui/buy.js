@@ -108,3 +108,59 @@ export function checkoutBody({ tab, pkg, custom, method, doc }) {
   if (doc) body.document = cleanDoc(doc);
   return body;
 }
+
+// ---------------------------------------------------------------- tela v2: cards de plano (Free + pacotes)
+// `cat.plan` vem do servidor: {plan: free|inicial|pro|escala, has_purchase}. Plano = maior pacote PAGO (estorno recalcula).
+// Free só aparece para conta sem compra paga (e é o "plano atual" dela). O card do plano atual pago ganha a etiqueta
+// "Seu plano atual" e o botão "Comprar de novo". "Mais escolhido" fica no pacote em destaque (Pro), exceto se ele for o
+// plano atual.
+export const DEFAULT_PACK = 'pro';
+
+export function planCards(cat) {
+  const plan = (cat && cat.plan) || { plan: 'free', has_purchase: false };
+  const current = plan.plan || 'free';
+  const showFree = !plan.has_purchase;
+  const paid = ((cat && cat.packages) || []).map((p) => ({
+    ...p, kind: 'paid', current: p.code === current,
+    badge: p.highlight && p.code !== current ? 'Mais escolhido' : null,
+  }));
+  const free = cat && cat.free ? { ...cat.free, code: 'free', kind: 'free', current: true, badge: null } : null;
+  return { cards: showFree && free ? [free, ...paid] : paid, current, showFree: !!(showFree && free) };
+}
+
+// Pacote selecionado ao abrir: o Pro (ou o destaque do catálogo, ou o primeiro).
+export function defaultSelection(cat) {
+  const ps = (cat && cat.packages) || [];
+  if (ps.some((p) => p.code === DEFAULT_PACK)) return DEFAULT_PACK;
+  const hl = ps.find((p) => p.highlight);
+  return hl ? hl.code : (ps[0] ? ps[0].code : null);
+}
+
+// Texto do botão de cada card pago.
+export function buyLabel(card, selected) {
+  if (card.current) return 'Comprar de novo';
+  return selected ? `Comprar ${card.name}` : 'Comprar';
+}
+
+// Setas no grupo de rádios (só os pagos): direita/baixo = próximo, esquerda/cima = anterior (com volta), Home/End.
+export function moveSelection(codes, cur, key) {
+  const n = codes.length;
+  if (!n) return cur;
+  const i = Math.max(codes.indexOf(cur), 0);
+  if (key === 'ArrowRight' || key === 'ArrowDown') return codes[(i + 1) % n];
+  if (key === 'ArrowLeft' || key === 'ArrowUp') return codes[(i - 1 + n) % n];
+  if (key === 'Home') return codes[0];
+  if (key === 'End') return codes[n - 1];
+  return cur;
+}
+
+// Celular: Pro primeiro, depois os outros pagos na ordem do catálogo, Free por último.
+export function phoneOrder(cards) {
+  const pro = cards.filter((c) => c.code === DEFAULT_PACK);
+  const rest = cards.filter((c) => c.kind === 'paid' && c.code !== DEFAULT_PACK);
+  const free = cards.filter((c) => c.kind === 'free');
+  return [...pro, ...rest, ...free];
+}
+
+// Barra fixa do celular: "600 créditos · R$ 199,90".
+export const barSummary = (p) => (p ? `${p.credits.toLocaleString('pt-BR')} créditos · ${brl(p.price_cents)}` : '');

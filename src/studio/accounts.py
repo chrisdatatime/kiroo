@@ -290,7 +290,7 @@ class Accounts:
         self.db.conn.execute("INSERT INTO password_resets(token_hash, user_id, expires_at) VALUES (?,?,?)", (_sha(token), u["id"], exp))
         return token
 
-    def finish_reset(self, token: str, new_password: str) -> None:
+    def finish_reset(self, token: str, new_password: str) -> str:
         validate_password(new_password)
         row = self.db.conn.execute("SELECT * FROM password_resets WHERE token_hash=?", (_sha(token or ""),)).fetchone()
         if not row or row["used_at"] or row["expires_at"] < now():
@@ -301,6 +301,7 @@ class Accounts:
         self.db.conn.execute("UPDATE password_resets SET used_at=? WHERE token_hash=?", (now(), row["token_hash"]))
         self.db.conn.execute("DELETE FROM password_resets WHERE user_id=? AND used_at IS NULL", (row["user_id"],))
         self.db.conn.execute("DELETE FROM sessions WHERE user_id=?", (row["user_id"],))  # derruba sessões antigas
+        return row["user_id"]
 
     # ----------------------------------------------------------- convites (uso único)
     @staticmethod

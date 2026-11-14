@@ -195,7 +195,7 @@ def next_video_summary(db, settings, pid: str) -> dict:
     """Resumo mostrado ANTES de gastar: produto, formato, cenas, ajustes incluídos, custo total autorizado (créditos;
     R$ só com STUDIO_CREDIT_PRICE_BRL), saldo e a garantia de que nada além disso é cobrado sem autorização."""
     from . import billing
-    from .credits import Ledger, fmt
+    from .credits import Ledger, fmt, fmt_balance
     p = db.production(pid)
     profile = json.loads(p["profiles_json"])["format"]["data"]
     product = json.loads(p["product_json"])
@@ -216,8 +216,8 @@ def next_video_summary(db, settings, pid: str) -> dict:
         "included_adjustments_per_scene": 0 if fal else included_adjustments_per_scene(),
         "total_cc": total, "total_credits": fmt(total),
         "total_brl": (f"{brl:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") if brl is not None else None),
-        "balance_cc": balance, "balance": fmt(balance), "exempt": exempt,
-        "balance_after": fmt(led.balance(wid)),   # o que sobra livre depois de reservar este vídeo
+        "balance_cc": balance, "balance": fmt_balance(balance), "exempt": exempt,
+        "balance_after": fmt_balance(led.balance(wid)),   # o que sobra livre depois de reservar este vídeo
         "no_extra_cost": NO_EXTRA_COST,
     }
 

@@ -36,7 +36,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlencode, urlparse
 
-from .. import agent_config, asaas as asaas_mod, creative_options, fal_contract, mailer, paid_gate, payments
+from .. import agent_config, asaas as asaas_mod, creative_options, fal_contract, mailer, paid_gate, payments, plans, welcome
 from ..agent_chat import AgentChat
 from ..accounts import (LOGIN_WINDOW_MIN, RESET_MINUTES, TERMS_VERSION, VERIFY_MINUTES, Accounts, AuthError, GoogleAuthError,
                         verify_password)
@@ -200,10 +200,10 @@ def _json(status: int, data, headers: dict | None = None) -> Response:
 def _no_balance_for_adjustment(cost_cc: int, balance_cc: int) -> Response:
     """402 com a conta à vista quando falta saldo para um ajuste extra. Nada foi cobrado nem mudou: o vídeo, as cenas e
     as aprovações continuam como estão e a entrega não depende deste ajuste."""
-    from ..credits import fmt
+    from ..credits import fmt, fmt_balance
     missing = max(cost_cc - balance_cc, 0)
     return _json(402, {"error": "Saldo insuficiente para um novo ajuste", "insufficient_credits": True,
-                       "kind": "adjustment", "balance_cc": balance_cc, "balance": fmt(balance_cc), "cost_cc": cost_cc,
+                       "kind": "adjustment", "balance_cc": balance_cc, "balance": fmt_balance(balance_cc), "cost_cc": cost_cc,
                        "cost": fmt(cost_cc), "missing_cc": missing, "missing": fmt(missing),
                        "keep_label": "Manter meu vídeo como está", "add_label": "Adicionar créditos",
                        "topup": payments.topup_options(missing)})
@@ -560,6 +560,7 @@ class App:
                 return back("google_failed")
             wid = acc.workspaces_of(uid)[0]["id"]
             token, _ = acc.create_session(uid, wid)
+            self._welcome(db, uid, wid, headers)   # e-mail confirmado pelo Google: decide o bônus (uma vez)
         finally:
             db.close()
         return back(None, [self._set_cookie(token, 30 * 86400, secure=secure)["Set-Cookie"]])
@@ -699,6 +700,15 @@ class App:
         except (OrchestratorError, ValueError, KeyError, StorageError, UploadError) as exc:
             return _json(400, {"error": redact(exc)})  # TrainingError e MusicError são ValueError
 
+    def _welcome(self, db, uid: str, wid: str | None, headers: dict) -> dict:
+        """Bônus de boas-vindas no momento em que o e-mail fica confirmado. Nunca derruba a confirmação."""
+        try:
+            return welcome.try_grant(db, user_id=uid, workspace_id=wid, ip=self._client_ip(headers),
+                                     device_id=_cookie(headers, welcome.DEVICE_COOKIE) or headers.get("X-Kiroo-Device"))
+        except Exception:  # noqa: BLE001 — o bônus é extra: falha vira log, a conta segue confirmada
+            log.exception("bônus de boas-vindas falhou")
+            return {"granted": False, "reason": "error"}
+
     def _limited(self, bucket: str, key: str) -> Response | None:
         wait = self.limiter.hit(bucket, key)
         if wait is None:
@@ -785,9 +795,11 @@ class App:
                     sent = self._send_verification(acc, sess["user_id"], sess["email"])
                     return _json(200, {"ok": True, "sent": sent, **({} if sent else {"message": SEND_FAILED_MSG})})
                 acc.verify_email(sess["user_id"], str(p.get("code", "")))
-                return _json(200, {"ok": True})
+                wb = self._welcome(db, sess["user_id"], sess["workspace_id"], headers)
+                return _json(200, {"ok": True, **({"welcome": wb} if wb.get("granted") else {})})
             if path == "/api/auth/reset":
-                acc.finish_reset(p.get("token", ""), p.get("password", ""))
+                uid = acc.finish_reset(p.get("token", ""), p.get("password", ""))
+                self._welcome(db, uid, None, headers)   # o link do e-mail também confirma o e-mail
                 return _json(200, {"ok": True})
             return _json(404, {"error": "não encontrado"})
         finally:
@@ -810,6 +822,8 @@ class App:
             try:
                 led = Ledger(db)
                 credits = led.summary(ws["id"])
+                plan = plans.view(db, ws["id"])
+                bonus = welcome.state(db, ctx["sess"]["user_id"])
                 if path == "/api/credits":  # extrato e consumo por produção/cena/operação (Fase C)
                     return _json(200, {**credits, "statement": led.statement(ws["id"]), "usage": led.usage(ws["id"]),
                                        "topup": payments.topup_options()})
@@ -824,7 +838,8 @@ class App:
                                              "credits": credits},
                                "workspaces": [{"id": w["id"], "name": w["name"], "role": w["role"]} for w in ctx["workspaces"]],
                                "paid_calls": {k: v for k, v in paid_gate.status().items() if k in ("blocked", "message")},
-                               "payments": {"online": payments.enabled() and not ws["credits_exempt"]}})
+                               "payments": {"online": payments.enabled() and not ws["credits_exempt"]},
+                               "plan": plan, "welcome": bonus})
         if path == "/api/payments/catalog" or re.fullmatch(r"/api/payments/kpay_[0-9a-f]{10}", path):
             return self._payments_get(path, ctx)
         if path == "/api/credits/topup":   # "Adicionar créditos": manual (desligado) ou compra pelo site (Asaas)
@@ -858,10 +873,11 @@ class App:
                     data = snapshot(s, db, sel, since=since, running=self.is_running(sel), error=self.errors.get(sel),
                                     workspace_id=wid)
                 data["credits"] = Ledger(db).summary(wid)
+                plan = plans.plan_of(db, wid)
             finally:
                 db.close()
             data["settings"]["video_engine"] = self._engine_for(ctx["ws"], s)   # a interface so mostra o fluxo fal.ai com "fal"
-            data["settings"]["fal_styles"] = self._fal_offer(s, data["settings"].get("mode"))
+            data["settings"]["fal_styles"] = self._fal_offer(s, data["settings"].get("mode"), plan)
             return _json(200, data)
         if path.startswith("/media/"):
             return self._media(path, ctx, url.query)
@@ -1099,10 +1115,10 @@ class App:
     @staticmethod
     def _no_credits(exc, fixed: bool = False) -> Response:
         """Saldo < pré-orçamento: bloqueia ANTES de começar, com a conta à vista. `fixed`: preço fixo (motor fal.ai)."""
-        from ..credits import fmt
+        from ..credits import fmt, fmt_balance
         cost = (f"Este vídeo custa {fmt(exc.needed_cc)} créditos" if fixed
                 else f"Este vídeo custa cerca de {fmt(exc.needed_cc)} créditos (com os ajustes incluídos)")
-        return _json(402, {"error": f"{cost} e o saldo do estúdio é {fmt(exc.balance_cc)}. Nada foi cobrado e a produção "
+        return _json(402, {"error": f"{cost} e o saldo do estúdio é {fmt_balance(exc.balance_cc)}. Nada foi cobrado e a produção "
                                     "não começou: adicione créditos e tente de novo.",
                            "insufficient_credits": True, "needed_cc": exc.needed_cc, "balance_cc": exc.balance_cc,
                            "topup": payments.topup_options(max(exc.needed_cc - exc.balance_cc, 0))})
@@ -1114,13 +1130,13 @@ class App:
         return own if own in ("gemini", "fal") else s.video_engine
 
     @staticmethod
-    def _fal_offer(s, mode) -> list[dict]:
+    def _fal_offer(s, mode, plan: str = "free") -> list[dict]:
         """Estilos liberados com o preco EXATO do botao "Criar video · N creditos" (o mesmo pre-orcamento reservado na
         criacao e conferido no /confirm). No DEMO nada e cobrado: cc 0."""
         from .. import budget as budget_mod
         from ..credits import fmt as fmt_cc
         out = []
-        for k in fal_contract.enabled_styles(s):
+        for k in fal_contract.styles_for_plan(s, plan):   # acesso antecipado: só para o plano marcado no contrato
             cc = budget_mod.estimate_workflow(s, k)["cc"] if mode == "real" else 0
             out.append({"id": k, "label": fal_contract.STYLE_LABELS[k], "cc": cc, "credits": fmt_cc(cc)})
         return out
@@ -1162,6 +1178,14 @@ class App:
             return _json(400, {"error": "Escolha o estilo: Escuro ou Claro."})
         if style not in fal_contract.enabled_styles(s):
             return _json(400, {"error": "Este estilo ainda nao esta disponivel. Use o estilo Claro."})
+        db = Database(s.db_path)
+        try:
+            plan = plans.plan_of(db, ctx["wid"])
+        finally:
+            db.close()
+        if style not in fal_contract.styles_for_plan(s, plan):
+            return _json(403, {"error": "Este estilo novo ainda está em acesso antecipado do plano Escala.",
+                               "code": "early_access"})
         crid = str(payload.get("client_request_id") or "")
         if not re.fullmatch(r"[A-Za-z0-9_-]{8,64}", crid):
             return _json(400, {"error": "pedido sem identificador (client_request_id)"})
@@ -1271,7 +1295,8 @@ class App:
         try:
             if path == "/api/payments/catalog":
                 from .. import catalog
-                return _json(200, {**catalog.public_view(), **payments.account_state(db, ctx["wid"])})
+                return _json(200, {**catalog.public_view(), **payments.account_state(db, ctx["wid"]),
+                                   "plan": plans.view(db, ctx["wid"])})
             row = payments.get(db, path.rsplit("/", 1)[1])
             if row is None or row["account_id"] != ctx["wid"]:
                 return _json(404, {"error": "compra não encontrada"})

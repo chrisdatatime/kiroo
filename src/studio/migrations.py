@@ -491,6 +491,30 @@ def _m010_payments(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE workspaces ADD COLUMN asaas_customer_id TEXT")
 
 
+def _m011_welcome_bonus(conn: sqlite3.Connection) -> None:
+    """Bônus de boas-vindas (20 créditos, uma vez por pessoa, só depois de confirmar o e-mail). Uma linha por DECISÃO
+    (concedido ou recusado, com o motivo); os índices únicos parciais garantem no máximo UM bônus concedido por
+    usuário, por e-mail normalizado e por dispositivo, mesmo com pedidos simultâneos. O id do dispositivo e o IP
+    ficam só como hash (servem para comparar, não para identificar)."""
+    conn.execute("""CREATE TABLE IF NOT EXISTS welcome_bonuses (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        workspace_id TEXT,
+        email_norm TEXT NOT NULL,             -- minúsculas, sem +tag, sem pontos no gmail
+        device_hash TEXT,                     -- sha256 do id persistente do navegador
+        ip_hash TEXT,                         -- sha256 do IP (limite por IP em 24 h)
+        status TEXT NOT NULL,                 -- granted | denied
+        reason TEXT,                          -- motivo da recusa (email, device, ip, daily_cap, no_device, ...)
+        credits INTEGER NOT NULL DEFAULT 0,
+        entry_id TEXT,                        -- lançamento welcome_bonus no livro
+        created_at TEXT NOT NULL
+    )""")
+    for col in ("user_id", "email_norm", "device_hash"):
+        conn.execute(f"CREATE UNIQUE INDEX IF NOT EXISTS ux_welcome_{col} ON welcome_bonuses({col}) WHERE status='granted'")
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_welcome_created ON welcome_bonuses(status, created_at)")
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_welcome_ip ON welcome_bonuses(ip_hash, created_at)")
+
+
 MIGRATIONS: list[Migration] = [
     Migration(1, "schema completo", _m001_baseline),
     Migration(2, "convites de uso único e consentimento", _m002_invites_consent),
@@ -502,6 +526,7 @@ MIGRATIONS: list[Migration] = [
     Migration(8, "Direção obrigatória antes do roteiro nas produções do app", _m008_direction_required),
     Migration(9, "motor fal.ai: engine/style/entrega por produção, id do cliente único e metadados da tentativa", _m009_fal_engine),
     Migration(10, "compra de créditos pelo Asaas: payments, payment_events e payment_id no livro", _m010_payments),
+    Migration(11, "bônus de boas-vindas: uma decisão por pessoa, únicos por e-mail e dispositivo", _m011_welcome_bonus),
 ]
 LATEST = MIGRATIONS[-1].version
 assert [m.version for m in MIGRATIONS] == list(range(1, LATEST + 1)), "migrações devem ser 1..N em ordem"

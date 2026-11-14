@@ -103,3 +103,106 @@ console.log('ok: credits');
   assert.equal(B.statusOf('paid').label, 'Pagamento confirmado');
   assert.ok(B.isFinal('paid') && !B.isFinal('pending'));
 }
+
+// ---------------------------------------------------------------- saldo inteiro, arredondado para baixo (só exibição)
+{
+  const { fmtBalance, noBalanceNotice: nb } = await import('../src/ui/credits.js');
+  assert.equal(fmtBalance(1999), '19');
+  assert.equal(fmtBalance(2000), '20');
+  assert.equal(fmtBalance(0), '0');
+  assert.equal(fmtBalance(-40), '−1');
+  assert.equal(fmtBalance(200000), '2.000');
+  assert.equal(nb({ scene: 1, costCc: 2000, balanceCc: 1999 }).balance, '19');
+  console.log('ok: saldo inteiro');
+}
+
+// ---------------------------------------------------------------- Comprar créditos v2: cards, seleção, celular
+{
+  const B = await import('../src/ui/buy.js');
+  const pk = (code, name, credits, price, extra = {}) => ({ code, name, credits, price_cents: price, features: [], ...extra });
+  const packages = [pk('inicial', 'Inicial', 200, 7990), pk('pro', 'Pro', 600, 19990, { highlight: true }), pk('escala', 'Escala', 2000, 54990)];
+  const free = { name: 'Free', credits: 20, tagline: 'Só para conhecer', price_note: 'Crédito de boas-vindas', missing: ['a'] };
+  // conta sem compra: Free à esquerda, plano atual; 4 cards; Pro com "Mais escolhido"; Pro selecionado por padrão
+  let r = B.planCards({ packages, free, plan: { plan: 'free', has_purchase: false } });
+  assert.deepEqual(r.cards.map((c) => c.code), ['free', 'inicial', 'pro', 'escala']);
+  assert.ok(r.showFree && r.cards[0].current && r.cards[0].kind === 'free');
+  assert.deepEqual(r.cards.map((c) => c.badge), [null, null, 'Mais escolhido', null]);
+  assert.equal(B.defaultSelection({ packages }), 'pro');
+  // conta que já comprou (Pro): Free some (3 cards), Pro é o plano atual, "Comprar de novo", sem "Mais escolhido"
+  r = B.planCards({ packages, free, plan: { plan: 'pro', has_purchase: true } });
+  assert.deepEqual(r.cards.map((c) => c.code), ['inicial', 'pro', 'escala']);
+  assert.ok(!r.showFree && r.cards[1].current && r.cards[1].badge === null);
+  assert.equal(B.buyLabel(r.cards[1], true), 'Comprar de novo');
+  // plano Escala: "Mais escolhido" continua no Pro
+  r = B.planCards({ packages, free, plan: { plan: 'escala', has_purchase: true } });
+  assert.equal(r.cards.find((c) => c.code === 'pro').badge, 'Mais escolhido');
+  assert.equal(B.buyLabel(r.cards[2], false), 'Comprar de novo');
+  // só avulso comprado: sem Free, nenhum plano atual entre os pacotes
+  r = B.planCards({ packages, free, plan: { plan: 'free', has_purchase: true } });
+  assert.ok(!r.showFree && r.cards.every((c) => !c.current));
+  // botões: selecionado = "Comprar Pro"; os outros "Comprar"
+  assert.equal(B.buyLabel(packages[1], true), 'Comprar Pro');
+  assert.equal(B.buyLabel(packages[0], true), 'Comprar Inicial');
+  assert.equal(B.buyLabel(packages[2], false), 'Comprar');
+  // teclado: setas andam e voltam pela ponta; Home/End; outras teclas não mudam
+  const codes = ['inicial', 'pro', 'escala'];
+  assert.equal(B.moveSelection(codes, 'pro', 'ArrowRight'), 'escala');
+  assert.equal(B.moveSelection(codes, 'escala', 'ArrowRight'), 'inicial');
+  assert.equal(B.moveSelection(codes, 'pro', 'ArrowLeft'), 'inicial');
+  assert.equal(B.moveSelection(codes, 'inicial', 'ArrowUp'), 'escala');
+  assert.equal(B.moveSelection(codes, 'pro', 'ArrowDown'), 'escala');
+  assert.equal(B.moveSelection(codes, 'pro', 'Home'), 'inicial');
+  assert.equal(B.moveSelection(codes, 'pro', 'End'), 'escala');
+  assert.equal(B.moveSelection(codes, 'pro', 'a'), 'pro');
+  // celular: Pro primeiro, Free por último
+  const all = B.planCards({ packages, free, plan: { plan: 'free', has_purchase: false } }).cards;
+  assert.deepEqual(B.phoneOrder(all).map((c) => c.code), ['pro', 'inicial', 'escala', 'free']);
+  assert.equal(B.barSummary(packages[1]), '600 créditos · ' + B.brl(19990));
+  assert.equal(B.barSummary(packages[2]), '2.000 créditos · ' + B.brl(54990));
+  // a tela nova não mostra mais "1 vídeo = 20 créditos" nem "≈ N vídeos"
+  const jsx = readFileSync(new URL('../src/ui/BuyCredits.jsx', import.meta.url), 'utf8');
+  assert.ok(!/1 vídeo =/.test(jsx) && !/≈/.test(jsx) && !/rende até/.test(jsx));
+  // movimento: 220 ms cubic-bezier(.2,.8,.2,1); só transform/sombra/cor; reduced-motion tira o movimento
+  const css = readFileSync(new URL('../src/ui/buyv2.css', import.meta.url), 'utf8');
+  assert.ok(/--bv-ease: cubic-bezier\(\.2, \.8, \.2, 1\); --bv-t: 220ms/.test(css));
+  assert.ok(/\.bv-card\.is-sel \{ transform: translateY\(-6px\); \}/.test(css));
+  assert.ok(/0 10px 28px rgba\(20, 20, 20, \.10\)/.test(css));
+  const rm = css.slice(css.indexOf('@media (prefers-reduced-motion: reduce)'));
+  assert.ok(/\.bv-card\.is-sel \{ transform: none; \}/.test(rm) && /transition: none/.test(rm));
+  assert.ok(!/transition:[^;]*(height|width|padding|margin)/.test(css.slice(0, css.indexOf('@media'))));   // nada de layout animado no desktop
+  assert.ok(!/#FF5B2E|orange/i.test(css));                                                                     // nada de laranja
+  console.log('ok: comprar créditos v2');
+}
+
+// ---------------------------------------------------------------- bônus de boas-vindas (ui/welcome.js)
+{
+  const W = await import('../src/ui/welcome.js');
+  const acc = { welcome: { credits: 20, granted_at: '2026-11-14T10:00:00+00:00' } };
+  assert.deepEqual(W.emptyMissionsCopy(acc, []), { title: 'Seus 20 créditos estão esperando.',
+    text: 'Solte a foto do seu produto e veja o vídeo pronto em 3 minutos.', cta: 'Criar meu primeiro vídeo' });
+  assert.equal(W.emptyMissionsCopy(acc, [{ id: 'p1' }]), null);
+  assert.equal(W.emptyMissionsCopy({ welcome: null }, []), null);
+  const P = { status: 'awaiting_final_review' };
+  const low = { balance_cc: 0, exempt: false };
+  assert.equal(W.firstVideoCopy({ P, productions: [P], wallet: low }).text,
+    'Esse é o seu produto vendendo sozinho. Continue criando: no Pro, cada vídeo sai por R$ 6,66.');
+  assert.equal(W.firstVideoCopy({ P, productions: [P], wallet: low }).cta, 'Ver pacotes');
+  assert.equal(W.firstVideoCopy({ P, productions: [P], wallet: { balance_cc: 2000 } }), null);       // ainda dá 1 vídeo
+  assert.equal(W.firstVideoCopy({ P, productions: [P, { status: 'completed' }], wallet: low }), null); // não é o primeiro
+  assert.equal(W.firstVideoCopy({ P: { status: 'producing' }, productions: [P], wallet: low }), null);
+  assert.equal(W.firstVideoCopy({ P, productions: [P], wallet: { balance_cc: 0, exempt: true } }), null);
+  assert.equal(W.NO_BALANCE_CREATE, 'Você já sabe o resultado. Escolha quantos vídeos quer fazer este mês.');
+  assert.ok(W.isNoFunds({ status: 402 }) && W.isNoFunds({ data: { insufficient_credits: true } }) && !W.isNoFunds({ status: 400 }));
+  console.log('ok: bônus de boas-vindas');
+}
+
+// saldo insuficiente ao criar (402): a criação devolve noFunds e o App troca pelo convite dos pacotes
+{
+  const { startFal } = await import('../src/ui/falFlow.js');
+  const r = await startFal(async () => { throw Object.assign(new Error('Este vídeo custa 20 créditos e o saldo do estúdio é 0.'), { status: 402, data: { insufficient_credits: true } }); }, { body: {}, cc: 2000 });
+  assert.equal(r.ok, false);
+  assert.equal(r.noFunds, true);
+  const app = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
+  assert.ok(/r\.noFunds \? NO_BALANCE_CREATE : r\.error/.test(app));
+  console.log('ok: saldo insuficiente ao criar');
+}

@@ -6,6 +6,7 @@ import Conveyor from './Conveyor.jsx';
 import { creditsByStation, taskThumb } from './conveyor.js';
 import { getJSON } from '../engine/api.js';
 import { FalStatusCard, FalDelivery, useFalBelt } from '../ui/FalMission.jsx';
+import { UpsellNote } from '../ui/UpsellNote.jsx';
 import { usePhone } from '../hooks/use-phone.js';
 import { PhoneFalMission } from './Phone.jsx';
 
@@ -87,6 +88,7 @@ function FalMissionView({ v, m }) {
         </section>
       </div>
       {belt.allDone ? <FalDelivery m={m} /> : null}
+      {belt.allDone && v.firstVideo ? <UpsellNote copy={v.firstVideo} onClick={v.openBuy} /> : null}
     </div></div>
   );
 }
@@ -100,9 +102,9 @@ export default function MissionView({ v }) {
   if (!v.hasProd) {
     return (
       <div className="pv-scroll"><div className="pv-wrap" style={{ maxWidth: 560 }}>
-        <div className="pv-card pv-empty" style={{ padding: 40 }}><strong style={{ fontSize: 20 }}>Nenhuma missão aberta</strong>
-          Descreva o produto e a equipe monta o roteiro, as imagens, os vídeos e a edição, pedindo sua decisão nos pontos certos.
-          <div style={{ marginTop: 18 }}><button className="pv-btn pv-btn-lime" onClick={v.newProd}><Icon name="plus" size={16} />Começar missão</button></div>
+        <div className="pv-card pv-empty" style={{ padding: 40 }}><strong style={{ fontSize: 20 }}>{v.welcomeEmpty ? v.welcomeEmpty.title : 'Nenhuma missão aberta'}</strong>
+          {v.welcomeEmpty ? v.welcomeEmpty.text : 'Descreva o produto e a equipe monta o roteiro, as imagens, os vídeos e a edição, pedindo sua decisão nos pontos certos.'}
+          <div style={{ marginTop: 18 }}><button className="pv-btn pv-btn-lime" onClick={v.newProd}><Icon name="plus" size={16} />{v.welcomeEmpty ? v.welcomeEmpty.cta : 'Começar missão'}</button></div>
           {v.productions.length > 0 && <div style={{ marginTop: 14 }}><button className="pv-btn pv-btn-quiet" onClick={() => v.setView('central')}>Ver missões anteriores</button></div>}
         </div>
       </div></div>

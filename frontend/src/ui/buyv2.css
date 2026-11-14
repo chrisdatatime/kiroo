@@ -1,0 +1,155 @@
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/inter/700.css";
+
+/* ===================================================================== Comprar créditos v2 (modal .bvd)
+   Referência: canvas "Kiroo - Comprar créditos", opção B. Inter; fundo #F7F6F2; cards #FFF; borda #E3E1DB; texto #141414;
+   secundário #5F5E5A. Nada de card escuro nem laranja. Seleção: só transform/sombra/cor animam (o layout não pula):
+   o fundo do card é um ::before que cresce para cima (scaleY a partir da base) enquanto o card sobe 6 px.
+   A landing não tem animação de destaque de card (só .lp-act-crew li, borda/sombra .3s sem deslocamento), então valem
+   os valores padrão do pedido: 220 ms cubic-bezier(.2,.8,.2,1). */
+.bvd { --bv-ink: #141414; --bv-2: #5F5E5A; --bv-line: #E3E1DB; --bv-bg: #F7F6F2; --bv-ease: cubic-bezier(.2, .8, .2, 1); --bv-t: 220ms;
+  width: min(1120px, calc(100vw - 32px)); max-width: none; max-height: calc(100vh - 32px); padding: 0; gap: 0; display: flex; flex-direction: column;
+  background: var(--bv-bg); border: 0; border-radius: 16px; overflow: hidden; }
+.bvd-body { flex: 1; min-height: 0; overflow: auto; }
+.bv { display: flex; flex-direction: column; gap: 26px; padding: 28px 32px; color: var(--bv-ink); font-family: Inter, system-ui, sans-serif; }
+.bv .buy-warn, .bv .buy-err { margin: 0; }
+.bv-load { display: grid; place-items: center; padding: 40px; }
+.bv-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.bv-h1 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -.01em; font-family: inherit; line-height: 1.2; }
+.bv-head-r { display: flex; align-items: center; gap: 10px; }
+.bv-bal { font-size: 14px; color: var(--bv-2); background: #fff; border: 1px solid var(--bv-line); border-radius: 999px; padding: 8px 14px; white-space: nowrap; }
+.bv-bal strong { color: var(--bv-ink); font-weight: 600; }
+.bv-close { width: 40px; height: 40px; border: 0; background: #fff; border-radius: 10px; cursor: pointer; display: grid; place-items: center; color: var(--bv-ink); }
+.bv-close:focus-visible, .bv-btn:focus-visible, .bv-link:focus-visible { outline: 2px solid var(--bv-ink); outline-offset: 2px; }
+
+/* grade: 4 colunas (com Free) ou 3; espaço em cima para o card subir e a etiqueta "Mais escolhido" */
+.bv-grid { --cols: 4; display: grid; grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); gap: 14px; align-items: end; padding-top: 34px; }
+.bv-grid[data-n="3"] { --cols: 3; }
+.bv-card { position: relative; height: 500px; border-radius: 16px; cursor: pointer; isolation: isolate;
+  transition: transform var(--bv-t) var(--bv-ease); }
+.bv-card::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: 16px; background: #fff; border: 1px solid var(--bv-line);
+  transform-origin: 50% 100%; transition: transform var(--bv-t) var(--bv-ease), box-shadow var(--bv-t) var(--bv-ease), border-color var(--bv-t) var(--bv-ease); }
+.bv-card:hover:not(.is-sel):not(.is-free)::before { border-color: #C9C6BE; }
+.bv-card.is-sel { transform: translateY(-6px); }
+.bv-card.is-sel::before { transform: scaleY(1.05); border-color: var(--bv-ink); box-shadow: 0 0 0 1px var(--bv-ink), 0 10px 28px rgba(20, 20, 20, .10); }
+.bv-card-in { position: relative; height: 100%; box-sizing: border-box; padding: 22px; display: flex; flex-direction: column; gap: 16px; }
+.bv-radio { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; pointer-events: none; }
+.bv-card:has(.bv-radio:focus-visible)::before, .bv-grid[data-kb] .bv-card:has(.bv-radio:focus)::before { outline: 2px solid var(--bv-ink); outline-offset: 4px; }
+.bv-label { display: flex; flex-direction: column; gap: 16px; cursor: pointer; }
+.bv-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 24px; }
+.bv-name { font-size: 15px; font-weight: 600; color: var(--bv-2); transition: color var(--bv-t) var(--bv-ease); }
+.bv-card.is-sel .bv-name { color: var(--bv-ink); }
+.bv-tag { font-size: 12px; font-weight: 600; color: var(--bv-ink); background: var(--bv-line); border-radius: 999px; padding: 4px 10px; white-space: nowrap; }
+.bv-badge { position: absolute; top: -13px; left: 50%; z-index: 2; transform: translateX(-50%); font-size: 12px; font-weight: 600; color: #fff; background: var(--bv-ink);
+  border-radius: 999px; padding: 5px 12px; white-space: nowrap; transition: transform var(--bv-t) var(--bv-ease); }
+.bv-card.is-sel .bv-badge { transform: translate(-50%, -25px); }   /* acompanha o topo do fundo (500 px x 5%) */
+.bv-num { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.bv-num strong { font-size: 40px; font-weight: 700; letter-spacing: -.03em; line-height: 1; }
+.bv-num span { font-size: 17px; font-weight: 600; }
+.bv-save { align-self: flex-start; font-size: 13px; font-weight: 600; color: #166534; background: #DCFCE7; border-radius: 8px; padding: 5px 9px; }
+.bv-tagline { font-size: 13px; color: var(--bv-2); height: 26px; display: flex; align-items: center; }
+.bv-more { display: grid; grid-template-rows: 1fr; transition: grid-template-rows var(--bv-t) var(--bv-ease); }
+.bv-more-in { min-height: 0; overflow: hidden; }
+.bv-feats { list-style: none; margin: 0; padding: 16px 0 0; border-top: 1px solid #ECEAE5; display: flex; flex-direction: column; gap: 10px; }
+.bv-feats li { display: flex; align-items: flex-start; gap: 8px; font-size: 14px; line-height: 1.4; color: #3A3935; }
+.bv-feats li.is-strong { color: var(--bv-ink); font-weight: 600; }
+.bv-feats.is-off { border-top-color: var(--bv-line); }
+.bv-feats.is-off li { color: var(--bv-2); }
+.bv-ic { flex: none; margin-top: 2px; }
+.bv-grow { flex: 1; }
+.bv-price { display: flex; flex-direction: column; gap: 4px; }
+.bv-price strong { font-size: 24px; font-weight: 700; }
+.bv-price span { font-size: 13px; color: var(--bv-2); }
+.bv-btn { min-height: 48px; padding: 0 18px; border: 1px solid var(--bv-ink); border-radius: 12px; background: #fff; color: var(--bv-ink); font: 600 15px/1 Inter, system-ui, sans-serif;
+  cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; text-decoration: none;
+  transition: background-color var(--bv-t) var(--bv-ease), color var(--bv-t) var(--bv-ease), border-color var(--bv-t) var(--bv-ease); }
+.bv-btn:hover:not(:disabled) { background: #F1F0EC; }
+.bv-btn.is-sel { background: var(--bv-ink); color: #fff; font-weight: 700; }
+.bv-btn.is-sel:hover:not(:disabled) { background: #2A2A28; }
+.bv-btn:disabled { opacity: .45; cursor: not-allowed; }
+.bv-btn.is-off, .bv-btn.is-off:disabled { border-color: #D6D3CC; background: transparent; color: var(--bv-2); opacity: 1; cursor: default; }
+/* Free: rebaixado, não selecionável */
+.bv-card.is-free { cursor: default; }
+.bv-card.is-free::before { background: #F1F0EC; }
+.bv-card.is-free .bv-num, .bv-card.is-free .bv-price strong { color: #3A3935; }
+.bv-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 14px; color: var(--bv-2); }
+.bv-link { border: 0; background: none; padding: 0; font: 600 14px/1 Inter, system-ui, sans-serif; color: var(--bv-ink); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.bv-link:hover { color: var(--bv-2); }
+.bv-secure { display: inline-flex; align-items: center; gap: 6px; }
+.bv-bar { display: none; }
+
+/* passos avulso / pagamento / acompanhamento */
+.bv-panel { display: flex; flex-direction: column; gap: 14px; max-width: 560px; width: 100%; align-self: center; background: #fff; border: 1px solid var(--bv-line);
+  border-radius: 16px; padding: 24px; box-sizing: border-box; }
+.bv-panel .buy-qty { background: var(--bv-bg); }
+.bv-h2 { margin: 0; font-size: 16px; font-weight: 600; }
+.bv-k { font-size: 13px; font-weight: 600; color: var(--bv-2); }
+.bv-sum { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; padding-bottom: 14px; border-bottom: 1px solid #ECEAE5; }
+.bv-sum > span { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--bv-2); }
+.bv-sum > span strong { font-size: 20px; color: var(--bv-ink); }
+.bv-sum-price { font-size: 24px; }
+.bv-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: space-between; }
+.bv-actions .bv-btn.is-sel { flex: 1; max-width: 320px; }
+.bv-self { align-self: flex-start; }
+.bv .buy-method[aria-checked="true"] { border-color: var(--bv-ink); box-shadow: 0 0 0 1px var(--bv-ink); }
+.bv .buy-chip[aria-pressed="true"] { background: var(--bv-ink); border-color: var(--bv-ink); }
+.bv .buy-method, .bv .buy-chip, .bv .buy-step, .bv .buy-doc input { border-color: var(--bv-line); }
+.bv .buy-method, .bv .buy-chip, .bv .buy-seg-btn, .bv .buy-link { font-family: inherit; }
+
+/* movimento reduzido: sem subir/crescer; só troca de borda e cor */
+@media (prefers-reduced-motion: reduce) {
+  .bv-card, .bv-card::before, .bv-badge, .bv-btn, .bv-name, .bv-more { transition: none; }
+  .bv-card.is-sel { transform: none; }
+  .bv-card.is-sel::before { transform: none; box-shadow: 0 0 0 1px var(--bv-ink); }
+  .bv-card.is-sel .bv-badge { transform: translateX(-50%); }
+}
+
+/* tela média: 2 colunas (os cards não espremem o texto) */
+@media (max-width: 980px) and (min-width: 641px) {
+  .bv-grid, .bv-grid[data-n="3"] { --cols: 2; row-gap: 44px; }
+}
+
+/* celular: cards empilhados (Pro primeiro e aberto; os outros compactos, tocar abre e seleciona), barra fixa no rodapé */
+@media (max-width: 640px) {
+  .bvd { width: 100vw; max-height: none; height: 100vh; height: 100dvh; border-radius: 0; }
+  .bv { padding: 12px 16px 0; padding-top: calc(12px + env(safe-area-inset-top)); gap: 16px; }
+  .bv-h1 { font-size: 18px; white-space: nowrap; }
+  .bv-head-r { gap: 8px; }
+  .bv-bal { padding: 7px 12px; font-size: 13px; }
+  .bv-close { width: 44px; height: 44px; }
+  .bv-grid, .bv-grid[data-n="3"] { grid-template-columns: 1fr; gap: 12px; padding-top: 14px; }
+  .bv-card { height: auto; }
+  .bv-card.is-sel { transform: none; }
+  .bv-card.is-sel::before { transform: none; }
+  .bv-card.is-sel .bv-badge { transform: translateX(-50%); }
+  .bv-card-in { padding: 18px 16px; gap: 12px; }
+  .bv-card.is-sel .bv-card-in { padding-top: 22px; }
+  .bv-num strong { font-size: 34px; }
+  .bv-grow { display: none; }
+  .bv-card .bv-btn { display: none; }              /* a ação é a barra fixa */
+  /* compacto: nome + créditos à esquerda, preço à direita; vantagens recolhidas */
+  .bv-card.is-compact .bv-card-in { display: grid; grid-template-columns: 1fr auto; align-items: center; column-gap: 12px; row-gap: 0; padding: 14px 16px; min-height: 76px; }
+  .bv-card.is-compact .bv-label { gap: 4px; grid-column: 1; }
+  .bv-card.is-compact .bv-card-in > .bv-row, .bv-card.is-compact .bv-card-in > .bv-num { grid-column: 1; }
+  .bv-card.is-compact .bv-card-in > .bv-num { margin-top: 4px; }
+  .bv-card.is-compact .bv-num strong { font-size: 24px; }
+  .bv-card.is-compact .bv-num span { font-size: 15px; }
+  .bv-card.is-compact .bv-save, .bv-card.is-compact .bv-tagline { display: none; }
+  .bv-card.is-compact .bv-more { grid-template-rows: 0fr; grid-column: 1 / -1; }
+  .bv-card.is-compact .bv-more .bv-feats { padding-top: 0; border-top: 0; }
+  .bv-card.is-compact .bv-price { grid-column: 2; grid-row: 1; align-items: flex-end; text-align: right; }
+  .bv-card.is-compact.is-free .bv-price { grid-row: 1 / span 2; }
+  .bv-card.is-compact .bv-price strong { font-size: 18px; }
+  .bv-feats li { font-size: 15px; }
+  .bv-foot { flex-direction: column; align-items: flex-start; gap: 4px; font-size: 15px; }
+  .bv-link { min-height: 44px; font-size: 15px; }
+  .bv-bar { display: flex; position: sticky; bottom: 0; z-index: 3; align-items: center; justify-content: space-between; gap: 12px; margin: 0 -16px;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); background: #fff; border-top: 1px solid var(--bv-line); box-shadow: 0 -6px 18px rgba(20, 20, 20, .06); }
+  .bv-bar-sum { font-size: 15px; font-weight: 600; }
+  .bv-bar-btn { min-height: 48px; min-width: 132px; }
+  .bv-panel { padding: 18px 16px; border-radius: 14px; margin-bottom: 16px; }
+  .bv-actions { flex-direction: column-reverse; }
+  .bv-actions .bv-btn { width: 100%; max-width: none; min-height: 48px; }
+}

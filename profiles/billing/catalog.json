@@ -5,10 +5,16 @@
   "video_price_credits": 20,
   "unit_price_cents": 50,
   "packages": [
-    {"code": "inicial", "name": "Inicial", "credits": 200, "price_cents": 7990},
-    {"code": "pro", "name": "Pro", "credits": 600, "price_cents": 19990, "highlight": true},
-    {"code": "escala", "name": "Escala", "credits": 2000, "price_cents": 54990}
+    {"code": "inicial", "name": "Inicial", "credits": 200, "price_cents": 7990,
+     "features": [{"text": "Vídeo, foto, título e legenda"}, {"text": "Todos os estilos de vídeo"}, {"text": "Suporte por e-mail"}]},
+    {"code": "pro", "name": "Pro", "credits": 600, "price_cents": 19990, "highlight": true,
+     "features": [{"text": "Tudo do Inicial"}, {"text": "Fila prioritária: seus vídeos saem primeiro", "strong": true},
+                  {"text": "Suporte por WhatsApp", "strong": true}]},
+    {"code": "escala", "name": "Escala", "credits": 2000, "price_cents": 54990,
+     "features": [{"text": "Tudo do Pro"}, {"text": "Novos estilos antes de todos"}]}
   ],
+  "free": {"name": "Free", "tagline": "Só para conhecer", "price_note": "Crédito de boas-vindas",
+           "missing": ["Espera na fila quando há movimento", "Sem suporte por WhatsApp", "Novos estilos só depois"]},
   "custom": {"unit_price_cents": 50, "min_credits": 40, "step_credits": 20, "max_credits": 1000,
              "shortcuts": [40, 100, 200], "hint_from_credits": 140, "hint_package": "inicial"}
 }

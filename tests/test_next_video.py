@@ -6,7 +6,7 @@ from __future__ import annotations
 import pytest
 
 from studio import budget, migrations
-from studio.credits import fmt
+from studio.credits import fmt, fmt_balance
 from studio.db import Database
 from studio.orchestrator import BudgetExceeded, OrchestratorError
 from studio.states import ProductionStatus as PS
@@ -78,7 +78,7 @@ def test_summary_has_product_format_scenes_adjustments_cost_balance(settings, pr
     assert sm["product"] == product.name and sm["format"] == "9:16" and sm["scenes"] == 3
     assert sm["included_adjustments_per_scene"] == 1
     assert sm["total_cc"] == total and sm["balance_cc"] == GRANT      # saldo atual conta o que está reservado
-    assert sm["balance_after"] == fmt(GRANT - total)
+    assert sm["balance_after"] == fmt_balance(GRANT - total)   # saldo exibido inteiro, arredondado para baixo
     assert sm["no_extra_cost"] == "Nenhum custo adicional será aplicado sem sua autorização."
     assert sm["total_brl"] is None                                   # sem tabela de preço configurada: sem R$
 

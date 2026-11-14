@@ -6,6 +6,7 @@ import { PilotContent } from './Pilot.jsx';
 import { CreditsContent } from './Credits.jsx';
 import { BuyCreditsContent } from './BuyCredits.jsx';
 import { AboutContent } from './About.jsx';
+import { SupportLinks } from './SupportLinks.jsx';
 import { adminTabVisible } from './admin.js';
 import { SCENERY_THEMES, THEME_LABELS } from '../game/scenery/scenery.js';
 import { lazyChunk } from '../lib/lazyChunk.jsx';
@@ -70,6 +71,11 @@ function General({ v }) {
         <Row title="Tutorial" desc="O tour rápido pelo estúdio, do começo.">
           <button type="button" className="pw-btn" onClick={v.openTour}><GraduationCap size={15} aria-hidden="true" />Rever tutorial</button>
         </Row>
+        {v.account && v.account.plan && (v.account.plan.support.whatsapp || v.account.plan.support.email) && (
+          <Row title="Suporte" desc={v.account.plan.support.whatsapp ? 'Seu plano tem atendimento por WhatsApp.' : 'Atendimento por e-mail.'}>
+            <SupportLinks plan={v.account.plan} bare />
+          </Row>
+        )}
       </section>
     </div>
   );
@@ -87,6 +93,17 @@ export default function Preferences({ v }) {
     const t = setTimeout(() => { const el = document.querySelector('.pref-item[aria-current="page"]'); if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest', inline: 'center' }); }, 60);
     return () => clearTimeout(t);
   }, [tab]);
+  // "Comprar créditos" é largo (4 cards lado a lado): modal próprio, sem a navegação das Preferências
+  if (tab === 'buy') {
+    return (
+      <Dialog open onOpenChange={onOpenChange}>
+        <DialogContent showCloseButton={false} className="bvd pw-theme duration-200" onKeyDown={stopKeys}>
+          <DialogDescription className="sr-only">{DESCS.buy}</DialogDescription>
+          <div className="bvd-body"><BuyCreditsContent v={v} Title={DialogTitle} /></div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
   return (
     <Dialog open onOpenChange={onOpenChange}>
       <DialogContent showCloseButton={false} className="pref pw-theme duration-200" onKeyDown={stopKeys}>

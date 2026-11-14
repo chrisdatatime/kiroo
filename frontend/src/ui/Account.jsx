@@ -1,4 +1,5 @@
 import React from 'react';
+import { SupportLinks } from './SupportLinks.jsx';
 
 // Minha conta: quem está logado, estúdio (workspace), modo e sair.
 export function AccountContent({ v }) {
@@ -9,6 +10,7 @@ export function AccountContent({ v }) {
       <dl className="g-card" style={{ margin: 0, padding: '6px 14px' }}>
         {[['Nome', a.user.name], ['E-mail', a.user.email], ['Estúdio', a.workspace.name],
           ['Modo', a.workspace.mode === 'real' ? 'IA real (gera custo)' : 'DEMO (sem custo, imagens de exemplo)'],
+          ['Plano', (a.plan && a.plan.plan_label) || 'Free'],
           ['Produção com IA real', a.workspace.allow_real ? 'liberada' : 'liberada com os planos de créditos'],
           ['Créditos', (v.wallet || a.workspace.credits || {}).exempt ? 'isento (conta do dono)' : ((v.wallet || a.workspace.credits || {}).balance || '0') + ' créditos']].map(([k, val]) => (
           <div key={k} style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '8px 0', borderBottom: '2px dotted #E7E7E4' }}>
@@ -16,6 +18,7 @@ export function AccountContent({ v }) {
           </div>
         ))}
       </dl>
+      <SupportLinks plan={a.plan} />
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <button className="g-btn g-sm g-lime" onClick={v.openCredits}>Créditos e extrato</button>
         {a.admin && <a className="g-btn g-sm" href="/painel">Painel do administrador</a>}

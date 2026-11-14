@@ -8,6 +8,7 @@ import { stationAria } from './conveyor.js';
 import { usePhone } from '../hooks/use-phone.js';
 import { useFalBelt } from '../ui/FalMission.jsx';
 import { missionWord, canShareFile, shareSupported, shareFallback, shareName } from '../ui/mobile.js';
+import { UpsellNote } from '../ui/UpsellNote.jsx';
 
 // Celular (<= 640 px): telas pensadas para o polegar, uma ação principal por tela (fixa no rodapé, acima da barra
 // inferior). Os dados são os mesmos do desktop (viewModel do App); só a forma muda. CSS em shell.css (.pv-ph-*).
@@ -43,7 +44,9 @@ export function PhoneMissions({ v }) {
       <section aria-labelledby="ph-missions-h" className="pv-ph-list">
         <h2 id="ph-missions-h" className="pv-ph-h">Suas missões{v.productions.length ? <span> · {v.productions.length}</span> : null}</h2>
         {v.productions.length === 0 && (
-          <div className="pv-ph-empty"><strong>Nenhuma missão ainda</strong>Envie a foto de um produto e a equipe cria o vídeo, a foto, o título e a legenda.</div>
+          v.welcomeEmpty ? (
+            <div className="pv-ph-empty"><strong>{v.welcomeEmpty.title}</strong>{v.welcomeEmpty.text}</div>
+          ) : <div className="pv-ph-empty"><strong>Nenhuma missão ainda</strong>Envie a foto de um produto e a equipe cria o vídeo, a foto, o título e a legenda.</div>
         )}
         <ul>
           {v.productions.map((p) => { const w = missionWord(p, p.current && v.falMission && v.falMission.status ? v.falMission.status.kind : null); return (
@@ -59,7 +62,7 @@ export function PhoneMissions({ v }) {
             </li>); })}
         </ul>
       </section>
-      <Dock><button type="button" className="pv-dock-btn" onClick={v.newProd}><Plus size={20} aria-hidden="true" />Nova produção</button></Dock>
+      <Dock><button type="button" className="pv-dock-btn" onClick={v.newProd}><Plus size={20} aria-hidden="true" />{v.welcomeEmpty ? v.welcomeEmpty.cta : 'Nova produção'}</button></Dock>
     </div></div>
   );
 }
@@ -191,6 +194,7 @@ export function PhoneFalMission({ v, m: m0 }) {
   return (
     <div className="pv-scroll"><div className="pv-wrap pv-ph">
       {done && <PhoneDelivery m={m} product={v.prodName} />}
+      {done && v.firstVideo && <UpsellNote copy={v.firstVideo} onClick={v.openBuy} />}
       {!done && (
         <section className="pv-ph-status" role="status" data-kind={st.kind}>
           <strong>{st.label}</strong>
