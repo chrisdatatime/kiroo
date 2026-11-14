@@ -1,11 +1,11 @@
 {
-  "_nota": "Contrato EXTERNO dos workflows da fal.ai: so o mapeamento de chaves. Escopo real: input unico image_url; saidas uteis video (mp4 ~15 s JA COM A NARRACAO, sem musica), images (1 foto hero) e output (texto com JSON {\"title\",\"caption\"}). A saida audio/audio_2 do display e intermediaria de TTS: ignorada. Nao ha musica. descricao_produto existe no schema do workflow mas nao esta ligada a nenhum no: nao e enviada. Campos A CONFIRMAR (Fase 0) e a lista `pending` dependem da fixture real. O resto do codigo so conhece o formato canonico (WorkflowPackage). Caminhos: pontos separam chaves; numeros indexam listas (ex.: images.0.url). Os caminhos valem sobre output quando o envelope (X-Fal-Workflow-Envelope) esta ligado, senao sobre o resultado inteiro (sem envelope, `output` e o texto do workflow; com envelope, o texto fica em `output.output`, e o caminho do contrato continua sendo `output`).",
-  "version": 2,
-  "status": "PARCIAL (Fase 0): caminhos de saida mapeados; indice da foto e recuperacao pelo no A CONFIRMAR",
+  "_nota": "Contrato EXTERNO dos workflows da fal.ai: so o mapeamento de chaves. Resposta REAL confirmada no playground (wf01 Claro, produto nao-perfume): so 3 campos de topo. `video` ({url, content_type, file_name, file_size}), `images` (lista; images[0] e a foto hero; file_name e file_size vem null: nao depender deles, valem content_type e os bytes baixados) e `output` (TEXTO com o JSON {\"title\",\"caption\"}, geralmente dentro de cerca markdown ```json ... ``` apesar do prompt proibir: o parser remove cercas com ou sem o rotulo json). Nao ha audio/audio_2 na resposta; se vierem, sao ignorados (TTS intermediario). Nao ha musica. Input unico: image_url (descricao_produto existe no schema mas nao esta ligada a nenhum no: nao e enviada). A caption traz emoji (UTF-8). O que ainda depende de dado real fica A CONFIRMAR e listado em `pending` (o provider recusa chamada real enquanto houver item la). O resto do codigo so conhece o formato canonico (WorkflowPackage). Caminhos: pontos separam chaves; numeros indexam listas. Os caminhos valem sobre o `output` do envelope (X-Fal-Workflow-Envelope) quando ligado, senao sobre o resultado inteiro (com envelope o texto do workflow fica em output.output e o caminho do contrato continua sendo `output`).",
+  "version": 3,
+  "status": "CONFIRMADO (wf01 Claro, resposta real): entrada e saidas. A CONFIRMAR: recover.hero e request_id por no no envelope",
   "envelope": true,
   "styles": {
     "dark": {
-      "status": "PARCIAL: caminhos de saida mapeados pelo escopo real do workflow; falta confirmar na fixture real (Fase 0)",
+      "status": "CONFIRMADO: entrada e saidas (wf01 Claro; o wf02 Escuro tem a mesma estrutura, a confirmar na rodada dele). A CONFIRMAR: recover.hero e request_id por no",
       "workflow_env": "WORKFLOW_ID_DARK",
       "input": {
         "image_field": "image_url",
@@ -18,17 +18,18 @@
         "text": "output"
       },
       "pending": [
-        "output.image: indice 0 de images (images[0].url) a confirmar na fixture real"
+        "recover.hero: node_id node-oTeZSiC32m e path images.0.url sao PROPOSTA (no do hero); A CONFIRMAR com o envelope real",
+        "envelope: A CONFIRMAR se cada no traz request_id (X-Fal-Workflow-Envelope)"
       ],
       "recover": {
         "hero": {
-          "node_id": "A CONFIRMAR (Fase 0)",
-          "path": "A CONFIRMAR (Fase 0)"
+          "node_id": "node-oTeZSiC32m",
+          "path": "images.0.url"
         }
       }
     },
     "light": {
-      "status": "PARCIAL: caminhos de saida mapeados pelo escopo real do workflow; falta confirmar na fixture real (Fase 0)",
+      "status": "CONFIRMADO: entrada e saidas (wf01 Claro; o wf02 Escuro tem a mesma estrutura, a confirmar na rodada dele). A CONFIRMAR: recover.hero e request_id por no",
       "workflow_env": "WORKFLOW_ID_LIGHT",
       "input": {
         "image_field": "image_url",
@@ -41,12 +42,13 @@
         "text": "output"
       },
       "pending": [
-        "output.image: indice 0 de images (images[0].url) a confirmar na fixture real"
+        "recover.hero: node_id node-oTeZSiC32m e path images.0.url sao PROPOSTA (no do hero); A CONFIRMAR com o envelope real",
+        "envelope: A CONFIRMAR se cada no traz request_id (X-Fal-Workflow-Envelope)"
       ],
       "recover": {
         "hero": {
-          "node_id": "A CONFIRMAR (Fase 0)",
-          "path": "A CONFIRMAR (Fase 0)"
+          "node_id": "node-oTeZSiC32m",
+          "path": "images.0.url"
         }
       }
     }

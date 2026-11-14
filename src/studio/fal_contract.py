@@ -168,16 +168,17 @@ def build_input(contract: dict, style: str, image_url: str) -> dict:
     return {**((cfg.get("input") or {}).get("extra") or {}), field_: image_url}
 
 
-_FENCE = re.compile(r"^```[a-zA-Z]*\s*|\s*```$")
+_WS = "\ufeff \t\r\n"                                  # BOM, espacos e quebras de linha ao redor
+_FENCE = re.compile(r"^```[a-zA-Z]*\s*|\s*```$")        # cerca markdown, com ou sem o rotulo (json, JSON...)
 
 
 def parse_text_output(raw) -> tuple[str, str, list[str]]:
     """Saida `output` do workflow -> (titulo, legenda, avisos). O texto traz JSON `{"title","caption"}` (aceita cerca
-    ```json e dict ja decodificado). JSON invalido, vazio ou com campos vazios (o prompt manda devolver strings vazias
+    ```json, cerca sem rotulo, espacos ao redor e dict ja decodificado). JSON invalido, vazio ou com campos vazios (o prompt manda devolver strings vazias
     quando nao identifica o produto): devolve o que houver, com aviso. NUNCA inventa texto."""
     data = raw
     if isinstance(raw, str):
-        txt = _FENCE.sub("", raw.strip()).strip()
+        txt = _FENCE.sub("", raw.strip(_WS)).strip(_WS)
         if not txt:
             return "", "", ["o workflow nao devolveu titulo nem legenda: escreva a legenda antes de publicar"]
         try:

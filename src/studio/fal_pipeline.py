@@ -558,7 +558,7 @@ class FalRunner:
         manifest[fc.COVER_FILE] = {"role": "cover", "sha256": sha256_file(delivery / fc.COVER_FILE)}
         fmt = json.loads(self.db.production(pid)["profiles_json"])["format"]["data"]
         caption_txt, cwarn = composer.build_caption(dj.get("title", ""), dj.get("caption", ""), fmt)
-        st.write_text(f"delivery/{fc.CAPTION_FILE}", caption_txt)
+        st.write_bytes(f"delivery/{fc.CAPTION_FILE}", caption_txt.encode("utf-8"))   # UTF-8 puro, sem traducao de quebra de linha
         text_ok = bool(dj.get("title") and dj.get("caption"))
         warnings = list(dict.fromkeys([*list(dj.get("warnings") or []), *rep.warnings, *cwarn]))
         status = "partial" if missing else "complete"      # texto faltando e AVISO (a entrega segue completa)

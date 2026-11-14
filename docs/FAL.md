@@ -42,11 +42,12 @@ studio doctor                                # mostra so se as variaveis existem
 
 ## Fase 0 (voce): preencher o contrato
 1. No playground da fal.ai, rode **cada workflow uma vez** (Escuro e Claro) com uma foto de teste.
-2. Salve o JSON do resultado em `tests/fixtures/fal_real/dark/result.json` e `.../light/result.json` (pasta ignorada pelo Git, pode conter a foto). Se possivel, rode com o header `X-Fal-Workflow-Envelope: true` para ter `nodes`.
-3. Abra `profiles/fal/workflow_contract.json`. Ja estao mapeados `input.image_field=image_url` e `output.video=video.url`, `output.image=images.0.url`, `output.text=output`. Falta confirmar na fixture real e limpar:
-   * o indice da foto em `images` (item em `pending`: confira que `images[0]` e mesmo a foto hero e apague a linha de `pending`);
-   * `recover.hero`: `node_id` do no que gera a foto e `path` dentro da saida do no (permite buscar so ela de novo);
-   * (com o envelope ligado, o texto do workflow fica em `output.output`; o caminho `output` do contrato continua valendo).
+2. Salve o JSON do resultado em `tests/fixtures/fal_real/dark/result.json` e `.../light/result.json` (pasta ignorada pelo Git, pode conter a foto; nao a confunda com `tests/fixtures/fal_shape/`, que e sintetica e versionada). Se possivel, rode com o header `X-Fal-Workflow-Envelope: true` para ter `nodes`.
+3. `profiles/fal/workflow_contract.json` ja esta **CONFIRMADO** com a resposta real do wf01 Claro: `input.image_field=image_url`, `output.video=video.url`, `output.image=images.0.url`, `output.text=output`. O `output` e **texto**, normalmente em cerca markdown (```json ... ```): o parser remove cerca com ou sem rotulo, BOM e espacos, e continua aceitando JSON puro. `file_name`/`file_size` da imagem vem `null`: nada depende deles. A caption tem emoji; `caption.txt` e gravado em UTF-8 (bytes, sem traducao de quebra de linha). A forma da resposta esta em `tests/fixtures/fal_shape/light_result.json` (**sintetica**, URLs falsas). Continua **A CONFIRMAR** (lista `pending`, que faz o provider recusar chamada real):
+   * `recover.hero`: `node_id` `node-oTeZSiC32m` e `path` `images.0.url` sao so proposta (no do hero);
+   * se cada no traz `request_id` no envelope (`X-Fal-Workflow-Envelope`);
+   * a rodada real do wf02 Escuro (mesma estrutura esperada).
+   Ao confirmar, apague os itens de `pending`.
 4. `python -m pytest tests/test_fal_real_fixtures.py` confere o contrato contra os resultados salvos.
 5. Anote a duracao do video (e se o audio vem mesmo embutido), tempo de execucao e o custo (dashboard) para ajustar `operation_costs.json` (`workflow_dark` / `workflow_light`, hoje PLACEHOLDER de US$ 2,00).
 

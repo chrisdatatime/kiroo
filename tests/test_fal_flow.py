@@ -641,3 +641,14 @@ def test_next_video_summary_is_the_fixed_package_price_per_style(settings, tmp_p
     sm = view.snapshot(o.s, o.db, pid, workspace_id=wid)["production"]["confirmation"]["summary"]
     assert sm["engine"] == "fal" and sm["style"] == "dark" and sm["total_cc"] == CHARGE and sm["scenes"] == 0
     assert sm["included_adjustments_per_scene"] == 0
+
+
+def test_caption_txt_keeps_emoji_in_utf8_when_the_text_comes_in_a_markdown_fence(settings, tmp_path, photo_product):
+    raw = "```json\n" + json.dumps({"title": "Copo térmico 🧊", "caption": "Gelado o dia todo 💙 #copo"}, ensure_ascii=False) + "\n```"
+    o = make(settings, tmp_path, fal_script=FalSimScript(output_text=raw))
+    pid = new(o, photo_product)
+    assert o.run(pid) == PS.AWAITING_FINAL_REVIEW
+    cap = (delivery(o, pid) / "caption.txt").read_bytes().decode("utf-8")           # UTF-8 puro, sem perda
+    assert cap.startswith("Copo térmico 🧊\n\nGelado o dia todo 💙 #copo")
+    meta = json.loads((delivery(o, pid) / "delivery_meta.json").read_text(encoding="utf-8"))
+    assert meta["title"] == "Copo térmico 🧊" and meta["text_status"] == "ok"
