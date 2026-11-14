@@ -22,6 +22,13 @@ def _rate_limit_off_by_default(monkeypatch):
     monkeypatch.setattr(ratelimit, "DEFAULT_ON", False)
 
 
+@pytest.fixture(autouse=True)
+def _payments_off_by_default(monkeypatch):
+    """Compra pelo Asaas desligada em todo teste, salvo nos que ligam de propósito (tests/test_payments_asaas.py)."""
+    for var in ("PAYMENTS_ENABLED", "ASAAS_ENV", "ASAAS_API_KEY", "ASAAS_WEBHOOK_TOKEN", "STUDIO_CREDIT_CATALOG_FILE"):
+        monkeypatch.delenv(var, raising=False)
+
+
 _FAL_BLOCKED = ("fal.run", "fal.ai", "fal.media")
 
 

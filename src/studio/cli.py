@@ -254,6 +254,35 @@ def _fal(settings, args) -> int:
         orch.db.close()
 
 
+def _payments(settings, args) -> int:
+    """`studio payments list [--email]` e `studio payments reconcile [--paid-days N]` (compras pelo Asaas)."""
+    from . import asaas, catalog, payments
+    from .db import Database
+    db = Database(settings.db_path)
+    try:
+        if args.pay_cmd == "list":
+            rows = payments.list_payments(db, args.email, limit=args.limit)
+            for r in rows:
+                print(f"{r['id']}  {r['created_at']}  {(r['email'] or '-'):28} {r['method']:4} {r['package_code']:8} "
+                      f"{r['credits']:5} créditos  {catalog.brl(r['amount_cents']):>12}  {r['status']:10} "
+                      f"asaas={r['asaas_payment_id'] or '-'}  ip={r['ip'] or '-'}{'  nota: ' + r['note'] if r['note'] else ''}")
+            if not rows:
+                print("nenhuma compra")
+            return 0
+        err = asaas.config_error()
+        if not asaas.config().enabled or err:
+            print(f"erro: pagamentos desligados ou mal configurados ({err or 'PAYMENTS_ENABLED=false'})", file=sys.stderr)
+            return 2
+        out = payments.reconcile(db, payments.make_client(), paid_days=args.paid_days)
+        for r in out:
+            print(json.dumps(r, ensure_ascii=False))
+        changed = sum(1 for r in out if r.get("delta_cc"))
+        print(f"{len(out)} item(ns) conferido(s); {changed} com mudança no saldo")
+        return 0
+    finally:
+        db.close()
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="studio", description="Esteira de vídeos Shopee Vídeo")
     ap.add_argument("-v", "--verbose", action="store_true")
@@ -349,6 +378,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--reason", default="", help="motivo da decisão (fica no histórico)")
     p.add_argument("--days", type=int, default=None, help="cleanup: retenção em dias (padrão STUDIO_FAL_RETENTION_DAYS)")
 
+    p = sub.add_parser("payments", help="compras de créditos pelo Asaas: list [--email] | reconcile [--paid-days N]")
+    p.add_argument("pay_cmd", choices=["list", "reconcile"])
+    p.add_argument("--email", default=None, help="list: só as compras deste e-mail")
+    p.add_argument("--limit", type=int, default=50, help="list: quantas (mais recentes)")
+    p.add_argument("--paid-days", type=int, default=0,
+                   help="reconcile: também reconfere as compras pagas dos últimos N dias (estorno/contestação perdidos)")
+
     p = sub.add_parser("final")
     p.add_argument("pid")
     p.add_argument("decision", choices=["approve", "reject"])
@@ -399,6 +435,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "fal":
         return _fal(settings, args)
+
+    if args.cmd == "payments":
+        return _payments(settings, args)
 
     if args.cmd == "ui":
         from .web.server import serve

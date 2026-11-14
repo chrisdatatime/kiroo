@@ -145,7 +145,7 @@ function NoBalance({ v }) {
         <button className="g-btn g-sm g-lime" onClick={v.keepAsIs}>{KEEP_LABEL}</button>
         <button className="g-btn g-sm" onClick={() => setOpen((o) => !o)} aria-expanded={open}>{ADD_LABEL}</button>
       </div>
-      {open && <TopUp topup={n.topup} missingCc={n.missing_cc} onClose={() => setOpen(false)} />}
+      {open && <TopUp topup={n.topup} missingCc={n.missing_cc} onClose={() => setOpen(false)} onBuy={v.openBuy} />}
     </div>
   );
 }

@@ -446,6 +446,51 @@ def _m009_fal_engine(conn: sqlite3.Connection) -> None:
                  "WHERE client_request_id IS NOT NULL")
 
 
+def _m010_payments(conn: sqlite3.Connection) -> None:
+    """Compra de créditos pelo Asaas. `payments`: uma cobrança nossa (account_id = workspace). `payment_events`: cada
+    evento do webhook uma vez só (asaas_event_id único), sem dado sensível. `credit_entries.payment_id` liga crédito e
+    estorno à compra. `workspaces.asaas_customer_id`: o cliente no Asaas (o CPF/CNPJ fica só no Asaas, nunca aqui)."""
+    conn.execute("""CREATE TABLE IF NOT EXISTS payments (
+        id TEXT PRIMARY KEY,                  -- nosso id (vai como externalReference na cobrança)
+        account_id TEXT NOT NULL,             -- workspace que recebe os créditos
+        user_id TEXT,                         -- quem comprou
+        asaas_payment_id TEXT UNIQUE,
+        asaas_customer_id TEXT,
+        method TEXT NOT NULL,                 -- pix | card
+        package_code TEXT NOT NULL,           -- inicial | pro | escala | avulso
+        credits INTEGER NOT NULL,
+        amount_cents INTEGER NOT NULL,
+        status TEXT NOT NULL,                 -- creating | pending | paid | refunded | chargeback | expired | canceled | failed | mismatch
+        remote_status TEXT,                   -- último status lido NA API do Asaas
+        invoice_url TEXT,
+        created_at TEXT NOT NULL,
+        paid_at TEXT,
+        refunded_at TEXT,
+        synced_at TEXT,
+        ip TEXT,
+        user_agent TEXT,
+        note TEXT
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_payments_account ON payments(account_id, created_at)")
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_payments_status ON payments(status)")
+    conn.execute("""CREATE TABLE IF NOT EXISTS payment_events (
+        asaas_event_id TEXT PRIMARY KEY,      -- id do evento: o mesmo evento repetido não é processado de novo
+        payment_id TEXT,                      -- nosso id (NULL se a cobrança não é nossa)
+        asaas_payment_id TEXT,
+        type TEXT NOT NULL,
+        received_at TEXT NOT NULL,
+        processed_at TEXT,
+        outcome TEXT,                         -- synced | ignored | unknown_payment | error
+        raw TEXT                              -- só campos não sensíveis (sem cartão, CPF, nome, e-mail)
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_payment_events_pending ON payment_events(processed_at)")
+    if "payment_id" not in _columns(conn, "credit_entries"):
+        conn.execute("ALTER TABLE credit_entries ADD COLUMN payment_id TEXT")
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_credit_payment ON credit_entries(payment_id)")
+    if "asaas_customer_id" not in _columns(conn, "workspaces"):
+        conn.execute("ALTER TABLE workspaces ADD COLUMN asaas_customer_id TEXT")
+
+
 MIGRATIONS: list[Migration] = [
     Migration(1, "schema completo", _m001_baseline),
     Migration(2, "convites de uso único e consentimento", _m002_invites_consent),
@@ -456,6 +501,7 @@ MIGRATIONS: list[Migration] = [
     Migration(7, "ficha técnica, âncora e correções acumulativas", _m007_product_fidelity),
     Migration(8, "Direção obrigatória antes do roteiro nas produções do app", _m008_direction_required),
     Migration(9, "motor fal.ai: engine/style/entrega por produção, id do cliente único e metadados da tentativa", _m009_fal_engine),
+    Migration(10, "compra de créditos pelo Asaas: payments, payment_events e payment_id no livro", _m010_payments),
 ]
 LATEST = MIGRATIONS[-1].version
 assert [m.version for m in MIGRATIONS] == list(range(1, LATEST + 1)), "migrações devem ser 1..N em ordem"

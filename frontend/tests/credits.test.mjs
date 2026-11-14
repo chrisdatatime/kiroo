@@ -59,3 +59,47 @@ assert.ok(app.indexOf('adjustFunds({ costCc') < app.indexOf('this.setUI({ confir
 assert.ok(!/Já tenho créditos: retomar/.test(pw));
 
 console.log('ok: credits');
+
+// ---------------------------------------------------------------- Comprar créditos (ui/buy.js)
+{
+  const B = await import('../src/ui/buy.js');
+  const custom = { unit_price_cents: 50, min_credits: 40, step_credits: 20, max_credits: 1000, hint_from_credits: 140, hint_package: 'inicial' };
+  const cat = { custom, packages: [{ code: 'inicial', name: 'Inicial', credits: 200, price_cents: 7990 }, { code: 'pro', name: 'Pro', credits: 600, price_cents: 19990 }] };
+  assert.equal(B.brl(7990), 'R$ 79,90');
+  assert.equal(B.brl(54990), 'R$ 549,90');
+  // Economize X% contra R$ 0,50/crédito (igual ao servidor: 20, 33, 45)
+  assert.deepEqual([[200, 7990], [600, 19990], [2000, 54990]].map(([c, p]) => B.savingsPct(c, p, 50)), [20, 33, 45]);
+  assert.equal(B.savingsPct(100, 5000, 50), 0);
+  assert.equal(B.videosFor(600, 20), 30);
+  // avulso: mínimo 40, de 20 em 20, máximo 1.000
+  assert.ok(B.customValid(40, custom) && B.customValid(1000, custom) && B.customValid(60, custom));
+  assert.ok(!B.customValid(20, custom) && !B.customValid(50, custom) && !B.customValid(1020, custom) && !B.customValid(40.5, custom));
+  assert.equal(B.clampCustom(10, custom), 40);
+  assert.equal(B.clampCustom(5000, custom), 1000);
+  assert.equal(B.clampCustom(51, custom), 60);
+  assert.equal(B.stepCustom(40, -1, custom), 40);
+  assert.equal(B.stepCustom(40, 1, custom), 60);
+  assert.equal(B.stepCustom(1000, 1, custom), 1000);
+  assert.equal(B.customTotalCents(100, custom), 5000);
+  assert.equal(B.customTotalCents(50, custom), 0);
+  // dica a partir de 140 créditos
+  assert.equal(B.customHint(120, cat), null);
+  assert.equal(B.customHint(140, cat), 'No pacote Inicial, 200 créditos saem por R$ 79,90.');
+  // CPF / CNPJ (inclusive CNPJ alfanumérico)
+  assert.ok(B.docValid('529.982.247-25') && B.docValid('11.222.333/0001-81') && B.docValid('12.ABC.345/01DE-35'));
+  assert.ok(!B.docValid('111.111.111-11') && !B.docValid('123.456.789-00') && !B.docValid('11.222.333/0001-80') && !B.docValid('123'));
+  assert.equal(B.maskDoc('52998224725'), '529.982.247-25');
+  assert.equal(B.maskDoc('11222333000181'), '11.222.333/0001-81');
+  // cartão: mesmo limite do servidor
+  const fresh = { new_account: true, disputed: false, count_today: 0, max_cents: 19990, daily_limit_cents: 60000 };
+  assert.equal(B.cardBlock(19990, fresh), null);
+  assert.match(B.cardBlock(54990, fresh), /pacote Pro/);
+  assert.match(B.cardBlock(7990, { ...fresh, count_today: 1, max_cents: 0 }), /1 compra no cartão por dia/);
+  assert.match(B.cardBlock(7990, { ...fresh, new_account: false, max_cents: 5000 }), /limite diário de R\$ 600,00/);
+  assert.match(B.cardBlock(100, { ...fresh, disputed: true }), /só por Pix/);
+  // o pedido nunca leva valor
+  assert.deepEqual(B.checkoutBody({ tab: 'pacotes', pkg: 'pro', custom: 100, method: 'pix', doc: '529.982.247-25' }), { method: 'pix', package: 'pro', document: '52998224725' });
+  assert.deepEqual(B.checkoutBody({ tab: 'avulso', pkg: 'pro', custom: 100, method: 'card', doc: '' }), { method: 'card', credits: 100 });
+  assert.equal(B.statusOf('paid').label, 'Pagamento confirmado');
+  assert.ok(B.isFinal('paid') && !B.isFinal('pending'));
+}

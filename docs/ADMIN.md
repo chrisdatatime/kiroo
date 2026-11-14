@@ -217,9 +217,32 @@ que falta, e escolhe **Manter meu vídeo como está** (nada muda, nada é cobrad
 pagamento, "Adicionar créditos" mostra o contato de `STUDIO_SUPPORT_CONTACT` e o passo a passo; você libera com o comando
 abaixo. Um vídeo já pago (pré-orçamento reservado) é entregue mesmo com o saldo livre zerado.
 
-**Mercado Pago (depois):** o ponto de integração é `src/studio/payments.py` — implementar
-`MercadoPagoProvider.start_checkout` e, no webhook, creditar com `Ledger.add(wid, cc, kind="purchase",
-ext_ref="mp:<payment_id>")` (o `ext_ref` já torna o crédito idempotente). `GET /api/credits/topup` é o que a tela lê.
+### Compra de créditos (Asaas)
+
+Com `PAYMENTS_ENABLED=true` (variáveis em [ENVS.md](ENVS.md)), o cliente compra em **Comprar créditos**: pacotes
+(Inicial 200 = R$ 79,90; Pro 600 = R$ 199,90; Escala 2.000 = R$ 549,90) ou avulso (R$ 0,50/crédito, mínimo 40, de 20 em 20,
+até 1.000). Um vídeo custa **20 créditos fixos**. Catálogo em `profiles/billing/catalog.json`; o navegador nunca envia valor.
+
+- **Pix** credita em `RECEIVED`; **cartão** (fatura hospedada do Asaas) em `CONFIRMED` (ou `RECEIVED`). Pix `CONFIRMED`
+  não credita (pode ser bloqueio cautelar temporário).
+- **Webhook** `POST /api/payments/asaas/webhook`: token no cabeçalho `asaas-access-token`; grava o evento (id único) e
+  responde 200 na hora. A decisão NUNCA vem do payload: o servidor busca a cobrança na API pelo id e confere valor,
+  cliente, meio e `externalReference`. Divergência = status `mismatch`, nada creditado, log `payment_mismatch`.
+- Crédito por **pagamento**: o mesmo pagamento nunca credita duas vezes (evento repetido, fora de ordem, `CONFIRMED` e
+  depois `RECEIVED`). Estorno (`REFUNDED`, `REFUND_*`) e contestação (`CHARGEBACK_*`) debitam os créditos da compra; o
+  saldo pode ficar **negativo**, e aí novas produções ficam bloqueadas com mensagem clara até o cliente regularizar.
+  Contestação ganha (volta a `CONFIRMED`/`RECEIVED`) devolve os créditos uma vez. **Estorno parcial** não mexe no saldo
+  sozinho: a compra fica com nota "revisar"; ajuste com `studio admin adjust-credits`.
+- **Cartão:** conta nova (< 7 dias ou sem compra Pix paga) = 1 compra no cartão por 24 h e no máximo o pacote Pro;
+  toda conta = até R$ 600 no cartão por 24 h; conta com contestação = só Pix. IP e user agent ficam na compra.
+- CPF/CNPJ só na primeira compra; vai para o Asaas e **não** é guardado no Kiroo (só o id do cliente).
+
+| O que | Comando |
+|---|---|
+| Compras (todas ou de um e-mail) | `python -m studio payments list [--email cliente@exemplo.com]` |
+| Webhook perdido: confere no Asaas eventos pendentes e cobranças abertas | `python -m studio payments reconcile` |
+| Também reconfere as pagas dos últimos N dias (estorno/contestação perdidos) | `python -m studio payments reconcile --paid-days 40` |
+| Receita bruta do mês, compras por meio, créditos vendidos × consumidos | `python -m studio admin metrics` |
 
 
 | O que | Comando |

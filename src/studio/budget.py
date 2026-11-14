@@ -143,11 +143,13 @@ def workflow_cost(style: str) -> tuple[float, str]:
 
 
 def estimate_workflow(settings, style: str) -> dict:
-    """Pré-orçamento do pacote completo do motor fal.ai (mesma forma de `estimate_production`). Um valor fixo por estilo:
-    cobre vídeo + 3 imagens. Refazer é execução nova e cobra de novo."""
-    from .credits import to_cc
+    """Pré-orçamento do pacote completo do motor fal.ai (mesma forma de `estimate_production`).
+    `cc` = PREÇO FIXO do vídeo em créditos (catálogo, ex.: 20 créditos), igual para Claro e Escuro: a variação do custo
+    da fal não chega ao cliente. `usd` continua sendo o custo estimado interno, base do orçamento operacional e dos
+    tetos (reserva interna em US$, separada do preço em créditos)."""
+    from . import catalog
     usd = round(workflow_cost(style)[0], 4)
-    return {"usd": usd, "cc": to_cc(usd), "parts_usd": {"workflow": usd}, "scenes": 0, "style": style,
+    return {"usd": usd, "cc": catalog.video_price_cc(), "parts_usd": {"workflow": usd}, "scenes": 0, "style": style,
             "image_tries_per_scene": 0, "video_tries_per_scene": 0, "included_adjustments_per_scene": 0}
 
 

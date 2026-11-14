@@ -21,7 +21,7 @@ const Landing = lazyChunk(() => import('./landing/Landing.jsx'));
 const Preferences = lazyChunk(() => import('./ui/Preferences.jsx'));
 // Conversa com os agentes (Fase 6, mundo Phaser): chunk próprio, carrega no primeiro clique num agente
 const AgentChat = lazyChunk(() => import('./ui/world/AgentChat.jsx'));
-const PREF_WINS = ['prefs', 'account', 'pilot', 'credits', 'about', 'admin'];
+const PREF_WINS = ['prefs', 'account', 'pilot', 'credits', 'buy', 'about', 'admin'];
 // Kit de onboarding (Fase 5): chunk próprio, só carrega quando o tour abre (onboarding_done_at nulo ou "Rever tutorial")
 const Onboarding = lazyChunk(() => import('./onboarding/Onboarding.jsx'));
 // se o tour falhar, ele some (e o passo fica salvo); o estúdio continua funcionando
@@ -152,8 +152,10 @@ export default class App extends React.Component {
         LS.set('bc.ws', account.workspace.id);
         this.setState({ pid: null, draftMode: false });
       }
-      this.setState({ authState: 'in', account }, () => this.refresh());
-      this.maybeStartTour(account);
+      // voltou da fatura do cartão (?compra=kpay_...): abre "Comprar créditos", que acompanha a compra
+      const back = /[?&]compra=kpay_[0-9a-f]{10}/.test(window.location.search) && account.payments && account.payments.online;
+      this.setState({ authState: 'in', account }, () => { this.refresh(); if (back) this.setUI({ win: 'buy' }); });
+      if (!back) this.maybeStartTour(account);
     } catch (e) {
       this.setState({ authState: 'out', conn: e instanceof AuthRequired ? 'ok' : 'erro', err: e instanceof AuthRequired ? null : e.message });
     }
@@ -1128,6 +1130,7 @@ export default class App extends React.Component {
       goGames: (e) => { e.stopPropagation(); this.goInteract({ type: 'games' }); }, games, pilot,
       account: s.account, logout: () => this.logout(), openAccount: () => { this.dismissTut(); this.setUI({ win: 'account' }); },
       wallet: s.S ? s.S.credits : null, openCredits: () => { this.dismissTut(); this.setUI({ win: 'credits' }); },
+      openBuy: () => { this.dismissTut(); this.setUI({ win: s.account && s.account.payments && s.account.payments.online ? 'buy' : 'credits' }); },
       openProduction: (id) => { this.setState({ pid: id, draftMode: false }); this.closeWin(); },
       openGames: () => { this.dismissTut(); this.setUI({ win: 'games' }); }, openPilot: () => { this.dismissTut(); this.setUI({ win: 'pilot' }); },
       celebrate: st === 'exportado', confetti: CONFETTI,

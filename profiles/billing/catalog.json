@@ -1,13 +1,14 @@
 {
-  "_nota": "PROVISÓRIO: preços e quantidades a revisar com custos reais medidos. 1 crédito = R$ 1,00 de referência (STUDIO_CREDIT_PRICE_BRL). Valores em reais.",
+  "_nota": "Catálogo de COMPRA de créditos (Asaas) e preço fixo do vídeo em créditos. Valores em CENTAVOS de real; créditos inteiros. O servidor calcula todo preço a partir daqui (src/studio/catalog.py); o navegador nunca envia valor. Troque o arquivo inteiro com STUDIO_CREDIT_CATALOG_FILE.",
+  "version": 2,
   "currency": "BRL",
-  "packs": [
-    {"id": "pack_30", "name": "Pacote 30", "credits": 30, "price_brl": 30.00},
-    {"id": "pack_100", "name": "Pacote 100", "credits": 100, "price_brl": 95.00},
-    {"id": "pack_300", "name": "Pacote 300", "credits": 300, "price_brl": 270.00}
+  "video_price_credits": 20,
+  "unit_price_cents": 50,
+  "packages": [
+    {"code": "inicial", "name": "Inicial", "credits": 200, "price_cents": 7990},
+    {"code": "pro", "name": "Pro", "credits": 600, "price_cents": 19990, "highlight": true},
+    {"code": "escala", "name": "Escala", "credits": 2000, "price_cents": 54990}
   ],
-  "plans": [
-    {"id": "plan_criador", "name": "Criador", "credits": 70, "price_brl": 59.00, "description": "70 créditos por mês"},
-    {"id": "plan_pro", "name": "Profissional", "credits": 190, "price_brl": 149.00, "description": "190 créditos por mês"}
-  ]
+  "custom": {"unit_price_cents": 50, "min_credits": 40, "step_credits": 20, "max_credits": 1000,
+             "shortcuts": [40, 100, 200], "hint_from_credits": 140, "hint_package": "inicial"}
 }

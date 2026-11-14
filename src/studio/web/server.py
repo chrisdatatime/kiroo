@@ -36,7 +36,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlencode, urlparse
 
-from .. import agent_config, creative_options, fal_contract, mailer, paid_gate, payments
+from .. import agent_config, asaas as asaas_mod, creative_options, fal_contract, mailer, paid_gate, payments
 from ..agent_chat import AgentChat
 from ..accounts import (LOGIN_WINDOW_MIN, RESET_MINUTES, TERMS_VERSION, VERIFY_MINUTES, Accounts, AuthError, GoogleAuthError,
                         verify_password)
@@ -75,6 +75,7 @@ BRAND_FILES = {"favicon.ico": "image/x-icon", "favicon.svg": "image/svg+xml", "a
                "og-image.png": "image/png", "manifest.webmanifest": "application/manifest+json"}
 MAX_BODY = 150 * 1024 * 1024  # uploads em base64
 MAX_AUTH_BODY = 64 * 1024  # rotas sem sessão não recebem envio grande
+WEBHOOK_PATH = "/api/payments/asaas/webhook"   # pública: autenticada pelo token do Asaas, não por sessão
 SECURITY_HEADERS = {"X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer",
                     "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()"}
 # CSP do app (React + Phaser, tudo servido pela própria origem). Phaser decodifica texturas/áudio de blob:/data:.
@@ -252,6 +253,7 @@ class App:
         self.lock = threading.Lock()
         self.chat = AgentChat()  # conversa com os agentes (Fase 6); testes trocam o caller por um mock
         self.limiter = RateLimiter(rate_limits)   # memória do processo: vale porque há uma instância só
+        self.payments_sync = False   # testes: processa o evento do webhook na mesma thread
         # Login com Google: só aparece com as duas variáveis definidas. Testes trocam google_http por um mock.
         try:  # carrega o .env antes de ler as variáveis do Google e do SMTP
             self.load_settings()
@@ -611,6 +613,8 @@ class App:
             return self.health(path)
         if headers.get("Host", "").lower() not in self.allowed_hosts:
             return _json(403, {"error": "host não permitido"})
+        if path == WEBHOOK_PATH:   # antes do limite por IP: 429 conta como falha e o Asaas pausa a fila
+            return self._asaas_webhook(method, headers, body)
         if path.startswith("/api/"):   # limite por IP antes de abrir o banco
             ip = self._client_ip(headers)
             limited = self._limited("api_ip", ip)
@@ -688,7 +692,7 @@ class App:
             if method == "POST":
                 if headers.get("X-Studio-Token") != sess["csrf"]:
                     return _json(403, {"error": "token ausente ou inválido"})
-                return self._post(path, payload if payload is not None else json.loads(body or b"{}"), ctx, token)
+                return self._post(path, payload if payload is not None else json.loads(body or b"{}"), ctx, token, headers)
             return _json(405, {"error": "método não permitido"})
         except AuthError as exc:
             return _json(400, {"error": redact(exc)})
@@ -819,8 +823,11 @@ class App:
                                "workspace": {"id": ws["id"], "name": ws["name"], "mode": s.mode, "allow_real": bool(ws["allow_real"]),
                                              "credits": credits},
                                "workspaces": [{"id": w["id"], "name": w["name"], "role": w["role"]} for w in ctx["workspaces"]],
-                               "paid_calls": {k: v for k, v in paid_gate.status().items() if k in ("blocked", "message")}})
-        if path == "/api/credits/topup":   # "Adicionar créditos": hoje contato manual; ponto de integração do Mercado Pago
+                               "paid_calls": {k: v for k, v in paid_gate.status().items() if k in ("blocked", "message")},
+                               "payments": {"online": payments.enabled() and not ws["credits_exempt"]}})
+        if path == "/api/payments/catalog" or re.fullmatch(r"/api/payments/kpay_[0-9a-f]{10}", path):
+            return self._payments_get(path, ctx)
+        if path == "/api/credits/topup":   # "Adicionar créditos": manual (desligado) ou compra pelo site (Asaas)
             try:
                 missing = int(parse_qs(url.query).get("missing_cc", ["0"])[0])
             except ValueError:
@@ -892,7 +899,7 @@ class App:
         return _json(404, {"error": "não encontrado"})
 
     # --- escrita
-    def _post(self, path: str, payload: dict, ctx, token: str) -> Response:
+    def _post(self, path: str, payload: dict, ctx, token: str, headers: dict | None = None) -> Response:
         s, wid = ctx["s"], ctx["wid"]
         if self.stopping.is_set() and (path.startswith("/api/productions") or path == "/api/demo"):
             return _json(503, {"error": "o servidor está reiniciando; tente de novo em instantes"}, {"Retry-After": "30"})
@@ -928,6 +935,8 @@ class App:
             return post_agents(self, path, payload, ctx)
         if path == "/api/chat":
             return self._chat(payload, ctx)
+        if path == "/api/payments/checkout":
+            return self._checkout(payload, ctx, headers or {})
         if path == "/api/productions":
             return self._create(payload, ctx)
         if path == "/api/creative/preview":
@@ -1088,13 +1097,15 @@ class App:
         return min(ops, max(float(s.monthly_cap_usd or 0), 0.0))
 
     @staticmethod
-    def _no_credits(exc) -> Response:
-        """Saldo < pré-orçamento: bloqueia ANTES de começar, com a conta à vista."""
+    def _no_credits(exc, fixed: bool = False) -> Response:
+        """Saldo < pré-orçamento: bloqueia ANTES de começar, com a conta à vista. `fixed`: preço fixo (motor fal.ai)."""
         from ..credits import fmt
-        return _json(402, {"error": f"Este vídeo custa cerca de {fmt(exc.needed_cc)} créditos (com os ajustes incluídos) "
-                                    f"e o saldo do estúdio é {fmt(exc.balance_cc)}. Nada foi cobrado e a produção não "
-                                    "começou: adicione créditos e tente de novo.",
-                           "insufficient_credits": True, "needed_cc": exc.needed_cc, "balance_cc": exc.balance_cc})
+        cost = (f"Este vídeo custa {fmt(exc.needed_cc)} créditos" if fixed
+                else f"Este vídeo custa cerca de {fmt(exc.needed_cc)} créditos (com os ajustes incluídos)")
+        return _json(402, {"error": f"{cost} e o saldo do estúdio é {fmt(exc.balance_cc)}. Nada foi cobrado e a produção "
+                                    "não começou: adicione créditos e tente de novo.",
+                           "insufficient_credits": True, "needed_cc": exc.needed_cc, "balance_cc": exc.balance_cc,
+                           "topup": payments.topup_options(max(exc.needed_cc - exc.balance_cc, 0))})
 
     @staticmethod
     def _engine_for(ws, s) -> str:
@@ -1168,13 +1179,16 @@ class App:
         if s.mode == "real" and paid_gate.blocked_reason():
             return _json(409, {"error": paid_gate.MESSAGES[paid_gate.blocked_reason()], "paid_calls_blocked": True})
         prebudget = s.mode == "real"
+        blocked = self._negative_block(ctx)
+        if blocked:
+            return blocked
         if prebudget:
             from .. import budget as budget_mod
             db = Database(s.db_path)
             try:
                 Ledger(db).can_reserve(ctx["wid"], budget_mod.estimate_workflow(s, style)["cc"])
             except InsufficientCreditsError as exc:
-                return self._no_credits(exc)
+                return self._no_credits(exc, fixed=True)
             finally:
                 db.close()
         refs = save_uploads(s.data_dir, [{"name": files[0]["name"], "data": files[0].get("data", ""), "role": "front",
@@ -1192,12 +1206,104 @@ class App:
             pid, dup = fal_pipeline.create_production(orch, product, style=style, workspace_id=ctx["wid"],
                                                       client_request_id=crid, budget_usd=budget_usd, prebudget=prebudget)
         except InsufficientCreditsError as exc:
-            return self._no_credits(exc)
+            return self._no_credits(exc, fixed=True)
         finally:
             orch.db.close()
         # NAO inicia aqui: quem inicia e o /run, depois do /confirm (clique = consentimento). Antes, a criacao ja
         # disparava o laco, que parava em `validated` esperando a confirmacao e a tela mostrava "Preparando" a toa.
         return _json(200, {"ok": True, "pid": pid, "mode": s.mode, "duplicate": dup})
+
+    def _negative_block(self, ctx) -> Response | None:
+        """Saldo negativo (estorno/contestação de compra depois de usar os créditos): nenhuma produção nova até
+        regularizar. Mensagem clara, nada é criado nem cobrado."""
+        db = Database(ctx["s"].db_path)
+        try:
+            msg = payments.negative_balance_block(db, ctx["wid"])
+        finally:
+            db.close()
+        if msg:
+            return _json(402, {"error": msg, "insufficient_credits": True, "negative_balance": True,
+                               "topup": payments.topup_options()})
+        return None
+
+    # --- compra de créditos (Asaas)
+    def _asaas_webhook(self, method: str, headers: dict, body: bytes) -> Response:
+        """POST /api/payments/asaas/webhook: token do painel do Asaas no cabeçalho asaas-access-token (comparação em
+        tempo constante). Grava o evento uma vez só e responde 200 na hora; a conferência na API do Asaas (e o
+        crédito/débito) roda em segundo plano. Desligado (PAYMENTS_ENABLED=false): a rota não existe."""
+        if not payments.enabled():
+            return _json(404, {"error": "não encontrado"})
+        if method != "POST":
+            return _json(405, {"error": "método não permitido"})
+        if not payments.webhook_token_ok(headers.get(asaas_mod.WEBHOOK_HEADER)):
+            log.warning("webhook do Asaas com token inválido", extra={"event": "payment_webhook_unauthorized"})
+            return _json(401, {"error": "token inválido"})
+        try:
+            data = json.loads(body or b"{}")
+        except ValueError:
+            return _json(400, {"error": "json inválido"})
+        db = Database(self.settings().db_path)
+        try:
+            status, out, eid = payments.receive_event(db, data)
+        finally:
+            db.close()
+        if eid:
+            if self.payments_sync:
+                self._process_payment_event(eid)
+            else:
+                threading.Thread(target=self._process_payment_event, args=(eid,), name="studio-asaas-event",
+                                 daemon=True).start()
+        return _json(status, out)
+
+    def _process_payment_event(self, eid: str) -> None:
+        db = Database(self.settings().db_path)
+        try:
+            payments.process_event(db, payments.make_client(), eid)
+        except Exception:  # noqa: BLE001 — fica sem processed_at: o reconcile tenta de novo
+            log.error("falha ao processar evento do Asaas", exc_info=True)
+        finally:
+            db.close()
+
+    def _payments_get(self, path: str, ctx) -> Response:
+        if not payments.enabled():
+            return _json(404, {"error": "a compra pelo site não está disponível"})
+        db = Database(ctx["s"].db_path)
+        try:
+            if path == "/api/payments/catalog":
+                from .. import catalog
+                return _json(200, {**catalog.public_view(), **payments.account_state(db, ctx["wid"])})
+            row = payments.get(db, path.rsplit("/", 1)[1])
+            if row is None or row["account_id"] != ctx["wid"]:
+                return _json(404, {"error": "compra não encontrada"})
+            return _json(200, payments.poll(db, payments.make_client(), row))
+        finally:
+            db.close()
+
+    def _checkout(self, payload: dict, ctx, headers: dict) -> Response:
+        """Cria a compra. O preço sai do catálogo no servidor: qualquer valor enviado pelo navegador é ignorado.
+        IP e user agent ficam registrados na compra (disputa de cartão)."""
+        if not payments.enabled():
+            return _json(404, {"error": "a compra pelo site não está disponível"})
+        if ctx["ws"]["credits_exempt"]:
+            return _json(400, {"error": "Esta conta é isenta: não precisa comprar créditos."})
+        pkg = payload.get("package") or None
+        db = Database(ctx["s"].db_path)
+        try:
+            out = payments.checkout(db, payments.make_client(), wid=ctx["wid"], user_id=ctx["sess"]["user_id"],
+                                    user_name=ctx["sess"]["name"] or ctx["sess"]["email"].split("@")[0],
+                                    method=str(payload.get("method") or ""), package_code=pkg,
+                                    credits=None if pkg else payload.get("credits"), document=payload.get("document"),
+                                    ip=self._client_ip(headers), user_agent=headers.get("User-Agent") or "",
+                                    return_url=self.base_url())
+        except payments.PaymentRefused as exc:
+            return _json(400, {"error": str(exc), "code": exc.code})
+        except asaas_mod.AsaasError as exc:
+            log.warning("Asaas recusou/indisponível na compra", extra={"event": "payment_checkout_error", "detail": str(exc)})
+            return _json(502, {"error": "Não foi possível falar com o meio de pagamento agora. Nada foi cobrado; tente "
+                                        "de novo em instantes.", "code": "provider_error"})
+        finally:
+            db.close()
+        return _json(200, out)
 
     def _create(self, payload: dict, ctx) -> Response:
         s = ctx["s"]
@@ -1205,6 +1311,9 @@ class App:
             return self._create_fal(payload, ctx)
         if s.mode == "real" and paid_gate.blocked_reason():   # aviso antes de receber fotos e criar a produção
             return _json(409, {"error": paid_gate.MESSAGES[paid_gate.blocked_reason()], "paid_calls_blocked": True})
+        blocked = self._negative_block(ctx)
+        if blocked:
+            return blocked
         prebudget = s.mode == "real"
         if prebudget:   # pré-orçamento: sem saldo para o vídeo completo, recusa antes de receber fotos
             from .. import budget as budget_mod
@@ -1502,7 +1611,7 @@ def make_handler(app: App):
                         body = b""
                         if method == "POST":
                             length = int(self.headers.get("Content-Length") or 0)
-                            if self.path.startswith("/api/auth/") and length > MAX_AUTH_BODY:
+                            if self.path.startswith(("/api/auth/", WEBHOOK_PATH)) and length > MAX_AUTH_BODY:
                                 resp = _json(413, {"error": "envio grande demais"})
                             elif length > MAX_BODY:
                                 resp = _json(413, {"error": "envio grande demais (máx. 150 MB por vez)"})
@@ -1572,7 +1681,7 @@ def serve(port: int | None = None, open_browser: bool = True, public_host: str |
           host: str | None = None, trust_proxy: str | None = None) -> None:
     try:
         cfg = ServerConfig.from_env()
-        err = backup_start_error() or cfg.shutdown_budget_error()
+        err = backup_start_error() or cfg.shutdown_budget_error() or asaas_mod.config_error()
     except ValueError as exc:
         err = str(exc)
     if err:

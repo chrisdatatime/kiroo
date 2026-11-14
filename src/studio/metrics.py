@@ -167,6 +167,8 @@ def internal_metrics(db: Database, days: int = 30) -> dict:
         r = db.conn.execute(f"SELECT COUNT(*) n, COALESCE(SUM(cost_usd),0) usd FROM training_tests {tw}",
                             (since,) if since else ()).fetchone()
         extra["training_test"] = {"provider": "não registrado", "calls": r["n"], "usd": _r(r["usd"])}
+    from .payments import month_metrics
+    out["payments"] = month_metrics(db)
     out["outside_productions"] = [{"key": k, "label": OPERATIONS.get(k.split(":")[0], k) if k.startswith("chat") else OPERATIONS[k], **v, "avg_usd": _avg(v["usd"], v["calls"])}
                                   for k, v in extra.items()]
     return out
@@ -203,6 +205,14 @@ def format_text(m: dict) -> str:
         lines.append("  custo por provedor:")
         lines += [f"    {r['label']:26} {r['calls']:5} chamadas  {usd(r['usd'])}  (média {usd(r['avg_usd'])})"
                   for r in b["by_provider"]] or ["    (nada)"]
+    pm = m.get("payments")
+    if pm:
+        from .catalog import brl
+        lines += ["", f"[compras de créditos — mês {pm['month']} (horário de Brasília)]",
+                  f"  receita bruta: {brl(pm['gross_revenue_cents'])}",
+                  "  compras por meio: " + " | ".join(f"{'Pix' if k == 'pix' else 'cartão'}: {v['purchases']} "
+                                                      f"({brl(v['revenue_cents'])})" for k, v in pm["by_method"].items()),
+                  f"  créditos vendidos: {pm['credits_sold']} | créditos consumidos: {pm['credits_consumed']:g}"]
     lines += ["", "[fora das produções]"]
     lines += [f"  {r['label']:26} {r['provider']:15} {r['calls']:5} chamadas  {usd(r['usd'])}" for r in m["outside_productions"]] or ["  (nada)"]
     return "\n".join(lines)

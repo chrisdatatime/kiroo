@@ -30,7 +30,9 @@ export function CreditsContent({ v }) {
               <div className="fred" style={{ fontSize: 28, fontWeight: 600 }}>{d.exempt ? 'Isento' : d.balance + ' créditos'}</div>
             </div>
             <div><div className="g-label">Reservado</div><div style={{ font: '700 15px Instrument Sans,sans-serif' }}>{d.held_cc > 0 ? d.held + ' créditos' : 'nada'}</div></div>
-            {!d.exempt && <button className="g-btn g-sm g-lime" onClick={() => setAdding((a) => !a)} aria-expanded={adding}>{ADD_LABEL}</button>}
+            {!d.exempt && (d.topup && d.topup.online
+              ? <button className="g-btn g-sm g-lime" onClick={() => v.openPrefs('buy')}>Comprar créditos</button>
+              : <button className="g-btn g-sm g-lime" onClick={() => setAdding((a) => !a)} aria-expanded={adding}>{ADD_LABEL}</button>)}
             <p className="g-muted" style={{ margin: 0, fontSize: 12.5, lineHeight: 1.45, flex: '1 1 220px' }}>
               {d.exempt
                 ? 'Conta do dono: o consumo é registrado, mas não precisa de saldo.'
@@ -88,7 +90,7 @@ export function CreditsContent({ v }) {
                 </ul>
               ))}
           </div>
-          {!d.exempt && <p className="g-muted" style={{ margin: 0, fontSize: 12 }}>O pagamento pelo site ainda não está disponível: use "{ADD_LABEL}" para falar com a equipe. Um vídeo já pago nunca deixa de ser entregue por falta de saldo.</p>}
+          {!d.exempt && <p className="g-muted" style={{ margin: 0, fontSize: 12 }}>{d.topup && d.topup.online ? 'Compre créditos por Pix ou cartão em "Comprar créditos".' : `O pagamento pelo site ainda não está disponível: use "${ADD_LABEL}" para falar com a equipe.`} Um vídeo já pago nunca deixa de ser entregue por falta de saldo.</p>}
         </>
       )}
     </div>

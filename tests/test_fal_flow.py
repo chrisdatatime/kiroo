@@ -26,7 +26,7 @@ from studio.states import ProductionStatus as PS
 from .conftest import requires_ffmpeg
 
 pytestmark = requires_ffmpeg
-CHARGE = to_cc(budget.workflow_cost("dark")[0])      # 2,00 US$ placeholder -> centesimos de credito
+CHARGE = 2000                                         # preço fixo do vídeo: 20 créditos (catálogo), não o custo convertido
 
 
 def make(settings, tmp_path, *, real=False, fal_script=None, db=None, **ov):

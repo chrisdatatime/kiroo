@@ -5,7 +5,7 @@ import { safeHref } from './credits.js';
 // "Adicionar créditos". Hoje é contato/instrução manual (ainda não há pagamento pelo site). Ponto de integração do
 // Mercado Pago: quando `topup.online` vier verdadeiro com uma `checkout_url`, é aqui que o botão de pagar entra.
 // Sem `topup` pronto (ex.: abertura pela tela de Créditos), busca em /api/credits/topup.
-export function TopUp({ topup, missingCc = 0, onClose }) {
+export function TopUp({ topup, missingCc = 0, onClose, onBuy }) {
   const [t, setT] = React.useState(topup || null);
   const [err, setErr] = React.useState(null);
   React.useEffect(() => {
@@ -21,7 +21,8 @@ export function TopUp({ topup, missingCc = 0, onClose }) {
       <span style={{ fontSize: 13.5, lineHeight: 1.45 }}>{t.message}</span>
       <ol style={{ margin: 0, paddingLeft: 18, fontSize: 13, lineHeight: 1.5 }}>{(t.steps || []).map((s, k) => <li key={k}>{s}</li>)}</ol>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        {href && <a className="g-btn g-sm g-lime" href={href} target="_blank" rel="noreferrer noopener">{t.contact.label}</a>}
+        {t.online && onBuy && <button className="g-btn g-sm g-lime" onClick={onBuy}>Comprar créditos</button>}
+        {href && !t.online && <a className="g-btn g-sm g-lime" href={href} target="_blank" rel="noreferrer noopener">{t.contact.label}</a>}
         {!href && t.contact && <span style={{ font: '800 13px/1.3 Instrument Sans,sans-serif' }}>{t.contact.label}</span>}
         {onClose && <button className="g-btn g-sm" onClick={onClose}>Fechar</button>}
       </div>

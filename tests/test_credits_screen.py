@@ -128,12 +128,10 @@ def test_topup_is_manual_with_contact_from_env(monkeypatch):
     assert "18" in " ".join(payments.topup_options(1800)["steps"])             # diz quanto falta
 
 
-def test_mercadopago_is_a_ready_integration_point_but_not_active(monkeypatch):
-    monkeypatch.setenv("STUDIO_PAYMENTS_PROVIDER", "mercadopago")
-    assert payments.provider_name() == "mercadopago" and payments.topup_options()["online"] is False
-    with pytest.raises(payments.CheckoutUnavailable):
-        payments.MercadoPagoProvider().start_checkout("ws_x", 1000)
-    monkeypatch.setenv("STUDIO_PAYMENTS_PROVIDER", "qualquer")
+def test_payments_off_by_default_keeps_manual_topup(monkeypatch):
+    monkeypatch.delenv("PAYMENTS_ENABLED", raising=False)
+    assert payments.provider_name() == "manual" and payments.topup_options()["online"] is False
+    monkeypatch.setenv("PAYMENTS_ENABLED", "true")       # ligado mas sem chave/token: não vale (e o servidor não sobe)
     assert payments.provider_name() == "manual"
 
 

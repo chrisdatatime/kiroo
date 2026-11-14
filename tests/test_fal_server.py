@@ -221,4 +221,5 @@ def test_state_offers_the_light_style_with_the_exact_button_price(app):
     from studio import budget
     from studio.credits import fmt
     real = app._fal_offer(app.settings(), "real")
-    assert real[0]["cc"] == budget.estimate_workflow(app.settings(), "light")["cc"] == 972 and fmt(972) == "9,72"
+    assert real[0]["cc"] == budget.estimate_workflow(app.settings(), "light")["cc"] == 2000 and fmt(2000) == "20"
+    assert real[0]["credits"] == "20"                                     # botão "Criar vídeo · 20 créditos"

@@ -1,0 +1,107 @@
+/* Comprar créditos (ui/BuyCredits.jsx): dentro do modal de Preferências (.pw-theme). Tinta = primário; laranja só no
+   selo "Mais escolhido" (texto tinta sobre laranja). Celular (<= 640 px): pacotes empilhados, alvos de 44 px e o botão
+   de pagar fixo no rodapé (uma ação principal por tela). */
+.buy { display: flex; flex-direction: column; gap: 16px; color: var(--pw-text); font-family: 'Instrument Sans', system-ui, sans-serif; }
+.buy-k { font-size: 13px; font-weight: 600; color: var(--pw-text-2); }
+.buy-top { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.buy-bal { font-size: 22px; font-weight: 650; letter-spacing: -.01em; }
+.buy-rate { font-size: 13px; color: var(--pw-text-2); padding: 6px 10px; border: 1px solid var(--pw-border); border-radius: 999px; }
+.buy-rate strong { color: var(--pw-text); }
+.buy-warn { margin: 0; padding: 10px 12px; border-radius: 10px; border: 1px solid #F0C7BA; background: #FFF4F0; font-size: 13.5px; line-height: 1.45; }
+.buy-err { padding: 10px 12px; border-radius: 10px; background: #FDECEA; color: #7A2218; font-size: 13.5px; }
+
+.buy-seg { display: inline-flex; align-self: flex-start; padding: 3px; gap: 2px; border-radius: 11px; background: var(--pw-primary-soft); border: 1px solid var(--pw-border); }
+.buy-seg-btn { min-height: 34px; padding: 0 18px; border: 0; border-radius: 8px; background: transparent; color: var(--pw-text-2); font: 600 13.5px/1 inherit; font-family: inherit; cursor: pointer; }
+.buy-seg-btn[aria-selected="true"] { background: #fff; color: var(--pw-text); box-shadow: 0 1px 2px rgba(14, 14, 16, .1); }
+.buy-seg-btn:focus-visible, .buy-pack:focus-visible, .buy-method:focus-visible, .buy-chip:focus-visible, .buy-step:focus-visible, .buy-link:focus-visible { outline: 2px solid var(--pw-primary); outline-offset: 2px; }
+
+.buy-packs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.buy-pack { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 14px 14px 12px; border: 1px solid var(--pw-border); border-radius: 14px;
+  background: #fff; color: var(--pw-text); text-align: left; cursor: pointer; font-family: inherit; transition: border-color .15s, box-shadow .15s, transform .15s; }
+.buy-pack:hover { border-color: #C9C9C4; }
+.buy-pack[aria-checked="true"] { border-color: var(--pw-primary); box-shadow: 0 0 0 1px var(--pw-primary), var(--pw-shadow); }
+.buy-pack.is-hl { background: linear-gradient(180deg, #FFF6F2 0%, #fff 60%); }
+.buy-pack-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-height: 22px; padding-right: 24px; }
+.buy-pack-name { font-size: 13px; font-weight: 600; color: var(--pw-text-2); }
+.buy-badge { font-size: 11.5px; font-weight: 700; padding: 3px 8px; border-radius: 999px; background: var(--pw-attn); color: var(--pw-text); }
+.buy-pack-cr { font-size: 14px; color: var(--pw-text-2); margin-top: 4px; }
+.buy-pack-cr strong { display: block; font-size: 34px; line-height: 1; font-weight: 700; letter-spacing: -.02em; color: var(--pw-text); }
+.buy-pack-vid { font-size: 13px; color: var(--pw-text-2); }
+.buy-pack-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.buy-price { font-size: 17px; font-weight: 700; }
+.buy-save { font-size: 12px; font-weight: 700; padding: 3px 7px; border-radius: 6px; background: #E6F2E8; color: #205C2E; }
+.buy-radio { position: absolute; top: 12px; right: 12px; width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid #C9C9C4; display: grid; place-items: center; color: #fff; }
+.buy-pack[aria-checked="true"] .buy-radio { background: var(--pw-primary); border-color: var(--pw-primary); }
+
+.buy-custom { display: flex; flex-direction: column; gap: 12px; }
+.buy-stepper { display: flex; align-items: center; gap: 10px; }
+.buy-step { width: 44px; height: 44px; flex: none; display: grid; place-items: center; border-radius: 12px; border: 1px solid var(--pw-border); background: #fff; color: var(--pw-text); cursor: pointer; }
+.buy-step:hover:not(:disabled) { background: var(--pw-primary-soft); }
+.buy-step:disabled { opacity: .4; cursor: not-allowed; }
+.buy-qty { flex: 1; display: flex; align-items: baseline; justify-content: center; gap: 6px; min-height: 56px; padding: 6px; border-radius: 12px; background: var(--pw-primary-soft); }
+.buy-qty strong { font-size: 32px; font-weight: 700; letter-spacing: -.02em; }
+.buy-qty span { font-size: 14px; color: var(--pw-text-2); }
+.buy-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.buy-chip { min-height: 36px; min-width: 56px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--pw-border); background: #fff; font: 600 13.5px/1 inherit; font-family: inherit; color: var(--pw-text); cursor: pointer; }
+.buy-chip[aria-pressed="true"] { background: var(--pw-primary); border-color: var(--pw-primary); color: #fff; }
+.buy-total { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 13px; color: var(--pw-text-2); }
+.buy-total strong { font-size: 22px; color: var(--pw-text); }
+.buy-note { margin: 0; font-size: 13px; line-height: 1.45; color: var(--pw-text-2); }
+.buy-hint { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 10px 12px; border-radius: 10px; background: #E6F2E8; color: #173F20; font-size: 13.5px; }
+.buy-link { min-height: 32px; border: 0; background: transparent; font: 700 13.5px/1 inherit; font-family: inherit; color: inherit; text-decoration: underline; cursor: pointer; padding: 0 4px; }
+
+.buy-pay { display: flex; flex-direction: column; gap: 10px; padding-top: 14px; border-top: 1px solid var(--pw-border); }
+.buy-methods { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.buy-method { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 8px 12px; border-radius: 12px; border: 1px solid var(--pw-border); background: #fff; color: var(--pw-text); text-align: left; cursor: pointer; font-family: inherit; }
+.buy-method span { display: flex; flex-direction: column; gap: 2px; }
+.buy-method strong { font-size: 14px; }
+.buy-method small { font-size: 12.5px; color: var(--pw-text-2); }
+.buy-method[aria-checked="true"] { border-color: var(--pw-primary); box-shadow: 0 0 0 1px var(--pw-primary); }
+.buy-doc { display: flex; flex-direction: column; gap: 6px; }
+.buy-doc input, .buy-copy input { height: 44px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--pw-border); font: 500 15px/1 'Geist Mono', ui-monospace, monospace; color: var(--pw-text); background: #fff; min-width: 0; }
+.buy-doc input:focus-visible, .buy-copy input:focus-visible { outline: 2px solid var(--pw-primary); outline-offset: 1px; }
+.buy-doc input[aria-invalid="true"] { border-color: #C2412A; }
+.buy-doc small { font-size: 12.5px; color: var(--pw-text-2); }
+
+.buy-dock { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border-radius: 14px; background: var(--pw-primary-soft); }
+.buy-dock-sum { display: flex; flex-direction: column; gap: 2px; font-size: 13px; color: var(--pw-text-2); }
+.buy-dock-sum strong { font-size: 18px; color: var(--pw-text); }
+.buy-cta { min-height: 44px; padding: 0 18px; font-size: 14px; }
+.buy-cta:disabled { opacity: .45; cursor: not-allowed; }
+.buy-cta-link { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; min-height: 44px; align-self: flex-start; }
+.buy-fine { margin: 0; display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--pw-text-2); }
+
+.buy-status { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 12px; font-weight: 650; font-size: 15px; background: var(--pw-primary-soft); }
+.buy-status.is-ok { background: #E6F2E8; color: #173F20; }
+.buy-status.is-bad { background: #FDECEA; color: #7A2218; }
+.buy-order-sum { display: flex; justify-content: space-between; align-items: baseline; font-size: 14px; color: var(--pw-text-2); }
+.buy-order-sum strong { font-size: 20px; color: var(--pw-text); }
+.buy-pix { display: flex; flex-direction: column; gap: 10px; }
+.buy-qr { width: 220px; height: 220px; align-self: center; border: 1px solid var(--pw-border); border-radius: 12px; padding: 8px; background: #fff; image-rendering: pixelated; }
+.buy-steps { margin: 0; padding-left: 20px; font-size: 13.5px; line-height: 1.55; }
+.buy-copy { display: flex; gap: 8px; }
+.buy-copy input { flex: 1; font-size: 13px; }
+.buy-copy .pw-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; }
+.buy-done { display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.buy-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+.buy-row .pw-btn { min-height: 44px; }
+
+@media (max-width: 640px) {
+  .buy { gap: 14px; }
+  .buy-packs { grid-template-columns: 1fr; }
+  .buy-pack { display: grid; grid-template-columns: 1fr auto; grid-template-areas: "head head" "cr foot" "vid foot"; align-items: end; column-gap: 12px; padding: 12px 14px; }
+  .buy-pack-head { grid-area: head; }
+  .buy-pack-cr { grid-area: cr; margin-top: 2px; }
+  .buy-pack-cr strong { display: inline; font-size: 28px; margin-right: 4px; }
+  .buy-pack-vid { grid-area: vid; font-size: 13px; }
+  .buy-pack-foot { grid-area: foot; flex-direction: column; align-items: flex-end; gap: 4px; margin: 0; }
+  .buy-seg { align-self: stretch; } .buy-seg-btn { flex: 1; min-height: 44px; font-size: 15px; }
+  .buy-chip { min-height: 44px; flex: 1; font-size: 15px; }
+  .buy-method small { font-size: 13px; }
+  .buy-steps, .buy-note, .buy-warn, .buy-hint { font-size: 15px; }
+  /* o pagamento fica fixo no rodapé da tela (uma ação principal) */
+  .buy-dock { position: sticky; bottom: calc(-24px - env(safe-area-inset-bottom)); margin: 0 -16px; border-radius: 0; padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+    background: #fff; border-top: 1px solid var(--pw-border); box-shadow: 0 -6px 18px rgba(14, 14, 16, .06); z-index: 2; }
+  .buy-cta { flex: 1; max-width: 260px; font-size: 15px; }
+  .buy-qr { width: 240px; height: 240px; }
+}

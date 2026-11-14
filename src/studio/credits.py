@@ -28,8 +28,10 @@ _LOCK = threading.RLock()
 # O schema vive em migrations.py (PRAGMA user_version).
 
 KINDS_IN = {"grant", "purchase", "adjust"}  # entradas manuais/compras
+# Compras pelo Asaas: "purchase" (crédito) e "reversal" (estorno/contestação; negativo, pode deixar o saldo negativo).
+# Os dois levam payment_id e são escritos só por payments.py (Ledger.payment_entry).
 LABELS = {"grant": "Créditos liberados", "purchase": "Compra", "adjust": "Ajuste", "reserve": "Reserva",
-          "release": "Reserva devolvida", "debit": "Uso"}
+          "release": "Reserva devolvida", "debit": "Uso", "reversal": "Estorno de compra"}
 STAGES = {"image": "Imagens", "video": "Vídeos", "review_image": "Conferência das imagens",
           "review_video": "Conferência dos takes", "plan": "Direção (roteiro)",
           "workflow": "Pacote de vídeo e fotos"}
@@ -111,7 +113,7 @@ class Ledger:
         """Extrato: créditos que entraram e uso por tentativa (reserva+liberação+débito viram uma linha)."""
         rows = self.db.conn.execute(
             "SELECT e.*, p.product_json FROM credit_entries e LEFT JOIN productions p ON p.id=e.production_id"
-            " WHERE e.workspace_id=? AND e.kind IN ('grant','purchase','adjust','debit','release')"
+            " WHERE e.workspace_id=? AND e.kind IN ('grant','purchase','adjust','debit','release','reversal')"
             " ORDER BY e.created_at DESC, e.rowid DESC LIMIT ?", (wid, limit * 3)).fetchall()
         debited = {r["hold_id"] for r in rows if r["kind"] == "debit"}
         out = []
@@ -183,6 +185,26 @@ class Ledger:
                     return row[0]
             return self._insert(workspace_id=wid, kind=kind, amount_cc=int(credits_cc), note=note[:300],
                                 ext_ref=ext_ref, created_by=by)
+
+    def payment_net(self, payment_id: str) -> int:
+        """Quanto a compra `payment_id` soma hoje no saldo (créditos menos estornos)."""
+        return self.db.conn.execute("SELECT COALESCE(SUM(amount_cc),0) FROM credit_entries WHERE payment_id=?",
+                                    (payment_id,)).fetchone()[0]
+
+    def payment_entry(self, wid: str, payment_id: str, target_cc: int, note: str = "") -> int:
+        """Leva o que a compra soma no saldo até `target_cc` (créditos da compra quando paga; 0 depois de estorno ou
+        contestação). Escreve só a diferença, sob o lock: o mesmo pagamento nunca credita duas vezes, por mais que o
+        webhook repita ou chegue fora de ordem. O débito de estorno pode deixar o saldo NEGATIVO (de propósito).
+        Devolve o lançamento feito em centésimos (0 = nada mudou)."""
+        with self._txn():
+            net = self.payment_net(payment_id)
+            delta = int(target_cc) - net
+            if delta == 0:
+                return 0
+            seq = self.db.conn.execute("SELECT COUNT(*) FROM credit_entries WHERE payment_id=?", (payment_id,)).fetchone()[0]
+            self._insert(workspace_id=wid, kind="purchase" if delta > 0 else "reversal", amount_cc=delta,
+                         payment_id=payment_id, note=note[:300], ext_ref=f"payment:{payment_id}:{seq + 1}")
+        return delta
 
     def hold(self, wid: str, pid: str, usd: float, stage: str) -> str | None:
         """Reserva antes de uma chamada paga. Sem saldo → InsufficientCredits (nada é reservado)."""
@@ -316,7 +338,8 @@ class Ledger:
                 if att["status"] == "failed":
                     decision, charge = "technical_failure", 0
                 else:
-                    cost = to_cc(usd)
+                    # pacote fal.ai: preço FIXO em créditos (catálogo), nunca o custo real convertido
+                    cost = _fixed_price_cc() if att["kind"] == "workflow" else to_cc(usd)
                     charge = 0 if state["closed"] else min(cost, state["remaining_cc"])
                     decision = "charged" if charge == cost else "absorbed"   # absorbed: o Kiroo paga a diferença
                 if charge > 0:
@@ -353,6 +376,11 @@ class Ledger:
         """Registro por produção, cena, operação e provedor (o que custou ao Kiroo e o que saiu do cliente)."""
         return [dict(r) for r in self.db.conn.execute(
             "SELECT * FROM production_charges WHERE production_id=? ORDER BY created_at, rowid", (pid,))]
+
+
+def _fixed_price_cc() -> int:
+    from .catalog import video_price_cc
+    return video_price_cc()
 
 
 def attempt_cost_usd(att) -> float:

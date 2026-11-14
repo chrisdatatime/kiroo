@@ -32,11 +32,26 @@ Como ler as colunas:
 | `STUDIO_OPERATION_COSTS_FILE` | não | não | execução | *(não definir)* | Caminho de uma tabela de custos por operação (formato de `profiles/billing/operation_costs.json`: roteiro, imagem, conferências, vídeo; `usd: null` = tabela de preços do modelo). Base do pré-orçamento e das reservas de conferência/roteiro. |
 | `STUDIO_CREDIT_PRICE_BRL` | não | não | execução | *(não definir)* | Preço de 1 crédito em R$. **Só com ele definido (> 0) o resumo "Seu próximo vídeo" mostra o valor em R$**; sem ele a interface mostra apenas créditos (o padrão interno 1,00 serve só à conversão de custo). |
 | `STUDIO_SUPPORT_CONTACT` | não | não | execução | `ajuda@exemplo.com` | Contato mostrado em "Adicionar créditos" (enquanto não há pagamento pelo site): e-mail (vira `mailto:`), endereço `https://` (formulário, WhatsApp) ou texto livre. Qualquer outro esquema (`javascript:`) aparece só como texto. Vazio: a tela mostra só a instrução. |
-| `STUDIO_PAYMENTS_PROVIDER` | não | não | execução | *(não definir; padrão `manual`)* | `manual` (padrão) ou `mercadopago`. O Mercado Pago é só o ponto de integração (`src/studio/payments.py`): ainda não cobra; com `mercadopago` a tela continua no modo manual até o checkout ser implementado. |
+| `STUDIO_PAYMENTS_PROVIDER` | não | não | execução | *(não definir)* | **Obsoleta** (era o ponto de integração do Mercado Pago). A compra pelo site agora é o Asaas, ligada por `PAYMENTS_ENABLED` (abaixo). |
 | `STUDIO_KILL_SWITCH` | não | não | execução | *(não definir)* | `1` bloqueia qualquer chamada paga em qualquer ambiente. Trava de emergência; com `ALLOW_PAID_CALLS=0` já é redundante. |
 
 > Em staging nunca coloque `GEMINI_API_KEY` nem `ANTHROPIC_API_KEY`. Sem chave o modo simulado funciona
 > normalmente e o chat cai no modo "sem IA". Chave que não existe é chave que não vaza.
+
+### Compra de créditos (Asaas; desligada por padrão)
+
+Pix e cartão para **comprar créditos** (o ledger continua o mesmo). Cartão é pago na **fatura hospedada do Asaas**
+(`invoiceUrl`): nenhum dado de cartão passa pelo Kiroo. Preço sempre calculado no servidor pelo catálogo
+`profiles/billing/catalog.json` (centavos; o vídeo custa 20 créditos fixos). Regras e passo a passo do painel em
+[docs/ADMIN.md](ADMIN.md), seção "Compra de créditos (Asaas)".
+
+| Variável | Obrig. | Segredo | Quando | Valor no staging | Para que serve |
+|---|---|---|---|---|---|
+| `PAYMENTS_ENABLED` | não | não | execução | `false` *(padrão)* | Liga a tela "Comprar créditos", o checkout e o webhook `POST /api/payments/asaas/webhook`. Desligado, a tela volta ao "Adicionar créditos" manual e a rota do webhook responde 404. |
+| `ASAAS_ENV` | com pagamentos | não | execução | `sandbox` | `sandbox` (`https://api-sandbox.asaas.com/v3`) ou `production` (`https://api.asaas.com/v3`). **Recusa subir** com `production` fora de `STUDIO_ENV=production` e com `sandbox` em `STUDIO_ENV=production`. |
+| `ASAAS_API_KEY` | com pagamentos | **sim** | execução | *(selada)* | Chave de API (cabeçalho `access_token`). Sandbox começa com `$aact_hmlg_`, produção com `$aact_prod_`: chave do ambiente errado **impede a subida**. |
+| `ASAAS_WEBHOOK_TOKEN` | com pagamentos | **sim** | execução | *(selada)* | O mesmo "Token de autenticação" cadastrado no webhook do painel do Asaas; chega no cabeçalho `asaas-access-token` e é comparado em tempo constante. 32 a 255 caracteres, sem espaço, não pode ser uma chave de API. |
+| `STUDIO_CREDIT_CATALOG_FILE` | não | não | execução | *(não definir)* | Caminho de outro catálogo (mesmo formato de `profiles/billing/catalog.json`). |
 
 ### Motor fal.ai (workflows; desligado por padrão)
 
