@@ -1,53 +1,53 @@
 {
-  "_nota": "Contrato EXTERNO dos workflows da fal.ai: so o mapeamento de chaves. Tudo aqui e PLACEHOLDER marcado A CONFIRMAR (Fase 0) ate voce rodar cada workflow no playground e preencher com o resultado real (ver relatorio de entrega). O resto do codigo so conhece o formato canonico (WorkflowPackage). Caminhos: pontos separam chaves; numeros indexam listas (ex.: images.0.url). Os caminhos valem sobre output quando o envelope (X-Fal-Workflow-Envelope) esta ligado, senao sobre o resultado inteiro.",
-  "version": 1,
-  "status": "A CONFIRMAR (Fase 0)",
+  "_nota": "Contrato EXTERNO dos workflows da fal.ai: so o mapeamento de chaves. Escopo real: input unico image_url; saidas uteis video (mp4 ~15 s JA COM A NARRACAO, sem musica), images (1 foto hero) e output (texto com JSON {\"title\",\"caption\"}). A saida audio/audio_2 do display e intermediaria de TTS: ignorada. Nao ha musica. descricao_produto existe no schema do workflow mas nao esta ligada a nenhum no: nao e enviada. Campos A CONFIRMAR (Fase 0) e a lista `pending` dependem da fixture real. O resto do codigo so conhece o formato canonico (WorkflowPackage). Caminhos: pontos separam chaves; numeros indexam listas (ex.: images.0.url). Os caminhos valem sobre output quando o envelope (X-Fal-Workflow-Envelope) esta ligado, senao sobre o resultado inteiro (sem envelope, `output` e o texto do workflow; com envelope, o texto fica em `output.output`, e o caminho do contrato continua sendo `output`).",
+  "version": 2,
+  "status": "PARCIAL (Fase 0): caminhos de saida mapeados; indice da foto e recuperacao pelo no A CONFIRMAR",
   "envelope": true,
   "styles": {
     "dark": {
-      "status": "A CONFIRMAR (Fase 0)",
+      "status": "PARCIAL: caminhos de saida mapeados pelo escopo real do workflow; falta confirmar na fixture real (Fase 0)",
       "workflow_env": "WORKFLOW_ID_DARK",
-      "input": {"image_field": "A CONFIRMAR (Fase 0)", "extra": {}},
+      "input": {
+        "image_field": "image_url",
+        "extra": {}
+      },
       "expected_duration_s": 15,
       "output": {
-        "video": "A CONFIRMAR (Fase 0)",
-        "narration": "A CONFIRMAR (Fase 0)",
-        "music": "A CONFIRMAR (Fase 0)",
-        "description": "A CONFIRMAR (Fase 0)",
-        "narration_text": "A CONFIRMAR (Fase 0)",
-        "images": {
-          "hero": "A CONFIRMAR (Fase 0)",
-          "lifestyle": "A CONFIRMAR (Fase 0)",
-          "details": "A CONFIRMAR (Fase 0)"
-        }
+        "video": "video.url",
+        "image": "images.0.url",
+        "text": "output"
       },
+      "pending": [
+        "output.image: indice 0 de images (images[0].url) a confirmar na fixture real"
+      ],
       "recover": {
-        "hero": {"node_id": "A CONFIRMAR (Fase 0)", "path": "A CONFIRMAR (Fase 0)"},
-        "lifestyle": {"node_id": "A CONFIRMAR (Fase 0)", "path": "A CONFIRMAR (Fase 0)"},
-        "details": {"node_id": "A CONFIRMAR (Fase 0)", "path": "A CONFIRMAR (Fase 0)"}
+        "hero": {
+          "node_id": "A CONFIRMAR (Fase 0)",
+          "path": "A CONFIRMAR (Fase 0)"
+        }
       }
     },
     "light": {
-      "status": "A CONFIRMAR (Fase 0)",
+      "status": "PARCIAL: caminhos de saida mapeados pelo escopo real do workflow; falta confirmar na fixture real (Fase 0)",
       "workflow_env": "WORKFLOW_ID_LIGHT",
-      "input": {"image_field": "A CONFIRMAR (Fase 0)", "extra": {}},
+      "input": {
+        "image_field": "image_url",
+        "extra": {}
+      },
       "expected_duration_s": 15,
       "output": {
-        "video": "A CONFIRMAR (Fase 0)",
-        "narration": "A CONFIRMAR (Fase 0)",
-        "music": "A CONFIRMAR (Fase 0)",
-        "description": "A CONFIRMAR (Fase 0)",
-        "narration_text": "A CONFIRMAR (Fase 0)",
-        "images": {
-          "hero": "A CONFIRMAR (Fase 0)",
-          "lifestyle": "A CONFIRMAR (Fase 0)",
-          "details": "A CONFIRMAR (Fase 0)"
-        }
+        "video": "video.url",
+        "image": "images.0.url",
+        "text": "output"
       },
+      "pending": [
+        "output.image: indice 0 de images (images[0].url) a confirmar na fixture real"
+      ],
       "recover": {
-        "hero": {"node_id": "A CONFIRMAR (Fase 0)", "path": "A CONFIRMAR (Fase 0)"},
-        "lifestyle": {"node_id": "A CONFIRMAR (Fase 0)", "path": "A CONFIRMAR (Fase 0)"},
-        "details": {"node_id": "A CONFIRMAR (Fase 0)", "path": "A CONFIRMAR (Fase 0)"}
+        "hero": {
+          "node_id": "A CONFIRMAR (Fase 0)",
+          "path": "A CONFIRMAR (Fase 0)"
+        }
       }
     }
   }

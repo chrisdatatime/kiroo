@@ -1,6 +1,6 @@
 """Apoio dos testes do motor fal.ai: contrato de AMOSTRA (chaves inventadas, nao as reais) e resultados falsos.
 
-Nada aqui e o formato real dos workflows: o real fica A CONFIRMAR (Fase 0) em profiles/fal/workflow_contract.json.
+Nada aqui e o formato real dos workflows: o real (parcialmente A CONFIRMAR, Fase 0) fica em profiles/fal/workflow_contract.json.
 Quando as fixtures reais forem salvas localmente, os testes de integracao delas usam o contrato preenchido.
 """
 
@@ -9,23 +9,15 @@ from __future__ import annotations
 import copy
 
 SAMPLE_CONTRACT = {
-    "version": 1,
+    "version": 2,
     "status": "AMOSTRA DE TESTE",
     "styles": {
         style: {
             "workflow_env": f"WORKFLOW_ID_{style.upper()}",
-            "input": {"image_field": "photo_url", "extra": {"language": "pt-BR"}},
+            "input": {"image_field": "image_url", "extra": {}},
             "expected_duration_s": 15,
-            "output": {
-                "video": "final.video.url", "narration": "audio.voice.url", "music": "audio.music.url",
-                "description": "text.description", "narration_text": "text.script",
-                "images": {"hero": "pics.2.url", "lifestyle": "pics.0.url", "details": "pics.1.url"},
-            },
-            "recover": {
-                "hero": {"node_id": "n_hero", "path": "image.url"},
-                "lifestyle": {"node_id": "n_life", "path": "image.url"},
-                "details": {"node_id": "n_det", "path": "image.url"},
-            },
+            "output": {"video": "video.url", "image": "images.0.url", "text": "output"},
+            "recover": {"hero": {"node_id": "n_hero", "path": "image.url"}},
         } for style in ("dark", "light")
     },
 }
@@ -37,14 +29,17 @@ def sample_contract():
     return copy.deepcopy(SAMPLE_CONTRACT)
 
 
-def sample_result(*, drop=(), envelope=True):
-    """Resultado bruto fictício. `drop`: caminhos a remover (ex.: 'audio.music', 'pics.1')."""
+TEXT = '{"title": "Copo azul de aco inox", "caption": "Mantem a bebida gelada por horas."}'
+
+
+def sample_result(*, drop=(), envelope=True, text=TEXT):
+    """Resultado bruto fictício no escopo real: video (com a narracao embutida), images (1 foto hero) e output (texto
+    com JSON). `audio` e o intermediario de TTS do display: presente e IGNORADO. `drop`: caminhos a remover."""
     out = {
-        "final": {"video": {"url": f"{BASE}/final.mp4"}},
-        "audio": {"voice": {"url": f"{BASE}/voz.mp3"}, "music": {"url": f"{BASE}/trilha.mp3"}},
-        "text": {"description": "Copo azul de aco inox.", "script": "Conheca o copo que acompanha seu dia."},
-        # a ORDEM da lista nao define o papel: o mapeamento do contrato define (aqui, deliberadamente embaralhada)
-        "pics": [{"url": f"{BASE}/lifestyle.jpg"}, {"url": f"{BASE}/details.jpg"}, {"url": f"{BASE}/hero.jpg"}],
+        "video": {"url": f"{BASE}/final.mp4"},
+        "audio": {"url": f"{BASE}/voz.mp3"},
+        "images": [{"url": f"{BASE}/hero.jpg"}],
+        "output": text,
     }
     for d in drop:
         cur = out
@@ -58,8 +53,4 @@ def sample_result(*, drop=(), envelope=True):
             cur.pop(last, None)
     if not envelope:
         return out
-    return {"output": out, "nodes": {
-        "n_hero": {"endpoint": "fal-ai/img/a", "request_id": "r-hero"},
-        "n_life": {"endpoint": "fal-ai/img/b", "request_id": "r-life"},
-        "n_det": {"endpoint": "fal-ai/img/c", "request_id": "r-det"},
-    }}
+    return {"output": out, "nodes": {"n_hero": {"endpoint": "fal-ai/img/a", "request_id": "r-hero"}}}

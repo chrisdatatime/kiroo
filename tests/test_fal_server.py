@@ -78,13 +78,12 @@ def test_create_run_gallery_and_individual_downloads(app):
     P = state(app, pid)["production"]
     assert P["engine"] == "fal" and P["style"] == "dark" and P["status"] == "awaiting_final_review"
     assert P["delivery_status"] == "complete" and P["scenes"] == [] and P["fal"]["finalizing"] is False
-    assert [i["role"] for i in P["fal"]["images"]] == ["hero", "lifestyle", "details"]
-    assert [i["label"] for i in P["fal"]["images"]] == ["Hero Shot", "Lifestyle", "Detalhes"]
-    assert all(i["url"] for i in P["fal"]["images"]) and "final.mp4" in P["delivery"] and "caption.txt" in P["delivery"]
+    assert (P["fal"]["image"]["role"], P["fal"]["image"]["label"]) == ("hero", "Hero Shot") and P["fal"]["image"]["url"]
+    assert set(P["delivery"]) == {"final.mp4", "product_image_01.jpg", "cover.jpg", "caption.txt"}
     assert P["confirmation"]["required"] is False                      # DEMO: sem custo
     plain = get(app, P["delivery"]["final.mp4"])
     assert plain.status == 200 and "Content-Disposition" not in plain.headers
-    for name in ("final.mp4", "product_image_01.jpg", "product_image_02.jpg", "product_image_03.jpg"):
+    for name in ("final.mp4", "product_image_01.jpg"):
         r = get(app, P["delivery"][name] + "?download=1")
         assert r.status == 200 and r.headers["Content-Disposition"] == f'attachment; filename="{name}"'
         assert r.headers["Cache-Control"] == "private, no-store"

@@ -1,9 +1,9 @@
 """Fixtures REAIS dos workflows (Fase 0), salvas localmente. Pulado enquanto a pasta estiver vazia.
 
 Como usar (detalhes em docs/FAL.md): rode cada workflow UMA vez no playground, salve o JSON do resultado em
-tests/fixtures/fal_real/<dark|light>/result.json (com o envelope, se possivel) e preencha
-profiles/fal/workflow_contract.json. Este teste confere que o contrato preenchido le o resultado real: pacote
-completo, 3 imagens com papel e a duracao esperada nos arquivos baixados (opcionais, na mesma pasta).
+tests/fixtures/fal_real/<dark|light>/result.json (com o envelope, se possivel) e preencha o que sobrou A CONFIRMAR em
+profiles/fal/workflow_contract.json (indice da foto em `images`, recuperacao pelo no). Este teste confere que o
+contrato preenchido le o resultado real: video, foto hero e o JSON {"title","caption"} em `output`.
 Nada aqui chama a rede nem gasta.
 """
 
@@ -30,5 +30,6 @@ def test_filled_contract_reads_the_real_result(style):
     pkg = fc.parse_result(result, style, contract)
     assert pkg.missing() == [], f"o resultado real nao traz: {pkg.missing()}"
     assert pkg.failure_kind() is None
-    assert len({a.url for a in pkg.images.values()}) == 3          # tres imagens distintas, cada uma no seu papel
-    assert pkg.description and pkg.narration_text
+    assert pkg.video.url and pkg.hero.url
+    # o prompt manda devolver strings vazias quando nao identifica o produto: so conferimos que o JSON foi lido
+    assert pkg.title or pkg.caption or pkg.warnings

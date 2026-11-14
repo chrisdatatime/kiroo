@@ -1,6 +1,6 @@
 {
   "_nota": "Custo estimado (US$) por operação, usado no PRÉ-ORÇAMENTO da produção (reserva do saldo do cliente antes de começar) e nas reservas de conferência/roteiro. usd null = usa a tabela de preços do modelo configurado (src/studio/pricing.py). Troque o arquivo inteiro com STUDIO_OPERATION_COSTS_FILE.",
-  "workflow_nota": "PLACEHOLDER: workflow_dark/workflow_light (US$ por execução do pacote de 4 entregáveis: vídeo + 3 fotos) são valores de referência até a medição real na Fase 5. Não são preço da fal.ai.",
+  "workflow_nota": "PLACEHOLDER: workflow_dark/workflow_light (US$ por execução do pacote: vídeo com narração + 1 foto + legenda) são valores de referência até a medição real na Fase 5. Não são preço da fal.ai.",
   "version": 1,
   "retrieved_on": "2026-10-26",
   "operations": {

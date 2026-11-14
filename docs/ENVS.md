@@ -54,7 +54,6 @@ Só **nomes** aqui; os valores ficam no painel (variáveis seladas para as chave
 | `STUDIO_FAL_MAX_INFLIGHT` | não | não | execução | *(padrão `2`)* | Execuções simultâneas do Kiroo (a conta nova da fal.ai permite 2). |
 | `STUDIO_FAL_RETENTION_DAYS` | não | não | execução | *(padrão `7`)* | Retenção dos artefatos intermediários em `workflow/attempt_NN/`. `delivery/` nunca é limpa. |
 | `STUDIO_FAL_TARGET_S` / `_MIN_S` / `_MAX_S` | não | não | execução | *(padrão `15` / `14` / `16`)* | Duração-alvo do vídeo final e janela aceitável. |
-| `STUDIO_FAL_ATEMPO_MAX` | não | não | execução | *(padrão `1.08`)* | Teto do ajuste de velocidade da narração (sem cortar palavras). Acima disso, revisão do administrador. |
 
 ### Chat com os agentes (Gemini por padrão)
 

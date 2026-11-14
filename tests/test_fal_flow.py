@@ -1,4 +1,4 @@
-"""Fluxo ponta a ponta do motor fal.ai com o workflow SIMULADO: criacao, execucao, entrega dos 4 arquivos, creditos,
+"""Fluxo ponta a ponta do motor fal.ai com o workflow SIMULADO: criacao, execucao, entrega (video + 1 foto + legenda), creditos,
 idempotencia, retomada, cancelamento, entrega incompleta, recuperacao controlada, decisoes do administrador, custo real
 e limpeza. Nenhuma rede e nenhum custo."""
 
@@ -73,36 +73,75 @@ def delivery(o, pid):
 
 
 # ================================================================= entrega
-def test_demo_flow_delivers_the_four_files_plus_auxiliaries(settings, tmp_path, photo_product):
+def test_demo_flow_delivers_video_photo_caption_and_cover(settings, tmp_path, photo_product):
     o = make(settings, tmp_path)
     pid = new(o, photo_product, style="light")
     assert o.run(pid) == PS.AWAITING_FINAL_REVIEW
     d = delivery(o, pid)
     names = {p.name for p in d.iterdir()}
-    assert {"final.mp4", "product_image_01.jpg", "product_image_02.jpg", "product_image_03.jpg", "cover.jpg",
-            "caption.txt"} <= names
+    assert {"final.mp4", "product_image_01.jpg", "cover.jpg", "caption.txt", "delivery_meta.json"} <= names
+    assert not names & {"product_image_02.jpg", "product_image_03.jpg"}
     info = o.ffmpeg.probe(d / "final.mp4")
     assert abs(info["duration_s"] - 15.0) < 0.3 and (info["width"], info["height"]) == (540, 960) and info["has_audio"]
-    imgs = [(d / f"product_image_0{i}.jpg").read_bytes() for i in (1, 2, 3)]
-    assert len(set(imgs)) == 3 and all(pf.validate("image", b)["width"] == 720 for b in imgs)
+    assert pf.validate("image", (d / "product_image_01.jpg").read_bytes())["width"] == 720
+    cap = (d / "caption.txt").read_text(encoding="utf-8")
+    assert cap.startswith("Copo azul de aco inox\n\nMantem a bebida gelada")           # titulo + legenda do JSON do workflow
     row = o.db.production(pid)
     assert row["engine"] == "fal" and row["style"] == "light" and row["delivery_status"] == "complete"
     att = o.db.attempts(pid)[0]
     assert att["kind"] == "workflow" and att["status"] == "succeeded" and att["scene_idx"] is None
     assert json.loads((o.s.data_dir / "productions" / pid / "workflow/attempt_01/result.json").read_text(encoding="utf-8"))["package"]
     meta = json.loads((d / "delivery_meta.json").read_text(encoding="utf-8"))
-    assert meta["delivery_status"] == "complete" and set(meta["files"]) >= {"final.mp4", "product_image_01.jpg"}
-    assert meta["files"]["product_image_01.jpg"]["role"] == "hero"          # papel gravado, nao inferido pela ordem
+    assert meta["delivery_status"] == "complete" and meta["text_status"] == "ok" and meta["compose"]["video_action"] == "copy"
+    assert set(meta["files"]) == {"final.mp4", "product_image_01.jpg", "cover.jpg"}
+    assert meta["files"]["product_image_01.jpg"]["role"] == "hero"
     o.final_decision(pid, True)
     assert status(o, pid) == PS.COMPLETED
 
 
-def test_caption_uses_workflow_description_when_name_is_empty(settings, tmp_path, photo_product):
-    o = make(settings, tmp_path, fal_script=FalSimScript(description="Garrafa azul de aco inox."))
+def test_final_video_is_the_workflow_video_copied_without_reencode(settings, tmp_path, photo_product):
+    o = make(settings, tmp_path)
+    pid = new(o, photo_product)
+    o.run(pid)
+    raw = o.s.data_dir / "productions" / pid / "workflow/attempt_01/video.mp4"
+    final = delivery(o, pid) / "final.mp4"
+    for m in ("0:v", "0:a"):
+        a = o.ffmpeg.run(["-i", str(raw), "-map", m, "-c", "copy", "-f", "md5", "-"]).stdout.strip()
+        b = o.ffmpeg.run(["-i", str(final), "-map", m, "-c", "copy", "-f", "md5", "-"]).stdout.strip()
+        assert a == b, m
+
+
+def test_video_outside_the_window_is_cut_or_extended_keeping_audio(settings, tmp_path, photo_product):
+    for secs, action in ((17.5, "cut"), (13.5, "extend")):
+        o = make(settings, tmp_path, fal_script=FalSimScript(video_seconds=secs))
+        pid = new(o, photo_product, crid=f"janela-{action}")
+        assert o.run(pid) == PS.AWAITING_FINAL_REVIEW
+        meta = json.loads((delivery(o, pid) / "delivery_meta.json").read_text(encoding="utf-8"))
+        info = o.ffmpeg.probe(delivery(o, pid) / "final.mp4")
+        assert meta["compose"]["video_action"] == action and info["has_audio"] and abs(info["duration_s"] - 15.0) < 0.3
+
+
+def test_caption_is_the_workflow_text_and_never_invented(settings, tmp_path, photo_product):
+    o = make(settings, tmp_path, fal_script=FalSimScript(title="Garrafa azul", caption="Aco inox."))
     pid = new(o, photo_product)
     o.run(pid)
     cap = (delivery(o, pid) / "caption.txt").read_text(encoding="utf-8")
-    assert cap.splitlines()[0].startswith("Garrafa azul")
+    assert cap.splitlines()[0] == "Garrafa azul" and "Aco inox." in cap
+
+
+@pytest.mark.parametrize("raw", ["isto nao e json {", "", '{"title": "", "caption": ""}'])
+def test_invalid_or_empty_caption_json_still_delivers_with_a_warning_and_no_invented_text(settings, tmp_path, photo_product, raw):
+    o, wid = funded(settings, tmp_path, fal_script=FalSimScript(output_text=raw))
+    pid = new(o, photo_product, wid=wid)
+    assert o.run(pid) == PS.AWAITING_FINAL_REVIEW
+    d = delivery(o, pid)
+    assert (d / "final.mp4").is_file() and (d / "product_image_01.jpg").is_file()
+    cap = (d / "caption.txt").read_text(encoding="utf-8")
+    assert "Copo" not in cap and "Produto" not in cap and len(cap.splitlines()) <= 2          # so a identificacao de publicidade
+    meta = json.loads((d / "delivery_meta.json").read_text(encoding="utf-8"))
+    assert meta["text_status"] == "partial" and any("legenda" in w for w in meta["warnings"])
+    assert any(e["type"] == "delivery_warning" and "legenda" in e["message"] for e in o.db.events(pid))
+    assert Ledger(o.db).pool_state(pid)["used_cc"] == CHARGE                                   # entrega valida: cobra
 
 
 def test_photo_is_resized_to_at_most_2048px(settings, tmp_path):
@@ -114,13 +153,6 @@ def test_photo_is_resized_to_at_most_2048px(settings, tmp_path):
     o.run(pid)
     up = o.s.data_dir / "productions" / pid / "inputs" / "workflow_photo.jpg"
     assert max(pf.jpeg_info(up.read_bytes())) == 2048
-
-
-def test_missing_music_delivers_with_warning(settings, tmp_path, photo_product):
-    o = make(settings, tmp_path, fal_script=FalSimScript(missing={"music"}))
-    pid = new(o, photo_product)
-    assert o.run(pid) == PS.AWAITING_FINAL_REVIEW
-    assert any("trilha" in e["message"] for e in o.db.events(pid) if e["type"] == "delivery_warning")
 
 
 def test_each_style_goes_to_its_own_workflow(settings, tmp_path, photo_product):
@@ -199,7 +231,7 @@ def test_reassembly_after_final_rejection_does_not_resubmit_or_charge_again(sett
 
 # ================================================================= falhas
 @pytest.mark.parametrize("script", [FalSimScript(error_on_complete="no falhou"), FalSimScript(missing={"video"}),
-                                    FalSimScript(missing={"narration"})])
+                                    FalSimScript(video_has_audio=False)])
 def test_technical_failure_has_no_debit_and_refunds_the_prebudget(settings, tmp_path, photo_product, script):
     o, wid = funded(settings, tmp_path, fal_script=script)
     pid = new(o, photo_product, wid=wid)
@@ -209,6 +241,17 @@ def test_technical_failure_has_no_debit_and_refunds_the_prebudget(settings, tmp_
     assert [c["decision"] for c in led.charges(pid)] == ["technical_failure"]
     assert "Nada foi cobrado" in o.db.production(pid)["status_reason"]
     assert not (delivery(o, pid) / "final.mp4").exists()
+
+
+def test_video_without_audio_is_a_technical_failure_with_no_debit_and_nothing_published(settings, tmp_path, photo_product):
+    o, wid = funded(settings, tmp_path, fal_script=FalSimScript(video_has_audio=False))
+    pid = new(o, photo_product, wid=wid)
+    assert o.run(pid) == PS.FAILED
+    assert "sem audio" in " ".join(e["message"] for e in o.db.events(pid))
+    assert not (delivery(o, pid) / "final.mp4").exists() and not (delivery(o, pid) / "caption.txt").exists()
+    led = Ledger(o.db)
+    assert led.balance(wid) == 50_000 and [c["decision"] for c in led.charges(pid)] == ["technical_failure"]
+    assert o.db.production(pid)["delivery_status"] != "complete" and o.fal_gen.submit_count == 1       # nao reenvia
 
 
 def test_corrupt_video_is_a_technical_failure(settings, tmp_path, photo_product):
@@ -361,13 +404,13 @@ def test_cancel_in_flight_calls_remote_cancel_and_refunds_everything(settings, t
 
 # ================================================================= entrega incompleta
 def test_missing_image_is_never_a_complete_delivery_and_nothing_is_published(settings, tmp_path, photo_product):
-    o, wid = funded(settings, tmp_path, fal_script=FalSimScript(missing={"image:lifestyle"}))
+    o, wid = funded(settings, tmp_path, fal_script=FalSimScript(missing={"image:hero"}))
     pid = new(o, photo_product, wid=wid)
     assert o.run(pid) == PS.PAUSED
     row = o.db.production(pid)
     assert row["pause_code"] == fp.INCOMPLETE and row["delivery_status"] == "incomplete"
     assert row["status"] != PS.COMPLETED and "finalizando" in row["status_reason"]
-    assert json.loads(row["delivery_json"])["missing"] == ["lifestyle"]
+    assert json.loads(row["delivery_json"])["missing"] == ["hero"]
     d = delivery(o, pid)
     assert not (d / "final.mp4").exists() and not (d / "product_image_01.jpg").exists()   # nada publicado pela metade
     led = Ledger(o.db)                                                                    # reserva mantida: sem debito
@@ -381,9 +424,9 @@ def test_missing_image_is_never_a_complete_delivery_and_nothing_is_published(set
 
 
 def test_corrupt_image_counts_as_missing(settings, tmp_path, photo_product):
-    o = make(settings, tmp_path, fal_script=FalSimScript(corrupt={"image:details"}))
+    o = make(settings, tmp_path, fal_script=FalSimScript(corrupt={"image:hero"}))
     pid = new(o, photo_product)
-    assert o.run(pid) == PS.PAUSED and json.loads(o.db.production(pid)["delivery_json"])["missing"] == ["details"]
+    assert o.run(pid) == PS.PAUSED and json.loads(o.db.production(pid)["delivery_json"])["missing"] == ["hero"]
 
 
 def test_controlled_recovery_fetches_only_the_missing_image_by_node(settings, tmp_path, photo_product):
@@ -396,19 +439,19 @@ def test_controlled_recovery_fetches_only_the_missing_image_by_node(settings, tm
 
 
 def test_admin_deliver_partial_settles_and_records_the_decision(settings, tmp_path, photo_product):
-    o, wid = funded(settings, tmp_path, fal_script=FalSimScript(missing={"image:details"}))
+    o, wid = funded(settings, tmp_path, fal_script=FalSimScript(missing={"image:hero"}))
     pid = new(o, photo_product, wid=wid)
     o.run(pid)
     fp.admin_action(o, pid, "deliver-partial", reason="cliente aceitou")
     assert o.run(pid) == PS.AWAITING_FINAL_REVIEW
     assert o.db.production(pid)["delivery_status"] == "partial"
-    assert (delivery(o, pid) / "product_image_03.jpg").exists() is False and (delivery(o, pid) / "product_image_01.jpg").exists()
+    assert (delivery(o, pid) / "product_image_01.jpg").exists() is False and (delivery(o, pid) / "final.mp4").exists()
     assert Ledger(o.db).pool_state(pid)["used_cc"] == CHARGE and o.fal_gen.submit_count == 1
     assert any(e["type"] == "admin_decision" for e in o.db.events(pid))
 
 
 def test_admin_waive_refunds_the_client_and_ends_the_mission(settings, tmp_path, photo_product):
-    o, wid = funded(settings, tmp_path, fal_script=FalSimScript(missing={"image:details"}))
+    o, wid = funded(settings, tmp_path, fal_script=FalSimScript(missing={"image:hero"}))
     pid = new(o, photo_product, wid=wid)
     o.run(pid)
     fp.admin_action(o, pid, "waive", reason="falha do fornecedor")
@@ -417,7 +460,7 @@ def test_admin_waive_refunds_the_client_and_ends_the_mission(settings, tmp_path,
 
 
 def test_admin_recover_tries_again_without_new_submit(settings, tmp_path, photo_product):
-    o = make(settings, tmp_path, fal_script=FalSimScript(missing={"image:details"}))
+    o = make(settings, tmp_path, fal_script=FalSimScript(missing={"image:hero"}))
     pid = new(o, photo_product)
     o.run(pid)
     fp.admin_action(o, pid, "recover")
@@ -425,7 +468,7 @@ def test_admin_recover_tries_again_without_new_submit(settings, tmp_path, photo_
 
 
 def test_admin_resubmit_is_explicit_and_goes_through_the_paid_gate(settings, tmp_path, photo_product, monkeypatch):
-    o, wid = funded(settings, tmp_path, fal_script=FalSimScript(missing={"image:details"}))
+    o, wid = funded(settings, tmp_path, fal_script=FalSimScript(missing={"image:hero"}))
     pid = new(o, photo_product, wid=wid)
     o.run(pid)
     monkeypatch.setenv("STUDIO_KILL_SWITCH", "1")
@@ -441,12 +484,13 @@ def test_admin_resubmit_is_explicit_and_goes_through_the_paid_gate(settings, tmp
 
 
 # ================================================================= composicao em revisao
-def test_narration_that_cannot_fit_pauses_for_review_keeping_the_reserve(settings, tmp_path, photo_product, monkeypatch):
-    o, wid = funded(settings, tmp_path, fal_script=FalSimScript(narration_seconds=16.5))
+def test_video_too_short_pauses_for_review_keeping_the_reserve(settings, tmp_path, photo_product, monkeypatch):
+    o, wid = funded(settings, tmp_path, fal_script=FalSimScript(video_seconds=9.0))
     pid = new(o, photo_product, wid=wid)
     assert o.run(pid) == PS.PAUSED and o.db.production(pid)["pause_code"] == fp.COMPOSE_REVIEW
     assert not (delivery(o, pid) / "final.mp4").exists() and Ledger(o.db).charges(pid) == []
-    monkeypatch.setenv("STUDIO_FAL_ATEMPO_MAX", "1.3")                    # decisao do admin: aceitar mais velocidade
+    for k, v in (("STUDIO_FAL_TARGET_S", "9"), ("STUDIO_FAL_MIN_S", "8"), ("STUDIO_FAL_MAX_S", "10")):
+        monkeypatch.setenv(k, v)                                           # decisao do admin: aceitar a janela real
     o.db.resume_production(pid)
     assert o.run(pid) == PS.AWAITING_FINAL_REVIEW and o.fal_gen.submit_count == 1
 
@@ -483,7 +527,7 @@ def test_reconcile_records_supplier_cost_without_any_new_debit(settings, tmp_pat
 
 
 def test_reconcile_skips_attempts_not_yet_decided_in_the_ledger(settings, tmp_path, photo_product):
-    o, wid = funded(settings, tmp_path, fal_script=FalSimScript(missing={"image:details"}))
+    o, wid = funded(settings, tmp_path, fal_script=FalSimScript(missing={"image:hero"}))
     pid = new(o, photo_product, wid=wid)
     o.run(pid)
     o.db.update_attempt(o.db.attempts(pid)[0]["id"], simulated=0)
@@ -508,7 +552,7 @@ def test_cleanup_removes_only_raw_intermediates_and_keeps_delivery_and_history(s
     assert "result.json" in raw and "video.mp4" in raw
     before = {p.name: p.read_bytes() for p in (root / "delivery").iterdir() if p.is_file()}
     r = fp.cleanup_intermediates(o.s.data_dir, o.db, 7)
-    assert r["removed"] >= 5 and r["freed_bytes"] > 0
+    assert r["removed"] >= 2 and r["freed_bytes"] > 0
     assert [p.name for p in (root / "workflow/attempt_01").iterdir()] == ["result.json"]
     after = {p.name: p.read_bytes() for p in (root / "delivery").iterdir() if p.is_file()}
     assert before == after                                                # delivery/ identica, byte a byte
@@ -552,11 +596,11 @@ def test_cleanup_path_guard_never_allows_delivery_or_anything_outside(settings, 
         assert fp._safe_intermediate(root, link) is False
     _complete_old(o, pid)
     fp.cleanup_intermediates(o.s.data_dir, o.db, 7)
-    assert (d / "final.mp4").is_file() and len(list(d.glob("product_image_*.jpg"))) == 3
+    assert (d / "final.mp4").is_file() and len(list(d.glob("product_image_*.jpg"))) == 1
 
 
 def test_cleanup_never_runs_on_active_or_paused_productions(settings, tmp_path, photo_product):
-    o = make(settings, tmp_path, fal_script=FalSimScript(missing={"image:details"}))
+    o = make(settings, tmp_path, fal_script=FalSimScript(missing={"image:hero"}))
     pid = new(o, photo_product)
     o.run(pid)                                                            # pausada (entrega incompleta): ainda precisa dos brutos
     o.db.conn.execute("UPDATE productions SET updated_at='2020-01-01T00:00:00+00:00' WHERE id=?", (pid,))
@@ -567,26 +611,26 @@ def test_cleanup_never_runs_on_active_or_paused_productions(settings, tmp_path, 
 # ================================================================= o que a interface enxerga
 def test_view_shows_finalizing_for_an_incomplete_delivery_and_hides_technical_detail(settings, tmp_path, photo_product):
     from studio.web import view
-    o = make(settings, tmp_path, fal_script=FalSimScript(missing={"image:details"}))
+    o = make(settings, tmp_path, fal_script=FalSimScript(missing={"image:hero"}))
     pid = new(o, photo_product)
     o.run(pid)
     P = view.snapshot(o.s, o.db, pid)["production"]
     assert P["engine"] == "fal" and P["status"] == "paused" and P["fal"]["finalizing"] is True
-    assert P["delivery_status"] == "incomplete" and P["fal"]["missing_images"] == ["details"]
-    assert P["delivery"] == {} and all(i["url"] is None for i in P["fal"]["images"])      # nada publicado
+    assert P["delivery_status"] == "incomplete" and P["fal"]["missing_images"] == ["hero"]
+    assert P["delivery"] == {} and P["fal"]["image"]["url"] is None      # nada publicado
     assert "finalizando" in P["reason"] and "fal" not in P["reason"].lower().replace("finalizando", "")
     assert P["pause_code"] == fp.INCOMPLETE                                                 # o admin enxerga o codigo
 
 
-def test_view_lists_all_four_deliverables_when_complete(settings, tmp_path, photo_product):
+def test_view_lists_the_package_when_complete(settings, tmp_path, photo_product):
     from studio.web import view
-    o = make(settings, tmp_path, fal_script=FalSimScript(narration_text="Texto da narracao.", description="Descricao."))
+    o = make(settings, tmp_path, fal_script=FalSimScript(title="Titulo do video", caption="Legenda do video."))
     pid = new(o, photo_product)
     o.run(pid)
     P = view.snapshot(o.s, o.db, pid)["production"]
-    assert set(P["delivery"]) == {"final.mp4", "product_image_01.jpg", "product_image_02.jpg", "product_image_03.jpg",
-                                  "cover.jpg", "caption.txt"}
-    assert P["fal"]["narration_text"] == "Texto da narracao." and P["fal"]["description"] == "Descricao."
+    assert set(P["delivery"]) == {"final.mp4", "product_image_01.jpg", "cover.jpg", "caption.txt"}
+    assert P["fal"]["title"] == "Titulo do video" and P["fal"]["caption"] == "Legenda do video."
+    assert P["fal"]["image"]["label"] == "Hero Shot" and P["fal"]["image"]["url"]
     assert P["fal"]["finalizing"] is False and P["fal"]["style_label"] == "Escuro"
 
 

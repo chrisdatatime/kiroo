@@ -290,7 +290,7 @@ class FalWorkflowGenerator:
         url = fal_contract._url_of(fal_contract.get_path(res, rec["path"]))
         if not url:
             return None
-        return fal_contract.Artifact(kind=artifact.kind, role=artifact.role, url=url, recover=rec)
+        return fal_contract.Artifact(kind=artifact.kind, url=url, recover=rec)
 
     def reconcile_cost(self, request_ids: list[str]) -> float | None:
         return billing_total(self.client.billing(request_ids))

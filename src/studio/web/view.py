@@ -309,9 +309,9 @@ def snapshot(settings: Settings, db: Database, pid: str | None, *, since: int = 
         except ValueError:
             pass
     engine = p["engine"] if "engine" in p.keys() else "gemini"
-    if engine == "fal":   # entrega do motor fal.ai: vídeo + 3 fotos publicitárias + capa + legenda (só o que existe em disco)
+    if engine == "fal":   # entrega do motor fal.ai: vídeo + 1 foto hero + capa + legenda (só o que existe em disco)
         ddir = settings.data_dir / "productions" / pid / "delivery"
-        names = ["final.mp4", *fal_contract.IMAGE_FILES.values(), "cover.jpg", "caption.txt"]
+        names = [fal_contract.FINAL_VIDEO, fal_contract.HERO_FILE, fal_contract.COVER_FILE, fal_contract.CAPTION_FILE]
         delivery = {n: f"/media/{pid}/delivery/{n}" for n in names if (ddir / n).is_file()}             if st in (PS.AWAITING_FINAL_REVIEW, PS.COMPLETED) else {}
     costs = cost_summary(db, pid)
     committed = 0.0
@@ -394,7 +394,7 @@ FAL_FINALIZING_CODES = {"delivery_incomplete", "compose_review", "fal_submit_unc
 
 
 def _fal_view(settings, db, p, pid: str, st, delivery: dict) -> dict:
-    """Pacote do motor fal.ai para a interface: estilo, etapa, fotos com papel, descrição/narração e se está "em
+    """Pacote do motor fal.ai para a interface: estilo, etapa, foto hero, título/legenda e se está "em
     finalização" (entrega incompleta ou à espera do administrador: o cliente nunca vê o detalhe técnico)."""
     dj = json.loads(p["delivery_json"]) if p["delivery_json"] else {}
     att = db.conn.execute("SELECT * FROM attempts WHERE production_id=? AND kind='workflow' AND superseded=0 "
@@ -402,11 +402,11 @@ def _fal_view(settings, db, p, pid: str, st, delivery: dict) -> dict:
     meta = json.loads(att["remote_meta_json"] or "{}") if att is not None else {}
     code = p["pause_code"] if "pause_code" in p.keys() else None
     finalizing = st == PS.PAUSED and (code in FAL_FINALIZING_CODES or p["delivery_status"] == "incomplete")
-    images = [{"role": r, "label": fal_contract.ROLE_LABELS[r], "file": fal_contract.IMAGE_FILES[r],
-               "url": delivery.get(fal_contract.IMAGE_FILES[r])} for r in fal_contract.ROLES]
+    image = {"role": "hero", "label": fal_contract.HERO_LABEL, "file": fal_contract.HERO_FILE,
+             "url": delivery.get(fal_contract.HERO_FILE)}
     return {"style": p["style"], "style_label": fal_contract.STYLE_LABELS.get(p["style"], ""),
             "stage": meta.get("stage"), "queue_position": meta.get("queue"), "remote_status": meta.get("remote_status"),
             "finalizing": finalizing, "delivery_status": p["delivery_status"],
-            "images": images, "missing_images": dj.get("missing", []) if p["delivery_status"] in ("incomplete", "partial") else [],
-            "description": dj.get("description", ""), "narration_text": dj.get("narration_text", ""),
+            "image": image, "missing_images": dj.get("missing", []) if p["delivery_status"] in ("incomplete", "partial") else [],
+            "title": dj.get("title", ""), "caption": dj.get("caption", ""),
             "warnings": dj.get("warnings", []), "submitted_at": att["submitted_at"] if att is not None else None}

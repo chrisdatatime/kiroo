@@ -1,10 +1,13 @@
-"""Workflow simulado: pacote sintetico completo e injecao de falhas por componente. Usa FFmpeg (lavfi), sem rede."""
+"""Workflow simulado: pacote sintetico (1 video com audio, 1 foto, JSON de legenda) e injecao de falhas. Usa FFmpeg
+(lavfi), sem rede."""
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
-from studio import fal_contract as fc, package_files as pf
+from studio import package_files as pf
 from studio.ffmpeg import FFmpeg
 from studio.providers.base import OpState, PermanentError, TransientError, WorkflowRequest
 from studio.providers.fal import UncertainSubmit
@@ -36,44 +39,50 @@ def test_complete_synthetic_package(settings, ff, tmp_path):
     info, res = run(sim, tmp_path)
     assert res.state == OpState.SUCCEEDED
     pkg = res.package
-    assert pkg.missing() == [] and pkg.failure_kind() is None
+    assert pkg.missing() == [] and pkg.failure_kind() is None and pkg.warnings == []
     probe = ff.probe(pkg.video.path)
     assert (probe["width"], probe["height"]) == (540, 960) and abs(probe["duration_s"] - 15.0) < 0.2
-    assert ff.probe(pkg.narration.path)["has_audio"] and ff.probe(pkg.music.path)["has_audio"]
+    assert probe["has_audio"]                                       # a narracao ja vem embutida no video
     pf.validate("video", sim.fetch(pkg.video))
-    pf.validate("narration", sim.fetch(pkg.narration))
-    pf.validate("music", sim.fetch(pkg.music))
+    assert pf.validate("image", sim.fetch(pkg.hero)) == {"width": 720, "height": 1280}
+    assert pkg.title and pkg.caption
+    assert not hasattr(pkg, "music") and not hasattr(pkg, "narration")
 
 
-def test_three_distinct_decodable_jpgs(settings, ff, tmp_path):
-    _, res = run(make(settings, ff), tmp_path)
-    datas = [res.package.images[r].path.read_bytes() for r in fc.ROLES]
-    assert len(set(datas)) == 3
-    for d in datas:
-        assert pf.validate("image", d) == {"width": 720, "height": 1280}
+def test_video_without_audio_can_be_injected(settings, ff, tmp_path):
+    _, res = run(make(settings, ff, video_has_audio=False), tmp_path)
+    assert res.state == OpState.SUCCEEDED and not ff.probe(res.package.video.path)["has_audio"]
 
 
-@pytest.mark.parametrize("comp,kind", [("video", "technical"), ("narration", "technical"), ("music", None),
-                                       ("image:hero", "incomplete"), ("image:lifestyle", "incomplete"),
-                                       ("image:details", "incomplete")])
+@pytest.mark.parametrize("comp,kind", [("video", "technical"), ("image:hero", "incomplete")])
 def test_inject_missing_component(settings, ff, tmp_path, comp, kind):
     _, res = run(make(settings, ff, missing={comp}), tmp_path)
-    assert res.state == OpState.SUCCEEDED and comp in res.package.missing()
-    assert res.package.failure_kind() == kind
+    assert res.state == OpState.SUCCEEDED and res.package.failure_kind() == kind
+
+
+@pytest.mark.parametrize("raw", ["nao e json", "", '{"title": "", "caption": ""}'])
+def test_invalid_or_empty_caption_json_is_a_warning_not_invented_text(settings, ff, tmp_path, raw):
+    _, res = run(make(settings, ff, output_text=raw), tmp_path)
+    pkg = res.package
+    assert pkg.failure_kind() is None and (pkg.title, pkg.caption) == ("", "") and pkg.warnings
+
+
+def test_caption_json_comes_through_the_same_parser_as_the_real_workflow(settings, ff, tmp_path):
+    raw = json.dumps({"title": "T", "caption": "C"})
+    _, res = run(make(settings, ff, output_text=raw), tmp_path)
+    assert (res.package.title, res.package.caption) == ("T", "C")
 
 
 def test_corrupt_image_fails_byte_validation(settings, ff, tmp_path):
-    _, res = run(make(settings, ff, corrupt={"image:details"}), tmp_path)
-    ok = pf.validate("image", res.package.images["hero"].path.read_bytes())
-    assert ok["height"] == 1280
+    _, res = run(make(settings, ff, corrupt={"image:hero"}), tmp_path)
     with pytest.raises(pf.PackageFileError):
-        pf.validate("image", res.package.images["details"].path.read_bytes())
+        pf.validate("image", res.package.hero.path.read_bytes())
 
 
 def test_recoverable_image_is_handed_back_only_via_node_recovery(settings, ff, tmp_path):
     sim = make(settings, ff, missing={"image:hero"}, recoverable={"hero"})
     _, res = run(sim, tmp_path)
-    art = res.package.images["hero"]
+    art = res.package.hero
     assert art.path is None and art.recover is not None                  # nao veio no pacote
     got = sim.recover_artifact(art)
     assert got is not None and pf.validate("image", sim.fetch(got))["width"] == 720
@@ -81,9 +90,9 @@ def test_recoverable_image_is_handed_back_only_via_node_recovery(settings, ff, t
 
 
 def test_unrecoverable_image_stays_missing(settings, ff, tmp_path):
-    sim = make(settings, ff, missing={"image:details"})
+    sim = make(settings, ff, missing={"image:hero"})
     _, res = run(sim, tmp_path)
-    assert res.package.images["details"] is None and sim.recover_calls == 0
+    assert res.package.hero is None and sim.recover_calls == 0
 
 
 def test_polls_before_done_and_state_survives_a_new_instance(settings, ff, tmp_path):
@@ -115,8 +124,6 @@ def test_error_on_complete(settings, ff, tmp_path):
 def test_package_file_validation_rejects_wrong_bytes():
     with pytest.raises(pf.PackageFileError):
         pf.validate("video", b"x" * 30000)
-    with pytest.raises(pf.PackageFileError):
-        pf.validate("narration", b"y" * 5000)
     with pytest.raises(pf.PackageFileError):
         pf.validate("image", b"\xff\xd8" + b"0" * 9000)
     with pytest.raises(pf.PackageFileError):

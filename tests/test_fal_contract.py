@@ -19,58 +19,77 @@ def parse(**kw):
 def test_complete_package():
     pkg = parse()
     assert pkg.missing() == [] and pkg.failure_kind() is None and pkg.warnings == []
-    assert pkg.video.url.endswith("final.mp4") and pkg.narration.kind == "narration"
+    assert pkg.video.url.endswith("final.mp4") and pkg.hero.url.endswith("hero.jpg")
+    assert pkg.title == "Copo azul de aco inox" and pkg.caption.startswith("Mantem")
 
 
-def test_roles_come_from_the_mapping_not_from_list_order():
+def test_intermediate_audio_output_is_ignored():
     pkg = parse()
-    assert [pkg.images[r].url.rsplit("/", 1)[1] for r in fc.ROLES] == ["hero.jpg", "lifestyle.jpg", "details.jpg"]
+    assert not hasattr(pkg, "narration") and not hasattr(pkg, "music")
+    assert "voz.mp3" not in repr(fc.package_to_dict(pkg))
 
 
 def test_without_envelope_the_result_is_the_output():
     pkg = fc.parse_result(sample_result(envelope=False), "light", C)
-    assert pkg.failure_kind() is None and pkg.nodes == {} and all(a.recover is None for a in pkg.images.values())
+    assert pkg.failure_kind() is None and pkg.nodes == {} and pkg.hero.recover is None
 
 
-def test_envelope_gives_recovery_info_per_image():
-    pkg = parse()
-    assert pkg.images["hero"].recover == {"endpoint": "fal-ai/img/a", "request_id": "r-hero", "path": "image.url"}
+def test_envelope_gives_recovery_info_for_the_hero():
+    assert parse().hero.recover == {"endpoint": "fal-ai/img/a", "request_id": "r-hero", "path": "image.url"}
 
 
-def test_missing_music_is_allowed_with_warning():
-    pkg = parse(drop=["audio.music"])
-    assert pkg.missing() == ["music"] and pkg.failure_kind() is None and pkg.warnings
+def test_missing_video_is_technical_failure():
+    pkg = parse(drop=["video"])
+    assert pkg.missing() == ["video"] and pkg.failure_kind() == "technical"
 
 
-@pytest.mark.parametrize("drop,comp", [("final.video", "video"), ("audio.voice", "narration")])
-def test_missing_video_or_narration_is_technical_failure(drop, comp):
-    pkg = parse(drop=[drop])
-    assert comp in pkg.missing() and pkg.failure_kind() == "technical"
+def test_hero_missing_url_keeps_only_the_recovery_handle():
+    pkg = parse(drop=["images.0"])
+    assert pkg.hero.url is None and pkg.hero.recover is not None      # a pipeline tenta recuperar pelo no
 
 
-@pytest.mark.parametrize("idx,role", [(2, "hero"), (0, "lifestyle"), (1, "details")])
-def test_image_missing_url_keeps_only_the_recovery_handle(idx, role):
-    pkg = parse(drop=[f"pics.{idx}"])
-    # sem URL, so o recover do no segura o artefato: a pipeline tenta recuperar (nunca reexecuta o workflow)
-    assert pkg.images[role].url is None and pkg.images[role].recover is not None
+def test_missing_hero_without_recovery_info_is_incomplete():
+    pkg = fc.parse_result(sample_result(drop=["images.0"], envelope=False), "dark", C)
+    assert pkg.missing() == ["hero"] and pkg.failure_kind() == "incomplete"
 
 
-def test_missing_image_without_recovery_info_is_incomplete():
-    pkg = fc.parse_result(sample_result(drop=["pics.1"], envelope=False), "dark", C)
-    assert pkg.missing_images() == ["details"] and pkg.failure_kind() == "incomplete"
+def test_missing_text_is_only_a_warning():
+    pkg = parse(drop=["output"])
+    assert pkg.failure_kind() is None and pkg.title == "" and pkg.caption == "" and pkg.warnings
 
 
-def test_two_missing_images():
-    pkg = fc.parse_result(sample_result(drop=["pics.0", "pics.1"], envelope=False), "dark", C)
-    assert set(pkg.missing_images()) == {"lifestyle", "details"}
+@pytest.mark.parametrize("raw", ["isto nao e json {", "", "   ", "[1, 2]", "null", '{"title": "", "caption": ""}',
+                                 '{"title": 3, "caption": null}'])
+def test_invalid_or_empty_text_yields_no_text_and_a_warning(raw):
+    pkg = parse(text=raw)
+    assert (pkg.title, pkg.caption) == ("", "") and pkg.failure_kind() is None and len(pkg.warnings) == 1
+
+
+def test_text_with_only_one_field_keeps_it_and_warns():
+    pkg = parse(text='{"title": "Copo", "caption": ""}')
+    assert (pkg.title, pkg.caption) == ("Copo", "") and "legenda" in pkg.warnings[0]
+    pkg = parse(text='{"title": "", "caption": "So legenda"}')
+    assert (pkg.title, pkg.caption) == ("", "So legenda") and "titulo" in pkg.warnings[0]
+
+
+def test_text_in_a_code_fence_or_already_decoded_is_read():
+    assert fc.parse_text_output('```json\n{"title": "A", "caption": "B"}\n```')[:2] == ("A", "B")
+    assert fc.parse_text_output('Aqui vai: {"title": "A", "caption": "B"} fim')[:2] == ("A", "B")
+    assert fc.parse_text_output({"title": " A ", "caption": "B"})[:2] == ("A", "B")
 
 
 def test_non_url_values_are_ignored():
     r = sample_result(envelope=False)
-    r["final"]["video"]["url"] = "file:///etc/passwd"
-    r["pics"][2]["url"] = "javascript:alert(1)"
+    r["video"]["url"] = "file:///etc/passwd"
+    r["images"][0]["url"] = "javascript:alert(1)"
     pkg = fc.parse_result(r, "dark", C)
-    assert pkg.video is None and "image:hero" in pkg.missing()
+    assert pkg.video is None and pkg.hero is None and pkg.missing() == ["video", "hero"]
+
+
+def test_package_roundtrip_through_result_json():
+    pkg = parse(text="invalido")
+    again = fc.package_from_dict(fc.package_to_dict(pkg))
+    assert again.video.url == pkg.video.url and again.hero.recover == pkg.hero.recover and again.warnings == pkg.warnings
 
 
 def test_get_path_is_safe():
@@ -79,18 +98,21 @@ def test_get_path_is_safe():
         assert fc.get_path({"a": [{"b": 1}]}, bad) is None
 
 
-def test_build_input_uses_contract_field_and_extras():
-    assert fc.build_input(C, "dark", "https://x/y.jpg") == {"language": "pt-BR", "photo_url": "https://x/y.jpg"}
+def test_build_input_sends_only_the_image_url():
+    assert fc.build_input(C, "dark", "https://x/y.jpg") == {"image_url": "https://x/y.jpg"}
 
 
-def test_real_contract_is_entirely_placeholder_until_phase_0():
+def test_real_contract_maps_the_real_outputs_and_keeps_the_open_items_pending():
     real = fc.load_contract(PROJECT_ROOT / "profiles")
-    assert real["status"].startswith("A CONFIRMAR")
     for style in fc.STYLES:
+        cfg = real["styles"][style]
+        assert cfg["input"] == {"image_field": "image_url", "extra": {}}                  # so image_url
+        assert cfg["output"] == {"video": "video.url", "image": "images.0.url", "text": "output"}
+        assert all(k not in cfg["output"] for k in ("narration", "music", "description", "narration_text"))
+        assert list(cfg["recover"]) == ["hero"]
         pend = fc.placeholders(real, style)
-        assert any(p.startswith("input") for p in pend) and any(p.startswith("output.images") for p in pend)
-        with pytest.raises(fc.ContractError, match="A CONFIRMAR"):
-            fc.build_input(real, style, "https://x/y.jpg")
+        assert any(p.startswith("recover.hero") for p in pend) and any("indice 0" in p for p in pend)
+        assert fc.build_input(real, style, "https://x/y.jpg") == {"image_url": "https://x/y.jpg"}
 
 
 def test_unknown_style_is_refused():

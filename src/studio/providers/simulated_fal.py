@@ -1,11 +1,12 @@
 """Workflow fal.ai SIMULADO: pacote sintetico completo, sem rede e sem custo.
 
-Gera com o FFmpeg (lavfi) um video 9:16, narracao e musica, e 3 JPGs DISTINTOS (um por papel). Serve para desenvolver e
-testar a esteira inteira. NAO comprova integracao real nem qualidade. O estado de cada execucao fica em disco
-(data/sim_ops), como no simulador do Gemini, e sobrevive a reinicios.
+Gera com o FFmpeg (lavfi) UM video 9:16 COM audio embutido (a "narracao"; sem musica), UMA foto hero em JPG e o texto
+`output` com o JSON `{"title","caption"}`, exatamente como o workflow real. Serve para desenvolver e testar a esteira
+inteira. NAO comprova integracao real nem qualidade. O estado de cada execucao fica em disco (data/sim_ops), como no
+simulador do Gemini, e sobrevive a reinicios.
 
-Falhas injetaveis por componente (`FalSimScript`): sem musica, sem video, sem narracao, sem a imagem N, imagem
-corrompida, falha de envio, envio incerto, erro ao concluir e recuperacao posterior de uma imagem.
+Falhas injetaveis (`FalSimScript`): sem video, video sem audio, sem a foto hero, foto corrompida, texto de saida
+invalido/vazio, falha de envio, envio incerto, erro ao concluir e recuperacao posterior da foto.
 """
 
 from __future__ import annotations
@@ -22,7 +23,7 @@ from .base import OpResult, OpState, PermanentError, TransientError, WorkflowReq
 from .fal import SubmitInfo, UncertainSubmit
 
 SIM_PROVIDER = "simulated"
-ROLE_COLORS = {"hero": "0x2F55D4", "lifestyle": "0xE46F5A", "details": "0x3FB8AF"}
+HERO_COLOR = "0x2F55D4"
 
 
 @dataclass
@@ -31,16 +32,16 @@ class FalSimScript:
 
     polls_before_done: int = 0
     submit_failures: list[str] = field(default_factory=list)        # "transient" | "permanent" | "uncertain"
-    missing: set[str] = field(default_factory=set)                  # video, narration, music, image:hero|lifestyle|details
-    corrupt: set[str] = field(default_factory=set)                  # imagens corrompidas: "image:hero", ...
-    recoverable: set[str] = field(default_factory=set)              # imagens ausentes que uma busca por no recupera
+    missing: set[str] = field(default_factory=set)                  # video, image:hero
+    corrupt: set[str] = field(default_factory=set)                  # foto corrompida: "image:hero"
+    recoverable: set[str] = field(default_factory=set)              # {"hero"}: ausente do pacote, mas uma busca por no recupera
     error_on_complete: str | None = None                            # texto: o workflow termina com erro
+    video_has_audio: bool = True                                    # False: o mp4 sai SEM stream de audio
     video_seconds: float = 15.0
-    narration_seconds: float = 11.5
-    music_seconds: float = 20.0
     video_size: tuple[int, int] = (540, 960)
-    description: str = "Produto simulado em ambiente de teste."
-    narration_text: str = "Texto de narracao simulado."
+    title: str = "Copo azul de aco inox"
+    caption: str = "Mantem a bebida gelada por horas. Ideal para o dia a dia."
+    output_text: str | None = None                                  # texto cru de `output` (ex.: JSON invalido ou vazio)
     cost_usd: float = 1.0
 
 
@@ -93,6 +94,12 @@ class SimulatedFalWorkflow:
             raise UncertainSubmit("envio sem resposta (simulado)")
         raise PermanentError("falha permanente simulada (ex.: requisicao recusada)")
 
+    def _output_text(self) -> str:
+        s = self.script
+        if s.output_text is not None:
+            return s.output_text
+        return json.dumps({"title": s.title, "caption": s.caption}, ensure_ascii=False)
+
     def submit_full(self, request: WorkflowRequest) -> SubmitInfo:
         self._raise_scripted()
         self.submit_count += 1
@@ -100,7 +107,7 @@ class SimulatedFalWorkflow:
         files = self._render(op_id, request.style)
         self.ops.save(op_id, {"polls_left": self.script.polls_before_done, "style": request.style, "files": files,
                               "error": self.script.error_on_complete, "recoverable": sorted(self.script.recoverable),
-                              "description": self.script.description, "narration_text": self.script.narration_text})
+                              "output_text": self._output_text()})
         return SubmitInfo(op_id, {"workflow": f"simulado/{request.style}", "style": request.style})
 
     def submit(self, request: WorkflowRequest) -> str:
@@ -114,21 +121,16 @@ class SimulatedFalWorkflow:
             return OpResult(OpState.RUNNING)
         if st.get("error"):
             return OpResult(OpState.FAILED, error=st["error"], permanent=True)
-        pkg = WorkflowPackage(description=st["description"], narration_text=st["narration_text"],
-                              nodes={"sim": {"endpoint": "simulado/no", "request_id": op_id}})
-        for kind in ("video", "narration", "music"):
-            f = st["files"].get(kind)
-            if f:
-                setattr(pkg, kind, Artifact(kind=kind, path=Path(f)))
-        for role in fal_contract.ROLES:
-            f = st["files"].get(f"image:{role}")
-            if f and role not in st["recoverable"]:
-                pkg.images[role] = Artifact(kind="image", role=role, path=Path(f))
-            elif role in st["recoverable"]:
-                pkg.images[role] = Artifact(kind="image", role=role, recover={"endpoint": "simulado/no", "request_id": op_id,
-                                                                              "path": role})
-        if pkg.music is None:
-            pkg.warnings.append("workflow nao devolveu trilha: o video sai so com a narracao")
+        pkg = WorkflowPackage(nodes={"sim": {"endpoint": "simulado/no", "request_id": op_id}})
+        pkg.title, pkg.caption, warns = fal_contract.parse_text_output(st["output_text"])   # mesmo parser do real
+        pkg.warnings.extend(warns)
+        if st["files"].get("video"):
+            pkg.video = Artifact(kind="video", path=Path(st["files"]["video"]))
+        f = st["files"].get("image:hero")
+        if f and "hero" not in st["recoverable"]:
+            pkg.hero = Artifact(kind="image", path=Path(f))
+        elif "hero" in st["recoverable"]:
+            pkg.hero = Artifact(kind="image", recover={"endpoint": "simulado/no", "request_id": op_id, "path": "hero"})
         return OpResult(OpState.SUCCEEDED, package=pkg, confirmed_cost_usd=0.0,
                         usage={"request_id": op_id, "nodes": pkg.nodes})
 
@@ -147,10 +149,9 @@ class SimulatedFalWorkflow:
         self.recover_calls += 1
         rec = artifact.recover or {}
         st = self.ops.load(rec["request_id"])
-        role = artifact.role
-        f = st["files"].get(f"image:{role}")
-        if role in st["recoverable"] and f and Path(f).exists():
-            return Artifact(kind="image", role=role, path=Path(f))
+        f = st["files"].get("image:hero")
+        if "hero" in st["recoverable"] and f and Path(f).exists():
+            return Artifact(kind="image", path=Path(f))
         return None
 
     def reconcile_cost(self, request_ids: list[str]) -> float | None:
@@ -163,31 +164,24 @@ class SimulatedFalWorkflow:
         s, w, h = self.script, *self.script.video_size
         out: dict[str, str] = {}
         miss = set(s.missing)
-        # ficheiros que existem mesmo "ausentes" no pacote recuperavel ficam gravados para a busca por no
         if "video" not in miss:
             p = d / "video.mp4"
-            self.ffmpeg.run(["-f", "lavfi", "-i", f"testsrc2=size={w}x{h}:rate=30:duration={s.video_seconds}",
-                             "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-an", str(p)])
+            args = ["-f", "lavfi", "-i", f"testsrc2=size={w}x{h}:rate=30:duration={s.video_seconds}"]
+            if s.video_has_audio:     # "narracao" embutida: tom modulado como fala (sem musica)
+                expr = "0.45*sin(2*PI*190*t)*(0.55+0.45*sin(2*PI*3.3*t))"
+                args += ["-f", "lavfi", "-i", f"aevalsrc='{expr}':s=48000:d={s.video_seconds}", "-c:a", "aac", "-b:a", "128k"]
+            else:
+                args += ["-an"]
+            self.ffmpeg.run([*args, "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", str(p)])
             out["video"] = str(p)
-        if "narration" not in miss:
-            p = d / "narration.wav"
-            expr = "0.45*sin(2*PI*190*t)*(0.55+0.45*sin(2*PI*3.3*t))"
-            self.ffmpeg.run(["-f", "lavfi", "-i", f"aevalsrc='{expr}':s=48000:d={s.narration_seconds}", "-ac", "1", str(p)])
-            out["narration"] = str(p)
-        if "music" not in miss:
-            p = d / "music.wav"
-            expr = "0.5*(sin(2*PI*261.6*t)+sin(2*PI*329.6*t)+sin(2*PI*392*t))/3*(0.8+0.2*sin(2*PI*2*t))"
-            self.ffmpeg.run(["-f", "lavfi", "-i", f"aevalsrc='{expr}':s=48000:d={s.music_seconds}", "-ac", "2", str(p)])
-            out["music"] = str(p)
-        for role in fal_contract.ROLES:
-            key = f"image:{role}"
-            p = d / f"{role}.jpg"
-            self.ffmpeg.run(["-f", "lavfi", "-i", f"color=c={ROLE_COLORS[role]}:s=720x1280", "-frames:v", "1",
-                             "-vf", "format=yuvj420p", "-q:v", "3", str(p)])
-            if key in s.corrupt:
-                p.write_bytes(p.read_bytes()[:-40] if p.stat().st_size > 400 else b"\xff\xd8\xff\x00")
-            if key in miss and role not in s.recoverable:
-                p.unlink()
-                continue
+        key = "image:hero"
+        p = d / "hero.jpg"
+        self.ffmpeg.run(["-f", "lavfi", "-i", f"color=c={HERO_COLOR}:s=720x1280", "-frames:v", "1",
+                         "-vf", "format=yuvj420p", "-q:v", "3", str(p)])
+        if key in s.corrupt:
+            p.write_bytes(p.read_bytes()[:-40] if p.stat().st_size > 400 else b"\xff\xd8\xff\x00")
+        if not (key in miss and "hero" not in s.recoverable):
             out[key] = str(p)                     # recuperavel: existe no no, mas nao veio no pacote (ver poll)
+        else:
+            p.unlink()
         return out

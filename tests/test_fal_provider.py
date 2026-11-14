@@ -93,7 +93,7 @@ def test_submit_uploads_photo_then_submits_with_contract_input(gen, fake, photo)
     assert info.meta["status_url"].endswith("/requests/req-1/status")
     assert [m for m, _ in fake.calls] == ["POST", "PUT", "POST"]       # iniciar upload, enviar, executar o workflow
     k = f"POST queue.fal.run/{WF}"
-    assert json.loads(fake.bodies[k]) == {"language": "pt-BR", "photo_url": "https://v3.fal.media/files/up/foto.jpg"}
+    assert json.loads(fake.bodies[k]) == {"image_url": "https://v3.fal.media/files/up/foto.jpg"}
     h = fake.headers[k]
     assert h["authorization"] == f"Key {KEY}"
     assert h["x-fal-workflow-envelope"] == "true" and h["x-fal-no-retry"] == "1"
@@ -191,16 +191,14 @@ def test_poll_unexpected_status_fails(gen, fake):
     assert gen.poll("req-1", META).state == OpState.FAILED
 
 
-def test_poll_success_returns_canonical_package_with_roles_from_mapping(gen, fake):
+def test_poll_success_returns_canonical_package(gen, fake):
     fake.status = {"status": "COMPLETED", "metrics": {"inference_time": 41.5}}
     r = gen.poll("req-1", META)
     assert r.state == OpState.SUCCEEDED and r.confirmed_cost_usd is None
     pkg = r.package
     assert pkg.failure_kind() is None and pkg.missing() == []
-    assert pkg.images["hero"].url.endswith("/hero.jpg")            # papel pelo mapeamento, nao pela ordem da lista
-    assert pkg.images["lifestyle"].url.endswith("/lifestyle.jpg")
-    assert pkg.images["details"].url.endswith("/details.jpg")
-    assert pkg.description.startswith("Copo") and pkg.narration_text.startswith("Conheca")
+    assert pkg.video.url.endswith("/final.mp4") and pkg.hero.url.endswith("/hero.jpg")
+    assert pkg.title.startswith("Copo") and pkg.caption.startswith("Mantem")
     assert pkg.nodes["n_hero"] == {"endpoint": "fal-ai/img/a", "request_id": "r-hero"}
     assert r.usage["inference_time"] == 41.5
 
@@ -226,7 +224,7 @@ def test_download_only_from_allowed_https_hosts(gen):
 
 def test_recover_fetches_only_the_node_output_not_the_workflow(gen, fake):
     fake.result = {"image": {"url": f"{BASE}/recuperada.jpg"}}
-    art = fc.Artifact(kind="image", role="hero",
+    art = fc.Artifact(kind="image",
                       recover={"endpoint": "fal-ai/img/a", "request_id": "r-hero", "path": "image.url"})
     got = gen.recover_artifact(art)
     assert got.url.endswith("/recuperada.jpg")
@@ -235,7 +233,7 @@ def test_recover_fetches_only_the_node_output_not_the_workflow(gen, fake):
 
 
 def test_recover_without_node_info_returns_none(gen):
-    assert gen.recover_artifact(fc.Artifact(kind="image", role="hero")) is None
+    assert gen.recover_artifact(fc.Artifact(kind="image")) is None
 
 
 def test_billing_needs_its_own_key(fake):

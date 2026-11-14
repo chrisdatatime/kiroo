@@ -1,8 +1,8 @@
 """Pipeline do motor fal.ai: UMA execucao de workflow por producao, em vez de 3 cenas x (imagem + revisao + video).
 
-O Kiroo NAO reconstroi as etapas generativas (imagem, video, descricao, narracao, trilha): isso e do workflow. Aqui so:
-envia a foto e o estilo, acompanha a execucao, recupera e valida os artefatos, compoe o MP4 final com o FFmpeg do
-Kiroo e entrega o pacote (final.mp4 + 3 fotos + capa + legenda). Estados de producao reaproveitados:
+O Kiroo NAO reconstroi as etapas generativas (video com narracao, foto, titulo e legenda): isso e do workflow. Aqui so:
+envia a foto e o estilo, acompanha a execucao, recupera e valida os artefatos, prepara o MP4 final com o FFmpeg do
+Kiroo e entrega o pacote (final.mp4 + 1 foto hero + capa + legenda). Estados de producao reaproveitados:
 
   received -> validated -> scripted -> producing (workflow no ar) -> editing (composicao) -> awaiting_final_review -> completed
 
@@ -58,7 +58,6 @@ CLIENT_FAILED = "Nao foi possivel gerar o seu video desta vez. Nada foi cobrado.
 
 MAX_DOWNLOAD_RETRIES = 5
 RECOVER_MAX = 2
-AUDIO_EXT = {"wav": ".wav", "mp3/aac": ".mp3", "m4a": ".m4a", "ogg": ".ogg", "flac": ".flac"}
 ATTEMPT_DIR = re.compile(r"^attempt_\d{2,}$")
 KEEP_IN_ATTEMPT = {"result.json"}          # historico: fica para sempre
 
@@ -293,7 +292,7 @@ class FalRunner:
             return "progress"
         try:
             estimate, source = self.gen.estimate_cost(req)
-            hold = o._hold(pid, estimate, "pacote de video e fotos", "workflow")
+            hold = o._hold(pid, estimate, "pacote de video e foto", "workflow")
         except BudgetExceeded:
             return "paused"
         att_id = self.db.create_attempt(production_id=pid, scene_idx=None, kind="workflow", provider=self.gen.provider,
@@ -401,7 +400,7 @@ class FalRunner:
         (adir / "result.json").write_text(json.dumps({
             "request_id": att["remote_op_id"], "style": meta.get("style"), "package": fc.package_to_dict(pkg),
             "usage": res.usage, "completed_at": now()}, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
-        self._set_dj(pid, description=pkg.description, narration_text=pkg.narration_text, warnings=list(pkg.warnings))
+        self._set_dj(pid, title=pkg.title, caption=pkg.caption, warnings=list(pkg.warnings))
         self.db.update_attempt(att_id, usage_json=json.dumps(res.usage, default=str), transient_retries=0)
         self._set_meta(att_id, stage="ingesting", nodes=pkg.nodes)
         return self._ingest(pid, self.db.attempt(att_id))
@@ -420,8 +419,8 @@ class FalRunner:
             except pf.PackageFileError:
                 p.unlink(missing_ok=True)
         data = self.gen.fetch(art)
-        meta = pf.validate(kind, data)
-        ext = {"video": ".mp4", "image": ".jpg"}.get(kind) or AUDIO_EXT.get(meta.get("audio"), ".bin")
+        pf.validate(kind, data)
+        ext = {"video": ".mp4", "image": ".jpg"}[kind]
         out = adir / (base + ext)
         out.write_bytes(data)
         return out
@@ -434,43 +433,35 @@ class FalRunner:
         tries = dict(dj.get("recover_tries") or {})
         warnings = list(dj.get("warnings") or [])
         try:
-            # 1) obrigatorios: video e narracao (sem eles: falha tecnica, sem debito)
-            for kind in fc.REQUIRED_COMPONENTS:
-                art = getattr(pkg, kind)
-                if art is None or not art.available:
-                    self.db.update_attempt(att_id, status="failed", error=f"pacote sem {kind}", error_permanent=1, finished_at=now())
-                    return self._fail_production(pid, f"o pacote veio sem {kind}")
-                try:
-                    self._fetch_valid(adir, kind, kind, art)
-                except pf.PackageFileError as exc:
-                    self.db.update_attempt(att_id, status="failed", error=f"{kind} invalido: {exc}", error_permanent=1, finished_at=now())
-                    return self._fail_production(pid, f"{kind} invalido", str(exc))
-            # 2) trilha: opcional (sem ela entrega com aviso)
-            if pkg.music is not None and pkg.music.available:
-                try:
-                    self._fetch_valid(adir, "music", "music", pkg.music)
-                except (pf.PackageFileError, PermanentError) as exc:
-                    warnings.append(f"trilha descartada: {exc}")
-            else:
-                warnings.append("workflow nao devolveu trilha: o video sai so com a narracao")
-            # 3) as 3 imagens (papel pelo contrato); faltantes tentam a recuperacao controlada pelo no
+            # 1) o video (ja com a narracao embutida): sem ele, ou sem audio nele, e falha tecnica (sem debito)
+            art = pkg.video
+            if art is None or not art.available:
+                self.db.update_attempt(att_id, status="failed", error="pacote sem video", error_permanent=1, finished_at=now())
+                return self._fail_production(pid, "o pacote veio sem video")
+            try:
+                vpath = self._fetch_valid(adir, "video", "video", art)
+                composer.check_source(self.o.ffmpeg, vpath)
+            except (pf.PackageFileError, composer.SourceInvalid) as exc:
+                for f in adir.glob("video.*"):
+                    f.unlink(missing_ok=True)
+                self.db.update_attempt(att_id, status="failed", error=f"video invalido: {exc}", error_permanent=1, finished_at=now())
+                return self._fail_production(pid, "video invalido", str(exc))
+            # 2) a foto hero; se faltar, tenta a recuperacao controlada pelo no (nunca reexecuta o workflow)
             missing: list[str] = []
-            for role in fc.ROLES:
-                if self._have_image(adir, role) or self._try_image(adir, role, pkg.images.get(role)):
-                    continue
-                art = pkg.images.get(role)
-                if art is not None and art.recover and tries.get(role, 0) < RECOVER_MAX:
-                    tries[role] = tries.get(role, 0) + 1
+            if not (self._have_image(adir) or self._try_image(adir, pkg.hero)):
+                art = pkg.hero
+                again = None
+                if art is not None and art.recover and tries.get("hero", 0) < RECOVER_MAX:
+                    tries["hero"] = tries.get("hero", 0) + 1
                     self._set_dj(pid, recover_tries=tries)
                     try:
                         again = self.gen.recover_artifact(art)
                     except (TransientError, PermanentError) as exc:
-                        self.db.add_event(pid, "fal_recover", f"imagem {role}: busca pelo no falhou ({type(exc).__name__})")
-                        again = None
-                    if again is not None and self._try_image(adir, role, again):
-                        self.db.add_event(pid, "fal_recover", f"imagem {role} recuperada pelo no (sem novo envio)")
-                        continue
-                missing.append(role)
+                        self.db.add_event(pid, "fal_recover", f"foto hero: busca pelo no falhou ({type(exc).__name__})")
+                if again is not None and self._try_image(adir, again):
+                    self.db.add_event(pid, "fal_recover", "foto hero recuperada pelo no (sem novo envio)")
+                else:
+                    missing.append("hero")
         except TransientError as exc:   # download de arquivo: seguro repetir (a execucao ja terminou)
             n = att["transient_retries"] + 1
             if n > MAX_DOWNLOAD_RETRIES:
@@ -490,7 +481,7 @@ class FalRunner:
             self.db.update_production(pid, delivery_status="incomplete")
             self._set_meta(att_id, stage="incomplete")
             return self._pause(pid, CLIENT_FINALIZING, INCOMPLETE,
-                               f"entrega incompleta: faltam as imagens {', '.join(missing)}. Recuperacao pelo no esgotada ou "
+                               "entrega incompleta: falta a foto hero. Recuperacao pelo no esgotada ou "
                                "indisponivel. Opcoes: `studio fal recover|deliver-partial|resubmit|waive <pid>`.")
         self._set_meta(att_id, stage="ingested")
         self.db.update_production(pid, delivery_status="pending")
@@ -498,8 +489,8 @@ class FalRunner:
         return "progress"
 
     @staticmethod
-    def _have_image(adir: Path, role: str) -> bool:
-        p = adir / f"image_{role}.jpg"
+    def _have_image(adir: Path) -> bool:
+        p = adir / "image_hero.jpg"
         if not p.is_file():
             return False
         try:
@@ -509,8 +500,8 @@ class FalRunner:
             p.unlink(missing_ok=True)
             return False
 
-    def _try_image(self, adir: Path, role: str, art: fc.Artifact | None) -> bool:
-        """Baixa e valida a imagem do papel. False se nao ha origem ou o arquivo e invalido (conta como faltante)."""
+    def _try_image(self, adir: Path, art: fc.Artifact | None) -> bool:
+        """Baixa e valida a foto hero. False se nao ha origem ou o arquivo e invalido (conta como faltante)."""
         if art is None or not art.available:
             return False
         try:
@@ -518,7 +509,7 @@ class FalRunner:
             pf.validate("image", data)
         except (pf.PackageFileError, PermanentError):
             return False
-        (adir / f"image_{role}.jpg").write_bytes(data)
+        (adir / "image_hero.jpg").write_bytes(data)
         return True
 
     # ------------------------------------------------------------------ composicao e entrega
@@ -532,52 +523,50 @@ class FalRunner:
         adir = st.path(self._adir_rel(att))
         dj = self._dj(pid)
         video = next(iter(sorted(adir.glob("video.*"))), None)
-        narr = next(iter(sorted(adir.glob("narration.*"))), None)
-        music = next(iter(sorted(adir.glob("music.*"))), None)
-        if video is None or narr is None:
+        if video is None:
             self._pause(pid, CLIENT_FINALIZING, COMPOSE_REVIEW, "arquivos do pacote ausentes: refaca a recuperacao")
             return
-        images = {r: adir / f"image_{r}.jpg" for r in fc.ROLES}
-        missing = [r for r, p in images.items() if not p.is_file()]
+        hero = adir / "image_hero.jpg"
+        missing = [] if hero.is_file() else ["hero"]
         if missing and not dj.get("allow_partial"):
             self._set_dj(pid, missing=missing, delivery_status="incomplete")
             self.db.update_production(pid, delivery_status="incomplete")
             self._set_meta(att["id"], stage="incomplete")
-            self._pause(pid, CLIENT_FINALIZING, INCOMPLETE, f"imagens ausentes na composicao: {', '.join(missing)}")
+            self._pause(pid, CLIENT_FINALIZING, INCOMPLETE, "foto hero ausente na entrega")
             return
         work = st.dir("work/compose")
         cfg = composer.ComposeConfig.from_env()
         try:
-            rep = composer.compose(o.ffmpeg, video, narr, music, work / "final.mp4", work, cfg)
+            rep = composer.compose(o.ffmpeg, video, work / "final.mp4", work, cfg)
+        except composer.SourceInvalid as exc:     # video sem audio/stream: falha tecnica, sem debito
+            self.db.update_attempt(att["id"], status="failed", error=f"video invalido: {exc}", error_permanent=1, finished_at=now())
+            self._fail_production(pid, "video invalido", str(exc))
+            return
         except composer.ComposeNeedsReview as exc:
-            self._pause(pid, CLIENT_FINALIZING, COMPOSE_REVIEW, f"{exc} (codigo {exc.code}). Ajuste a configuracao "
-                        "(ex.: STUDIO_FAL_ATEMPO_MAX) e retome, ou use `studio fal waive|resubmit <pid>`.")
+            self._pause(pid, CLIENT_FINALIZING, COMPOSE_REVIEW, f"{exc} (codigo {exc.code}). Ajuste a janela de duracao "
+                        "(STUDIO_FAL_MIN_S/MAX_S) e retome, ou use `studio fal waive|resubmit <pid>`.")
             return
         delivery = st.dir("delivery")
         os.replace(work / "final.mp4", delivery / fc.FINAL_VIDEO)
         manifest = {fc.FINAL_VIDEO: {"role": "video", "sha256": sha256_file(delivery / fc.FINAL_VIDEO)}}
-        for role in fc.ROLES:
-            if role in missing:
-                continue
-            tmp = work / fc.IMAGE_FILES[role]
-            shutil.copy2(images[role], tmp)
-            os.replace(tmp, delivery / fc.IMAGE_FILES[role])
-            manifest[fc.IMAGE_FILES[role]] = {"role": role, "label": fc.ROLE_LABELS[role],
-                                              "sha256": sha256_file(delivery / fc.IMAGE_FILES[role])}
-        composer.make_cover(o.ffmpeg, delivery / fc.FINAL_VIDEO, delivery / "cover.jpg", cfg)
-        manifest["cover.jpg"] = {"role": "cover", "sha256": sha256_file(delivery / "cover.jpg")}
+        if not missing:
+            tmp = work / fc.HERO_FILE
+            shutil.copy2(hero, tmp)
+            os.replace(tmp, delivery / fc.HERO_FILE)
+            manifest[fc.HERO_FILE] = {"role": "hero", "label": fc.HERO_LABEL, "sha256": sha256_file(delivery / fc.HERO_FILE)}
+        composer.make_cover(o.ffmpeg, delivery / fc.FINAL_VIDEO, delivery / fc.COVER_FILE, cfg)
+        manifest[fc.COVER_FILE] = {"role": "cover", "sha256": sha256_file(delivery / fc.COVER_FILE)}
         fmt = json.loads(self.db.production(pid)["profiles_json"])["format"]["data"]
-        product = ProductInput.model_validate_json(self.db.production(pid)["product_json"])
-        caption, cwarn = composer.build_caption(product.name, dj.get("description", ""), fmt)
-        st.write_text("delivery/caption.txt", caption)
-        warnings = [*list(dj.get("warnings") or []), *rep.warnings, *cwarn]
-        status = "partial" if missing else "complete"
+        caption_txt, cwarn = composer.build_caption(dj.get("title", ""), dj.get("caption", ""), fmt)
+        st.write_text(f"delivery/{fc.CAPTION_FILE}", caption_txt)
+        text_ok = bool(dj.get("title") and dj.get("caption"))
+        warnings = list(dict.fromkeys([*list(dj.get("warnings") or []), *rep.warnings, *cwarn]))
+        status = "partial" if missing else "complete"      # texto faltando e AVISO (a entrega segue completa)
         st.write_json("delivery/delivery_meta.json", {
             "engine": "fal", "style": self._style(pid), "simulated": bool(self.gen.simulated), "delivery_status": status,
-            "final_probe": rep.checks, "compose": {"video_action": rep.plan.video_action, "atempo": rep.plan.atempo,
-                                                   "duck_db": rep.duck_db, "music_gain_db": rep.gain_db},
-            "missing_images": missing, "warnings": warnings, "files": manifest,
-            "description": dj.get("description", ""), "narration_text": dj.get("narration_text", "")})
+            "final_probe": rep.checks, "compose": {"video_action": rep.plan.video_action},
+            "missing": missing, "text_status": "ok" if text_ok else "partial", "warnings": warnings, "files": manifest,
+            "title": dj.get("title", ""), "caption": dj.get("caption", "")})
         if att["status"] != "succeeded":   # a ENTREGA completa e o que liquida o pre-orcamento (settle_pool)
             self.db.update_attempt(att["id"], status="succeeded", output_path=f"delivery/{fc.FINAL_VIDEO}",
                                    output_sha256=manifest[fc.FINAL_VIDEO]["sha256"], finished_at=now(), error=None,
@@ -586,7 +575,7 @@ class FalRunner:
         self._set_dj(pid, delivery_status=status, files=manifest, warnings=warnings, missing=missing)
         self.db.update_production(pid, delivery_status=status)
         self.db.add_event(pid, "edit_done", f"pacote {status}: video {rep.duration_s:.1f}s, "
-                          f"{3 - len(missing)} foto(s), {'com' if rep.music else 'sem'} trilha")
+                          f"{1 - len(missing)} foto(s), {'legenda' if text_ok else 'sem legenda completa'}")
         for w in warnings:
             self.db.add_event(pid, "delivery_warning", w)
         self.db.set_production_status(pid, PS.AWAITING_FINAL_REVIEW, f"pacote pronto: {rep.duration_s:.2f}s")
