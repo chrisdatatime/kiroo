@@ -34,6 +34,7 @@ class TourBoundary extends React.Component {
 import { deriveStage, sceneView, toCredits, creditsToUsd, endedOf, stoppedAt } from './engine/adapter.js';
 import { adjustmentGate, pauseKind } from './ui/pause.js';
 import { balanceLabel, needsConfirmation, usedLabel } from './ui/nextVideo.js';
+import { falActive, falView, gallery as falGallery, draftErrors as falDraftErrors, createPayload as falCreatePayload, newRequestId, IMAGE_EXT } from './ui/falFlow.js';
 import { adjustFunds, noBalanceFromError, noBalanceNotice } from './ui/credits.js';
 import Shell, { VIEWS } from './shell/Shell.jsx';
 import Central from './shell/Central.jsx';
@@ -107,6 +108,7 @@ export default class App extends React.Component {
       // sem sessão: home pública (null) ou tela de acesso ('login' | 'signup'); ?entrar abre direto o login
       entry: new URLSearchParams(window.location.search).has('entrar') ? 'login' : null,
       draft: Object.assign({}, EMPTY_DRAFT, LS.get('bc.draft', {})), files: [],
+      fal: { style: null, file: null, name: '', reqId: null, busy: false, tab: 'criar' },   // fluxo foto + estilo (só com o motor novo)
       opts: null, creative: null, preview: null, reqText: '', caption: null, pilot: LS.get('bc.autonomy', 'assistido'),
       ui: { win: null, who: null, tab: 'produto', dirSub: 'dir', ctab: 'personagem', revSel: 1, revView: 'scene', adjust: false, issues: [], adjText: '', toast: null, tut: !LS.get('bc.tutDone', false), playing: false, budgetHit: false },
       cenario: normalizeTheme(LS.get(THEME_KEY, DEFAULT_THEME)),
@@ -717,11 +719,55 @@ export default class App extends React.Component {
     this.setUI({ confirmCancel: false, budgetHit: false });
     this.act('cancelar', () => post(`/api/productions/${P.id}/cancel`), 'Produção encerrada. O que já foi gerado continua no histórico.');
   }
+  // ---------- fluxo foto + estilo (motor novo) ----------
+  setFal(patch) { this.setState((s) => ({ fal: { ...s.fal, ...patch } })); }
+  async falPick(e) {
+    const f = e.target.files && e.target.files[0]; e.target.value = '';
+    if (!f) return;
+    if (!IMAGE_EXT.test(f.name)) { this.toast('Use uma foto JPG, PNG ou WEBP.'); return; }
+    try { this.setFal({ file: { name: f.name, size: f.size, data: await readFile(f) }, reqId: null }); } catch (er) { this.toast(er.message); }
+  }
+  // O botão fica desabilitado até a resposta; o MESMO client_request_id é reaproveitado em um reenvio (servidor devolve a produção que já existe).
+  async falCreate() {
+    const f = this.state.fal;
+    if (f.busy) return;
+    const errs = falDraftErrors(f);
+    if (errs.length) { this.toast('Falta ' + errs.join(', ') + '.'); return; }
+    const reqId = f.reqId || newRequestId();
+    this.setFal({ busy: true, reqId });
+    try {
+      const r = await post('/api/productions', falCreatePayload({ style: f.style, file: f.file, requestId: reqId, name: f.name }));
+      this.setState({ pid: r.pid, draftMode: false, caption: null });
+      this.setFal({ busy: false, reqId: null, file: null, name: '', style: null, tab: 'acompanhar' });
+      await this.refresh();
+      const P = this.prodP();
+      if (P && needsConfirmation(P)) this.setFal({ tab: 'criar' });
+      else this.toast('Recebemos a sua foto. Avisamos quando o pacote estiver pronto.');
+    } catch (e) { this.setFal({ busy: false }); this.toast('Não deu certo: ' + e.message); }
+  }
+  falConfirm() {
+    const P = this.prodP(); if (!P || !needsConfirmation(P)) return;
+    const total = P.confirmation.summary.total_cc;
+    this.setFal({ tab: 'acompanhar' });
+    this.act('confirmar', async () => { await post(`/api/productions/${P.id}/confirm`, { total_cc: total }); await post(`/api/productions/${P.id}/run`); }, 'Confirmado. O Kiroo começou.');
+  }
+  falModel(P) {
+    const s = this.state;
+    if (!falActive(s.S, P, s.draftMode)) return null;
+    const f = s.fal;
+    return { P: P && P.engine === 'fal' ? P : null, view: falView(P), gallery: falGallery(P), tab: f.tab, setTab: (tab) => this.setFal({ tab }),
+      style: f.style, setStyle: (style) => this.setFal({ style }), file: f.file, name: f.name, setName: (e) => this.setFal({ name: e.target.value }),
+      clearFile: () => this.setFal({ file: null, reqId: null }), pick: (e) => this.falPick(e), errors: falDraftErrors(f),
+      busy: f.busy || !!s.busy, create: () => this.falCreate(), confirm: () => this.falConfirm(), goTrack: () => this.setFal({ tab: 'acompanhar' }),
+      mode: s.S ? s.S.settings.mode : '', exportVideo: () => this.exportVideo(), cancel: () => this.cancelProd(),
+      confirmCancel: !!s.ui.confirmCancel, canCancel: !!(P && !endedOf(P) && P.status !== 'completed') };
+  }
   exportVideo() {
     const P = this.prodP(); if (!P) return;
     this.act('exportar', () => post(`/api/productions/${P.id}/final`, { decision: 'approve', note: 'exportado pelo estúdio' }), 'Exportado! Baixe os arquivos e publique pelo app da Shopee.');
   }
   newProduction() {
+    this.setFal({ style: null, file: null, name: '', reqId: null, busy: false, tab: 'criar' });
     this.setState({ pid: null, draftMode: true, files: [], creative: null, preview: null, opts: null, caption: null, draft: Object.assign({}, EMPTY_DRAFT) });
     this.setUI({ win: 'prod', tab: 'produto' });
     this.toast('Nova produção! A Nina está esperando o produto.');
@@ -1089,13 +1135,15 @@ export default class App extends React.Component {
       // Missão encerrada e cancelamento pela interface (com confirmação dentro do app)
       ended, endedText, canCancel: !!(P && !ended && P.status !== 'completed'),
       // Apresentação e formato ATIVOS (os que o motor usa para roteiro, prompts e revisão)
-      active: P ? { presentation: P.presentation || null, label: P.presentation_label || (P.awaiting_direction ? 'A definir na Direção' : '—'),
+      active: P && P.engine === 'fal' ? { presentation: null, label: 'Estilo ' + ((P.fal && P.fal.style_label) || ''), format: '', provisional: false }
+        : P ? { presentation: P.presentation || null, label: P.presentation_label || (P.awaiting_direction ? 'A definir na Direção' : '—'),
         format: P.format_id || '', provisional: !!P.awaiting_direction } : null,
       // entrega
       entLocked: idx < 8, entBuilding: st === 'montando', delivery: P ? P.delivery : {},
       edit: P ? P.edit : null, editOptions: s.S ? s.S.settings.edit_styles : null,
       setEdit: (style, music) => this.setEdit(style, music), caption: s.caption || '', onCaption: (e) => this.setState({ caption: e.target.value }),
       exported: st === 'exportado', exportVideo: () => this.exportVideo(),
+      fal: this.falModel(P),
     };
   }
 

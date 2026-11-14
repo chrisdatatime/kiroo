@@ -51,6 +51,11 @@ export function deriveStage(P) {
   if (ended === 'cancelled') return 'cancelada';   // antes do resto: as cenas podem ter ficado em "gerando"
   if (ended === 'failed') return 'falhou';
   if (st === 'completed') return 'exportado';
+  if (P.engine === 'fal') {   // motor fal.ai: sem cenas nem Direção; um workflow gera tudo e o Kiroo monta o pacote
+    if (st === 'awaiting_final_review') return 'entrega';
+    if (st === 'editing') return 'montando';
+    return 'img_gerando';
+  }
   if (P.awaiting_direction) return 'direcao';
   if (st === 'awaiting_final_review') return 'entrega';
   if (st === 'editing') return 'montando';

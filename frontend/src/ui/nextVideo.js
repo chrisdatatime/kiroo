@@ -1,6 +1,8 @@
 // "Seu próximo vídeo": resumo mostrado ANTES de gastar (lógica pura, testada em tests/nextVideo.test.mjs).
 // Os números vêm prontos do servidor (production.confirmation.summary); aqui só viram linhas rotuladas.
 
+import { falSummaryRows } from './falFlow.js';
+
 export const CONFIRM_LABEL = 'Confirmar e criar vídeo';
 export const NO_EXTRA_COST = 'Nenhum custo adicional será aplicado sem sua autorização.';
 
@@ -15,6 +17,7 @@ export function needsConfirmation(P) {
 
 // Linhas do resumo, na ordem em que o cliente lê. R$ só aparece se o servidor mandar (preço do crédito configurado).
 export function summaryRows(sm) {
+  if (sm.engine === 'fal') return falSummaryRows(sm, credits);   // motor fal.ai: estilo + pacote, sem cenas nem ajustes
   const rows = [
     ['Produto', sm.product],
     ['Formato', `${sm.format} (vertical)`],

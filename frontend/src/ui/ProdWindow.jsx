@@ -5,6 +5,7 @@ import { formatPhotoUrl } from './direcao.js';
 import { CONFIRM_LABEL, needsConfirmation, summaryRows } from './nextVideo.js';
 import { ADD_LABEL, KEEP_LABEL, NO_BALANCE_TITLE, noBalanceRows } from './credits.js';
 import { TopUp } from './TopUp.jsx';
+import FalWindow from './FalWindow.jsx';
 
 // Janela da produção: uma aba por agente/etapa, com dados REAIS do motor.
 const Locked = ({ children }) => <div className="g-card" style={{ padding: 18, font: '700 15px/1.4 Instrument Sans,sans-serif' }}>{children}</div>;
@@ -512,6 +513,7 @@ function TabEntrega({ v }) {
 }
 
 export default function ProdWindow({ v }) {
+  if (v.fal) return <FalWindow v={v} />;   // motor novo (foto + estilo): janela própria, só com a flag ligada
   return (
     <section role="dialog" aria-labelledby="prod-h" className="g-panel pop" style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', zIndex: 20, width: 'min(1000px,calc(100vw - 24px))', height: 'min(680px,calc(100vh - 24px))', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <div style={{ padding: '12px 14px 0', background: '#F2F2EF', borderBottom: '1px solid #E7E7E4', display: 'flex', flexDirection: 'column', gap: 10 }}>
