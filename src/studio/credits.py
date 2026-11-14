@@ -98,14 +98,16 @@ def entry_status(kind: str, amount_cc: int) -> tuple[str, str]:
     return code, STATUS[code]
 
 
-def style_label(style: str | None) -> str:
-    from .fal_contract import STYLE_LABELS
-    return f"Estilo {STYLE_LABELS[style]}" if style in STYLE_LABELS else ""
+def style_label(scene: str | None, platform: str | None = None) -> str:
+    """Subtitulo do video fal.ai no extrato: "Casa Clara · Shopee Vídeo" (vazio para producoes de outro motor)."""
+    from .prompts.production import platform_label, scene_label
+    parts = [x for x in (scene_label(scene), platform_label(platform)) if x]
+    return " · ".join(parts)
 
 
-def entry_texts(kind: str, *, product: str = "", style: str | None = None, note: str = "", package: str | None = None,
+def entry_texts(kind: str, *, product: str = "", scene: str | None = None, platform: str | None = None, note: str = "", package: str | None = None,
                 method: str | None = None) -> tuple[str, str]:
-    """(título, subtítulo) do lançamento: "Compra · Pro" / "Pix", "Vídeo · Tênis" / "Estilo Claro"."""
+    """(título, subtítulo) do lançamento: "Compra · Pro" / "Pix", "Vídeo · Tênis" / "Casa Clara · Shopee Vídeo"."""
     from .plans import LABELS as PLAN_LABELS
     if kind in ("purchase", "reversal"):
         plan = PLAN_LABELS.get(package or "", "Avulso" if package else "")
@@ -119,7 +121,7 @@ def entry_texts(kind: str, *, product: str = "", style: str | None = None, note:
     if kind == "adjust":
         return "Ajuste", note
     video = f"Vídeo · {product}" if product else "Vídeo"
-    return video, style_label(style) or ("Falha técnica, sem custo" if kind == "refund" else "")
+    return video, style_label(scene, platform) or ("Falha técnica, sem custo" if kind == "refund" else "")
 
 
 def _csv_cell(v) -> str:
@@ -192,7 +194,7 @@ class Ledger:
         """Extrato do CLIENTE: o que entrou e o uso por vídeo (reserva+liberação+débito viram uma linha), com título,
         subtítulo, status e valor em crédito inteiro. O detalhe por chamada fica só no admin (`usage`)."""
         rows = self.db.conn.execute(
-            "SELECT e.*, p.product_json, p.style, pay.package_code pay_pkg, pay.method pay_method"
+            "SELECT e.*, p.product_json, CASE WHEN p.engine='fal' THEN p.scene END scene, CASE WHEN p.engine='fal' THEN p.platform END platform, pay.package_code pay_pkg, pay.method pay_method"
             " FROM credit_entries e LEFT JOIN productions p ON p.id=e.production_id"
             " LEFT JOIN payments pay ON pay.id=e.payment_id"
             " WHERE e.workspace_id=? AND e.kind IN ('grant','purchase','adjust','debit','release','reversal','welcome_bonus')"
@@ -204,7 +206,7 @@ class Ledger:
                 continue  # a liberação de uma reserva que virou débito não interessa no extrato
             kind = "refund" if r["kind"] == "release" else r["kind"]
             amount = 0 if kind == "refund" else r["amount_cc"]
-            title, sub = entry_texts(kind, product=_title(r["product_json"]), style=r["style"], note=r["note"] or "",
+            title, sub = entry_texts(kind, product=_title(r["product_json"]), scene=r["scene"], platform=r["platform"], note=r["note"] or "",
                                      package=r["pay_pkg"], method=r["pay_method"])
             status, status_label = entry_status(kind, amount)
             out.append({"id": r["id"], "kind": kind, "at": r["created_at"], "amount_cc": amount, "amount": fmt(amount),
@@ -221,7 +223,8 @@ class Ledger:
         """"Por vídeo" do cliente: produto, estilo, data e créditos cobrados (0 = não cobrado, ex.: falha técnica).
         Só vídeos encerrados: os que têm débito ou devolução da reserva."""
         rows = self.db.conn.execute(
-            "SELECT p.id, p.product_json, p.style, MAX(e.created_at) at,"
+            "SELECT p.id, p.product_json, CASE WHEN p.engine='fal' THEN p.scene END scene,"
+            " CASE WHEN p.engine='fal' THEN p.platform END platform, MAX(e.created_at) at,"
             " SUM(CASE WHEN e.kind='debit' THEN -e.amount_cc ELSE 0 END) cc"
             " FROM credit_entries e JOIN productions p ON p.id=e.production_id"
             " WHERE e.workspace_id=? AND e.kind IN ('debit','release') GROUP BY p.id ORDER BY at DESC LIMIT ?",
@@ -229,7 +232,7 @@ class Ledger:
         out = []
         for r in rows:
             status, status_label = entry_status("debit" if r["cc"] > 0 else "refund", -r["cc"])
-            out.append({"production_id": r["id"], "product": _title(r["product_json"]), "style": style_label(r["style"]),
+            out.append({"production_id": r["id"], "product": _title(r["product_json"]), "style": style_label(r["scene"], r["platform"]),
                         "at": r["at"], "credits_cc": r["cc"], "credits": fmt_charge(r["cc"]),
                         "status": status, "status_label": status_label})
         return out

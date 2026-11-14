@@ -1,28 +1,52 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { STYLES, availableStyles, effectiveStyle, draftErrors, createPayload, falActive, falStatus, falStations, falStepIndex, falAgentStatus, startFal, continueFal, offerFor, createLabel, RECEIVE_LINE, FRIENDLY_FALLBACK, EST_WORKFLOW_S, endedLabel, gallery, newRequestId, downloadUrl, falSummaryRows } from '../src/ui/falFlow.js';
+import { SCENES, PLATFORMS, DEFAULT_SCENE, DEFAULT_PLATFORM, NAME_MAX, availableScenes, availablePlatforms, effectiveScene, effectivePlatform, lockText, cleanName, sceneImage, sceneThumb, platformLogo, receiveLine, draftErrors, createPayload, falActive, falStatus, falStations, falStepIndex, falAgentStatus, startFal, continueFal, offerFor, createLabel, FRIENDLY_FALLBACK, EST_WORKFLOW_S, endedLabel, gallery, newRequestId, downloadUrl, falSummaryRows } from '../src/ui/falFlow.js';
 import { deriveStage } from '../src/engine/adapter.js';
 import { summaryRows, credits } from '../src/ui/nextVideo.js';
 
-// estilos e validação: foto + Escuro/Claro, nome e descrição NÃO são obrigatórios
-assert.deepEqual(STYLES.map((s) => s.id), ['dark', 'light']);
-assert.deepEqual(draftErrors({ style: 'dark', file: { name: 'a.PNG' } }), []);
-assert.deepEqual(draftErrors({ style: null, file: null }), ['a foto do produto', 'o estilo (Escuro ou Claro)']);
-assert.deepEqual(draftErrors({ style: 'light', file: { name: 'v.mp4' } }), ['uma foto JPG, PNG ou WEBP']);
-const body = createPayload({ style: 'dark', file: { name: 'a.png', data: 'data:x' }, requestId: 'abc12345' });
-assert.deepEqual(body, { style: 'dark', client_request_id: 'abc12345', files: [{ name: 'a.png', data: 'data:x' }] });   // sem nome
-assert.equal(createPayload({ style: 'dark', file: { name: 'a.png', data: 'd' }, requestId: 'abc12345', name: ' Copo ' }).name, 'Copo');
+// cenário + plataforma + validação: foto obrigatória; nome e descrição NÃO são obrigatórios
+assert.deepEqual(SCENES.map((s) => s.id), ['home_light', 'studio', 'natural', 'dark_premium']);
+assert.deepEqual(PLATFORMS.map((s) => s.id), ['shopee_video', 'tiktok_shop', 'mercado_livre']);
+assert.equal(DEFAULT_SCENE, 'home_light'); assert.equal(DEFAULT_PLATFORM, 'shopee_video');
+assert.deepEqual(SCENES.map((s) => s.label), ['Casa Clara', 'Estúdio', 'Natural', 'Escuro Premium']);
+assert.deepEqual(PLATFORMS.map((s) => s.label), ['Shopee Vídeo', 'TikTok Shop', 'Mercado Livre']);
+assert.deepEqual(draftErrors({ scene: 'studio', platform: 'tiktok_shop', file: { name: 'a.PNG' } }), []);
+assert.deepEqual(draftErrors({ scene: null, platform: null, file: null }), ['a foto do produto', 'o cenário', 'a plataforma']);
+assert.deepEqual(draftErrors({ scene: 'studio', platform: 'shopee_video', file: { name: 'v.mp4' } }), ['uma foto JPG, PNG ou WEBP']);
+// o corpo leva SÓ ids (nunca texto de prompt) + id do cliente + foto, e o nome só se houver
+const body = createPayload({ scene: 'dark_premium', platform: 'mercado_livre', file: { name: 'a.png', data: 'data:x' }, requestId: 'abc12345' });
+assert.deepEqual(body, { scene: 'dark_premium', platform: 'mercado_livre', client_request_id: 'abc12345', files: [{ name: 'a.png', data: 'data:x' }] });
+assert.equal(createPayload({ scene: 'studio', platform: 'shopee_video', file: { name: 'a.png', data: 'd' }, requestId: 'abc12345', name: ' Copo ' }).name, 'Copo');
+assert.ok(!Object.keys(body).some((k) => /prompt|strategy|context/i.test(k)));
+// nome: sem quebras de linha nem controles, até 80 caracteres
+assert.equal(NAME_MAX, 80);
+assert.equal(cleanName('  Copo \n  Azul\t500ml\u0000 '), 'Copo Azul 500ml');
+assert.equal(cleanName('x'.repeat(200)).length, 80); assert.equal(cleanName(null), '');
+assert.equal(createPayload({ scene: 'studio', platform: 'shopee_video', file: { name: 'a.png', data: 'd' }, requestId: 'abc12345', name: 'a\nb' }).name, 'a b');
+assert.equal('name' in createPayload({ scene: 'studio', platform: 'shopee_video', file: { name: 'a.png', data: 'd' }, requestId: 'abc12345', name: '  \n ' }), false);
 
-// só o Claro está liberado (settings.fal_styles): sem seletor, e o envio é sempre o Claro
-const only = { settings: { fal_styles: [{ id: 'light', label: 'Claro' }] } };
-assert.deepEqual(availableStyles(only).map((s) => s.id), ['light']);
-assert.deepEqual(availableStyles({}).map((s) => s.id), ['light']);                      // sem a lista do servidor: Claro
-assert.equal(effectiveStyle(only, null), 'light'); assert.equal(effectiveStyle(only, 'dark'), 'light');
-assert.deepEqual(draftErrors({ style: effectiveStyle(only, null), file: { name: 'a.png' } }), []);
-// com o Escuro ligado no servidor volta o seletor, e a escolha vale
-const both = { settings: { fal_styles: [{ id: 'dark', label: 'Escuro' }, { id: 'light', label: 'Claro' }] } };
-assert.deepEqual(availableStyles(both).map((s) => s.id), ['dark', 'light']);
-assert.equal(effectiveStyle(both, 'dark'), 'dark'); assert.equal(effectiveStyle(both, null), null);
+// listas do servidor (settings.fal_scenes / fal_platforms); sem elas, a reserva local; padrão Casa Clara + Shopee Vídeo
+assert.deepEqual(availableScenes({}).map((s) => s.id), ['home_light', 'studio', 'natural', 'dark_premium']);
+assert.ok(availableScenes({}).every((s) => s.locked === false));
+assert.deepEqual(availablePlatforms({}).map((s) => s.id), ['shopee_video', 'tiktok_shop', 'mercado_livre']);
+assert.equal(effectiveScene({}, null), 'home_light'); assert.equal(effectiveScene({}, 'natural'), 'natural'); assert.equal(effectiveScene({}, 'neon'), 'home_light');
+assert.equal(effectivePlatform({}, null), 'shopee_video'); assert.equal(effectivePlatform({}, 'tiktok_shop'), 'tiktok_shop'); assert.equal(effectivePlatform({}, 'orkut'), 'shopee_video');
+// acesso antecipado: cenário bloqueado mostra o cadeado ("Disponível no plano Escala") e não pode ser escolhido
+const Slock = { settings: { fal_scenes: [
+  { id: 'home_light', label: 'Casa Clara', subtitle: 'Sala iluminada, tons neutros', locked: false },
+  { id: 'studio', label: 'Estúdio', subtitle: 'Cinza pérola, luz editorial', locked: true, required_plan: 'escala', required_plan_label: 'Escala' },
+] } };
+const sc = availableScenes(Slock);
+assert.equal(sc[1].locked, true); assert.equal(lockText(sc[1]), 'Disponível no plano Escala'); assert.equal(lockText(sc[0]), null);
+assert.equal(effectiveScene(Slock, 'studio'), 'home_light');                       // escolha bloqueada cai no padrão
+assert.equal(effectiveScene(Slock, 'home_light'), 'home_light');
+const Slock2 = { settings: { fal_scenes: [{ id: 'home_light', label: 'Casa Clara', locked: true, required_plan_label: 'Escala' }, { id: 'natural', label: 'Natural', locked: false }] } };
+assert.equal(effectiveScene(Slock2, null), 'natural');                              // padrão bloqueado: o primeiro liberado
+// assets
+assert.equal(sceneImage('studio'), '/assets/scenes/studio.jpg'); assert.equal(sceneThumb('studio'), '/assets/scenes/studio-thumb.jpg');
+assert.equal(platformLogo('tiktok_shop'), '/assets/platforms/tiktok_shop.png');
+// texto do rodapé com a plataforma escolhida
+assert.equal(receiveLine('TikTok Shop'), 'Você recebe vídeo de ~15 s com narração, 1 foto, título e legenda para TikTok Shop. Se falhar por erro técnico, não é cobrado.');
 
 // id do cliente: UUID por envio; sem crypto, cai para um id aleatório de tamanho aceito pelo servidor (8 a 64)
 assert.equal(newRequestId(() => 'u-1'), 'u-1');
@@ -135,13 +159,13 @@ assert.equal(gallery({ engine: 'gemini' }), null);
 const inc = gallery(P({ status: 'paused', fal: { finalizing: true, missing_images: ['hero'], delivery_status: 'incomplete', image: { role: 'hero', label: 'Hero Shot', file: 'x', url: null } } }));
 assert.equal(inc.video, null); assert.equal(inc.image.download, null);
 
-// "Seu próximo vídeo" no motor fal.ai: estilo e o que vem no pacote, sem cenas nem ajustes
-const sm = { engine: 'fal', style: 'light', product: '', total_credits: '32,4', total_brl: null, balance: '500', balance_after: '467,6', exempt: false };
+// "Seu próximo vídeo" no motor fal.ai: cenário, plataforma e o que vem no pacote, sem cenas nem ajustes
+const sm = { engine: 'fal', scene: 'natural', platform: 'tiktok_shop', product: '', total_credits: '32,4', total_brl: null, balance: '500', balance_after: '467,6', exempt: false };
 const rows = Object.fromEntries(falSummaryRows(sm, credits));
-assert.equal(rows['Estilo'], 'Claro'); assert.ok(!('Cenas' in rows) && !('Ajustes incluídos por cena' in rows));
+assert.equal(rows['Cenário'], 'Natural'); assert.equal(rows['Plataforma'], 'TikTok Shop'); assert.ok(!('Estilo' in rows) && !('Cenas' in rows) && !('Ajustes incluídos por cena' in rows));
 assert.match(rows['O que você recebe'], /1 foto publicitária/); assert.ok(!/trilha|3 fotos/i.test(rows['O que você recebe']));
 assert.equal(rows['Custo total autorizado'], '32,4 créditos');
-assert.ok(Object.fromEntries(summaryRows({ ...sm, format: '9:16', scenes: 3, included_adjustments_per_scene: 1, product: 'X' }))['Estilo'] === 'Claro');
+assert.ok(Object.fromEntries(summaryRows({ ...sm, format: '9:16', scenes: 3, included_adjustments_per_scene: 1, product: 'X' }))['Cenário'] === 'Natural');
 
 // o cliente nunca vê modelo, fila técnica ou "fal.ai" nas telas do fluxo
 const read = (f) => readFileSync(new URL('../src/' + f, import.meta.url), 'utf8');
@@ -160,7 +184,7 @@ const fakePost = (fail = {}) => {
   return { fn, calls };
 };
 const okRun = fakePost();
-const r1 = await startFal(okRun.fn, { body: { style: 'light' }, cc: 972 });
+const r1 = await startFal(okRun.fn, { body: { scene: 'home_light', platform: 'shopee_video' }, cc: 972 });
 assert.deepEqual(r1, { ok: true, pid: 'prod_abc' });
 assert.deepEqual(okRun.calls.map((c) => c[0]), ['/api/productions', '/api/productions/prod_abc/confirm', '/api/productions/prod_abc/run']);   // nessa ordem
 assert.deepEqual(okRun.calls[1][1], { total_cc: 972 });                       // o custo que o botão mostrou
@@ -183,13 +207,20 @@ assert.equal(r4.ok, true); assert.equal(r4.already, true); assert.ok(!again.call
 const again2 = fakePost({ '/run': { message: 'Este vídeo já está sendo criado.', code: 'already_started' } });
 assert.equal((await continueFal(again2.fn, 'prod_x', 0)).ok, true);
 // botão e linha de baixo
-const Soffer = { settings: { fal_styles: [{ id: 'light', label: 'Claro', cc: 972, credits: '9,72' }] } };
-assert.deepEqual(offerFor(Soffer, 'light'), { cc: 972, credits: '9,72' });
-assert.equal(createLabel(offerFor(Soffer, 'light'), false), 'Criar vídeo · 9,72 créditos');
-assert.equal(createLabel(offerFor(Soffer, 'light'), true), 'Criar vídeo');
-assert.equal(RECEIVE_LINE, 'Você recebe: vídeo ~15 s com narração, 1 foto, título e legenda. Se falhar por erro técnico, não é cobrado.');
+const Soffer = { settings: { fal_offer: { cc: 2000, credits: '20' } } };
+assert.deepEqual(offerFor(Soffer), { cc: 2000, credits: '20' });                    // preço único, igual para qualquer cenário/plataforma
+assert.equal(createLabel(offerFor(Soffer), false), 'Criar vídeo · 20 créditos');
+assert.equal(createLabel(offerFor(Soffer), true), 'Criar vídeo');
+assert.deepEqual(offerFor({}), { cc: 0, credits: '0' });
 // as telas do fluxo novo não têm mais as abas Criar/Acompanhar/Entrega nem o cartão "Seu próximo vídeo"
 const ui2 = read('ui/FalWindow.jsx') + read('ui/FalMission.jsx');
 assert.ok(!/Acompanhar|Seu próximo vídeo|Confirmar e criar|Preparando a foto|role="tab"/.test(ui2), 'sobrou o fluxo antigo');
 assert.ok(!/fal\.ai|workflow|queue\.fal/i.test(ui2.replace(/\/\/.*$/gm, '')), 'a tela cita o fornecedor');
+// modal novo: cartões são <button aria-pressed>, logos com alt vazio, foco visível e nenhum texto de prompt no front
+const modal = read('ui/FalWindow.jsx').replace(/\/\/.*$/gm, '');
+const css = read('ui/falModal.css');
+assert.match(modal, /aria-pressed=\{on\}/); assert.match(modal, /alt=""/); assert.match(modal, /aria-label="Fechar"/);
+assert.match(css, /--accent: #5b5bd6/); assert.match(css, /:focus-visible \{ outline: 2px solid var\(--accent\)/);
+assert.match(css, /\.fm-x \{ width: 44px; height: 44px/);
+assert.ok(!/scene_prompt|platform_strategy|CRITICAL OBJECT|copywriting/.test(modal + read('App.jsx') + read('ui/falFlow.js')), 'texto de prompt no front');
 console.log('falflow.test ok');

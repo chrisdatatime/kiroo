@@ -222,10 +222,10 @@ def _fal(settings, args) -> int:
     orch = build(settings)
     try:
         if args.fal_cmd == "list":
-            rows = orch.db.conn.execute("SELECT id, status, style, delivery_status, pause_code, status_reason, updated_at FROM "
+            rows = orch.db.conn.execute("SELECT id, status, scene, platform, delivery_status, pause_code, status_reason, updated_at FROM "
                                         "productions WHERE engine='fal' ORDER BY created_at DESC LIMIT 50").fetchall()
             for r in rows:
-                print(f"{r['id']}  {r['status']:22} estilo={r['style']:5} entrega={r['delivery_status']:10} "
+                print(f"{r['id']}  {r['status']:22} cenario={r['scene']:12} plataforma={r['platform']:13} entrega={r['delivery_status']:10} "
                       f"pausa={r['pause_code'] or '-':22} {(r['status_reason'] or '')[:90]}")
             return 0
         if args.fal_cmd == "reconcile":
@@ -406,16 +406,12 @@ def main(argv: list[str] | None = None) -> int:
         from . import fal_contract
         try:
             contract = fal_contract.load_contract(settings.profiles_dir)
-            pend = {st: (len(fal_contract.placeholders(contract, st, include_recover=False)),
-                         len(fal_contract.recover_pending(contract, st))) for st in fal_contract.STYLES}
+            pend = (len(fal_contract.placeholders(contract, include_recover=False)), len(fal_contract.recover_pending(contract)))
         except fal_contract.ContractError:
             pend = None
         print(f"motor fal.ai: padrão={settings.video_engine} | FAL_KEY: {'sim' if settings.fal_api_key else 'não'} | "
-              f"FAL_BILLING_KEY: {'sim' if settings.fal_billing_key else 'não'} | WORKFLOW_ID_DARK: "
-              f"{'definido' if settings.workflow_id_dark else 'não'} | WORKFLOW_ID_LIGHT: "
-              f"{'definido' if settings.workflow_id_light else 'não'} | contrato A CONFIRMAR: "
-              f"{'ilegível' if pend is None else ', '.join(f'{k}=envio {a} / recuperação {b}' for k, (a, b) in pend.items())}"
-              f" | Escuro: {'ligado' if settings.fal_dark_enabled else 'desligado'}")
+              f"FAL_BILLING_KEY: {'sim' if settings.fal_billing_key else 'não'} | workflow: {settings.workflow_id} | "
+              f"contrato A CONFIRMAR: {'ilegível' if pend is None else f'envio {pend[0]} / recuperação {pend[1]}'}")
         print(f"ffmpeg: {settings.ffmpeg_bin or 'NÃO ENCONTRADO'}")
         print(f"ffprobe: {settings.ffprobe_bin or 'NÃO ENCONTRADO'}")
         print(f"fonte: {settings.font_file or 'NÃO ENCONTRADA'}")

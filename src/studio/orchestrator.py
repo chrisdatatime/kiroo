@@ -107,7 +107,7 @@ class Orchestrator:
     def create_production(self, product: ProductInput, *, format_id: str, art_direction: str, presenter: str,
                           budget_usd: float, go_ahead: str = "all", autonomy: str = "classico",
                           workspace_id: str | None = None, prebudget: bool = False,
-                          direction_required: bool = False, engine: str = "gemini", style: str | None = None,
+                          direction_required: bool = False, engine: str = "gemini", scene: str | None = None, platform: str | None = None,
                           client_request_id: str | None = None, estimate: dict | None = None) -> str:
         """go_ahead="none" exige liberação explícita (set_go_ahead) antes de gerar imagens e antes dos vídeos.
 
@@ -152,7 +152,8 @@ class Orchestrator:
         if workspace_id:
             fields["workspace_id"] = workspace_id
         if engine == "fal":
-            fields.update(engine="fal", style=style, client_request_id=client_request_id, format_id=f"fal_{style}")
+            fields.update(engine="fal", scene=scene or "home_light", platform=platform or "shopee_video",
+                          client_request_id=client_request_id, format_id=f"fal_{scene or 'home_light'}")
         if fields:   # numa UNICA gravacao: o indice unico (workspace, client_request_id) barra o duplo clique atomicamente
             try:
                 self.db.update_production(pid, **fields)

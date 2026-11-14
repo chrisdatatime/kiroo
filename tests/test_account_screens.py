@@ -69,8 +69,8 @@ def test_statement_texts():
     assert entry_texts("purchase", package="pro", method="pix") == ("Compra · Pro", "Pix")
     assert entry_texts("purchase", package="avulso", method="card") == ("Compra · Avulso", "Cartão")
     assert entry_texts("welcome_bonus") == ("Bônus de boas-vindas", "Seu primeiro vídeo")
-    assert entry_texts("debit", product="Tênis", style="light") == ("Vídeo · Tênis", "Estilo Claro")
-    assert entry_texts("refund", product="Tênis", style="dark") == ("Vídeo · Tênis", "Estilo Escuro")
+    assert entry_texts("debit", product="Tênis", scene="home_light", platform="shopee_video") == ("Vídeo · Tênis", "Casa Clara · Shopee Vídeo")
+    assert entry_texts("refund", product="Tênis", scene="dark_premium", platform="tiktok_shop") == ("Vídeo · Tênis", "Escuro Premium · TikTok Shop")
 
 
 def _seed(settings):
@@ -80,10 +80,12 @@ def _seed(settings):
                     " VALUES ('kpay_0000000001',?, 'pix','pro',200,7990,'paid','2026-11-01T10:00:00')", (wid,))
     led.payment_entry(wid, "kpay_0000000001", 20000, note="compra")
     led.add(wid, 2000, kind="welcome_bonus", note="boas-vindas", ext_ref="wb:1")
-    for pid, prod, style in (("prod_ok", "Tênis", "light"), ("prod_fail", "Mochila", "dark")):
+    for pid, prod, scene, platform in (("prod_ok", "Tênis", "home_light", "shopee_video"),
+                                       ("prod_fail", "Mochila", "dark_premium", "tiktok_shop")):
         db.conn.execute("INSERT INTO productions(id, status, mode, format_id, product_json, profiles_json, budget_usd,"
-                        " created_at, updated_at, style) VALUES (?,?,?,?,?,?,?,?,?,?)",
-                        (pid, "delivered", "real", "f", json.dumps({"name": prod}), "{}", 1.0, "2026-11-02", "2026-11-02", style))
+                        " created_at, updated_at, engine, scene, platform) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                        (pid, "delivered", "real", "f", json.dumps({"name": prod}), "{}", 1.0, "2026-11-02", "2026-11-02",
+                         "fal", scene, platform))
     led._insert(workspace_id=wid, kind="reserve", amount_cc=-2000, hold_id="pool:prod_ok", production_id="prod_ok",
                 stage="prebudget", ext_ref="pool:prod_ok:base")
     led._insert(workspace_id=wid, kind="debit", amount_cc=-2000, hold_id="pool:prod_ok", production_id="prod_ok",
@@ -103,7 +105,7 @@ def test_statement_rows_for_each_kind(settings):
     assert rows[("Estorno de compra · Pro", "reversed")]["credits"] == "−200"
     assert rows[("Bônus de boas-vindas", "gift")]["credits"] == "+20"
     ok = rows[("Vídeo · Tênis", "done")]
-    assert ok["credits"] == "−20" and ok["subtitle"] == "Estilo Claro" and ok["status_label"] == "Concluído"
+    assert ok["credits"] == "−20" and ok["subtitle"] == "Casa Clara · Shopee Vídeo" and ok["status_label"] == "Concluído"
     nc = rows[("Vídeo · Mochila", "not_charged")]
     assert nc["credits"] == "0" and nc["amount_cc"] == 0 and nc["status_label"] == "Não cobrado"
 
@@ -111,7 +113,7 @@ def test_statement_rows_for_each_kind(settings):
 def test_per_video_view_has_no_call_level_detail(settings):
     db, wid, led = _seed(settings)
     by = {v["product"]: v for v in led.videos(wid)}
-    assert by["Tênis"]["credits"] == "20" and by["Tênis"]["style"] == "Estilo Claro" and by["Tênis"]["status"] == "done"
+    assert by["Tênis"]["credits"] == "20" and by["Tênis"]["style"] == "Casa Clara · Shopee Vídeo" and by["Tênis"]["status"] == "done"
     assert by["Mochila"]["credits"] == "0" and by["Mochila"]["status"] == "not_charged"
     assert set(by["Tênis"]) == {"production_id", "product", "style", "at", "credits_cc", "credits", "status", "status_label"}
 
@@ -128,7 +130,7 @@ def test_csv_columns_whole_credits_and_formula_injection(settings):
     lines = csv.strip().split("\r\n")
     assert lines[0] == '"Data";"Descrição";"Detalhe";"Status";"Créditos"'
     assert any('"Compra · Pro";"Pix";"Pago";"+200"' in ln for ln in lines)
-    assert any('"Vídeo · Mochila";"Estilo Escuro";"Não cobrado";"0"' in ln for ln in lines)
+    assert any('"Vídeo · Mochila";"Escuro Premium · TikTok Shop";"Não cobrado";"0"' in ln for ln in lines)
     evil = statement_csv([{"at": "2026-01-01T00:00:00", "title": '=HYPERLINK("x")', "subtitle": "a\nb", "status_label": "Pago",
                            "credits": "+20"}])
     assert "\"'=HYPERLINK(\"\"x\"\")\"" in evil and "a b" in evil

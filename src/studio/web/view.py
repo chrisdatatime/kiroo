@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from urllib.parse import quote
 
 from .. import fal_contract
+from ..prompts import production as prompts
 from ..agent_config import agents_with_overrides, field_options
 from ..config import Settings
 from ..db import Database
@@ -228,7 +229,8 @@ def snapshot(settings: Settings, db: Database, pid: str | None, *, since: int = 
                     "ended": r["status"] if r["status"] in (PS.CANCELLED, PS.FAILED) else None,
                     "name": json.loads(r["product_json"]).get("name", ""), "created_at": r["created_at"],
                     "engine": r["engine"] if "engine" in r.keys() else "gemini",
-                    "style": r["style"] if "style" in r.keys() else None}
+                    "scene": r["scene"] if "scene" in r.keys() else None,
+                    "platform": r["platform"] if "platform" in r.keys() else None}
                    for r in db.productions(workspace_id)]
     if pid is None and productions:
         pid = productions[0]["id"]
@@ -382,7 +384,8 @@ def snapshot(settings: Settings, db: Database, pid: str | None, *, since: int = 
             "name": product.get("name"), "variant": product.get("variant"), "link": product.get("affiliate_link")},
         "costs": {**costs, "committed_usd": round(committed, 4)}, "scenes": scenes, "delivery": delivery,
         "running": running and not ended, "error": error,
-        "engine": engine, "style": p["style"] if "style" in p.keys() else None,
+        "engine": engine, "scene": p["scene"] if "scene" in p.keys() else None,
+        "platform": p["platform"] if "platform" in p.keys() else None,
         "delivery_status": p["delivery_status"] if "delivery_status" in p.keys() else "none",
         "fal": _fal_view(settings, db, p, pid, st, delivery) if engine == "fal" else None,
     }
@@ -404,7 +407,8 @@ def _fal_view(settings, db, p, pid: str, st, delivery: dict) -> dict:
     finalizing = st == PS.PAUSED and (code in FAL_FINALIZING_CODES or p["delivery_status"] == "incomplete")
     image = {"role": "hero", "label": fal_contract.HERO_LABEL, "file": fal_contract.HERO_FILE,
              "url": delivery.get(fal_contract.HERO_FILE)}
-    return {"style": p["style"], "style_label": fal_contract.STYLE_LABELS.get(p["style"], ""),
+    return {"scene": p["scene"], "scene_label": prompts.scene_label(p["scene"]),
+            "platform": p["platform"], "platform_label": prompts.platform_label(p["platform"]),
             "stage": meta.get("stage"), "queue_position": meta.get("queue"), "remote_status": meta.get("remote_status"),
             "finalizing": finalizing, "delivery_status": p["delivery_status"],
             "image": image, "missing_images": dj.get("missing", []) if p["delivery_status"] in ("incomplete", "partial") else [],

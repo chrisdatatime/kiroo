@@ -18,6 +18,7 @@ endpoint REST de upload; o header de lifecycle no initiate tambem e suposicao.
 from __future__ import annotations
 
 import json
+import logging
 import mimetypes
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,9 +26,12 @@ from urllib.parse import urlparse
 
 from .. import fal_contract, paid_gate
 from ..logs import redact
+from ..prompts.production import build_fal_arguments
 from .base import OpResult, OpState, PermanentError, ProviderBillingError, TransientError, WorkflowRequest
 
+log = logging.getLogger("studio")
 PROVIDER = "fal-workflow"
+TEXT_LOG_MAX = 4000
 QUEUE_URL = "https://queue.fal.run"
 REST_UPLOAD_URL = "https://rest.alpha.fal.ai"      # A CONFIRMAR: fluxo de upload do cliente oficial
 API_URL = "https://api.fal.ai"
@@ -194,15 +198,15 @@ def billing_total(billing_json: dict) -> float | None:
 
 
 class FalWorkflowGenerator:
-    """submit/poll de um workflow (um por estilo). Gera o pacote canonico (WorkflowPackage), sem baixar arquivos."""
+    """submit/poll do workflow UNICO (wf01white). Gera o pacote canonico (WorkflowPackage), sem baixar arquivos."""
 
     provider = PROVIDER
     simulated = False
 
-    def __init__(self, client: FalClient, contract: dict, workflow_ids: dict[str, str | None], *,
+    def __init__(self, client: FalClient, contract: dict, workflow_id: str | None, *,
                  start_timeout_s: float | None = None, upload_lifecycle_s: int | None = 3600, estimator=None):
         self.client, self.contract = client, contract
-        self.workflow_ids = workflow_ids
+        self.workflow_id = workflow_id
         self.start_timeout_s = start_timeout_s
         self.upload_lifecycle_s = upload_lifecycle_s
         self._estimator = estimator
@@ -210,41 +214,43 @@ class FalWorkflowGenerator:
         self.submit_count = 0
 
     # ---------------------------------------------------------------- guardas
-    def _workflow(self, style: str) -> str:
-        wid = self.workflow_ids.get(style)
-        if not wid:
-            raise PermanentError(f"workflow do estilo {style} nao configurado (WORKFLOW_ID_"
-                                 f"{'DARK' if style == 'dark' else 'LIGHT'})")
-        return wid
-
-    def _guard(self, style: str) -> str:
+    def _guard(self) -> str:
         paid_gate.check()            # kill switch / ambiente / teto: recusa antes de qualquer rede
-        wid = self._workflow(style)
-        pend = fal_contract.placeholders(self.contract, style, include_recover=False)   # recover nao bloqueia o envio
+        if not self.workflow_id:
+            raise PermanentError("workflow nao configurado (WORKFLOW_ID)")
+        pend = fal_contract.placeholders(self.contract, include_recover=False)   # recover nao bloqueia o envio
         if pend:
             raise PermanentError("contrato do workflow ainda A CONFIRMAR (Fase 0): " + ", ".join(pend[:4]))
-        return wid
+        return self.workflow_id
 
     def params(self, request: WorkflowRequest) -> dict:
-        return {"style": request.style, "workflow": self.workflow_ids.get(request.style)}
+        return {"scene": request.scene, "platform": request.platform, "workflow": self.workflow_id}
 
     def estimate_cost(self, request: WorkflowRequest) -> tuple[float, str]:
         if self._estimator is None:
             raise PermanentError("sem estimativa de custo para o workflow")
-        return self._estimator(request.style)
+        return self._estimator()
 
     # ---------------------------------------------------------------- submit / poll
     def submit_full(self, request: WorkflowRequest) -> SubmitInfo:
-        wid = self._guard(request.style)
+        wid = self._guard()
+        try:   # texto 100% do servidor (allowlist + dicionarios fixos); o nome entra como dado entre delimitadores
+            build_fal_arguments("https://placeholder.invalid/x", request.scene, request.platform, request.product_name)
+        except ValueError as exc:      # antes do upload: entrada invalida nao gasta nada
+            raise PermanentError(f"entrada do workflow invalida: {exc}") from None
         url = self.client.upload(request.image_path, lifecycle_s=self.upload_lifecycle_s)
-        payload = fal_contract.build_input(self.contract, request.style, url)
+        payload = build_fal_arguments(url, request.scene, request.platform, request.product_name)
+        try:
+            fal_contract.check_input(self.contract, payload)
+        except fal_contract.ContractError as exc:
+            raise PermanentError(f"entrada do workflow fora do contrato: {exc}") from None
         self.submit_count += 1
         return self.client.submit(wid, payload, start_timeout_s=self.start_timeout_s)
 
     def submit(self, request: WorkflowRequest) -> str:
         return self.submit_full(request).request_id
 
-    def poll(self, op_id: str, meta: dict | None = None, style: str | None = None) -> OpResult:
+    def poll(self, op_id: str, meta: dict | None = None) -> OpResult:
         meta = meta or {}
         wid = meta.get("workflow")
         status_url = meta.get("status_url") or (f"{QUEUE_URL}/{wid}/requests/{op_id}/status" if wid else None)
@@ -262,10 +268,23 @@ class FalWorkflowGenerator:
             return OpResult(OpState.FAILED, error=_msg(f"{et}: {st['error']}"), permanent=et not in ("server_error", "timeout"),
                             usage={"error_type": et})
         result = self.client.result(response_url)
-        pkg = fal_contract.parse_result(result, style or meta.get("style") or "dark", self.contract)
-        usage = {"request_id": op_id, "nodes": pkg.nodes,
+        pkg = fal_contract.parse_result(result, self.contract)
+        raw_text = self._raw_text(result)
+        # O formato do texto do no (JSON narration/title/caption) ainda e validado na rodada real: o bruto fica no log
+        # e no usage (texto gerado a partir da foto; sem dado pessoal), limitado em tamanho.
+        log.info("[fal %s] output bruto do no de texto: %r", op_id, raw_text[:TEXT_LOG_MAX])
+        usage = {"request_id": op_id, "nodes": pkg.nodes, "text_output": raw_text[:TEXT_LOG_MAX],
                  "inference_time": (st.get("metrics") or {}).get("inference_time")}
         return OpResult(OpState.SUCCEEDED, package=pkg, usage=usage, raw=result)
+
+    def _raw_text(self, result: dict) -> str:
+        envelope = isinstance(result, dict) and "output" in result and isinstance(result.get("nodes"), dict)
+        output = result.get("output") if envelope else result
+        path = (fal_contract.workflow_config(self.contract).get("output") or {}).get("text", "")
+        v = fal_contract.get_path(output, path)
+        if v is None:
+            return ""
+        return v if isinstance(v, str) else json.dumps(v, ensure_ascii=False, default=str)
 
     def cancel(self, op_id: str, meta: dict | None = None) -> None:
         url = (meta or {}).get("cancel_url")
@@ -281,12 +300,12 @@ class FalWorkflowGenerator:
             return self.client.download(artifact.url)
         raise PermanentError("artefato sem origem")
 
-    def recover_artifact(self, artifact: fal_contract.Artifact, style: str = "light") -> fal_contract.Artifact | None:
+    def recover_artifact(self, artifact: fal_contract.Artifact) -> fal_contract.Artifact | None:
         """Busca DE NOVO so este arquivo pelo request_id do no (nunca reexecuta o workflow). None se nao der."""
         rec = artifact.recover
         if not rec:
             return None
-        pend = fal_contract.recover_pending(self.contract, style)
+        pend = fal_contract.recover_pending(self.contract)
         if pend:     # recuperacao so depois de confirmar recover.hero e o request_id por no (rodada real)
             raise PermanentError("recuperacao de foto pelo no ainda A CONFIRMAR (manual): " + "; ".join(pend[:2]))
         res = self.client.node_result(rec["endpoint"], rec["request_id"])

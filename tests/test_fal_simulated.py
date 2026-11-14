@@ -27,10 +27,10 @@ def make(settings, ff, **kw):
     return SimulatedFalWorkflow(settings.data_dir, ff, FalSimScript(**kw))
 
 
-def run(sim, tmp_path, style="dark"):
+def run(sim, tmp_path, scene="home_light"):
     photo = tmp_path / "foto.jpg"
     photo.write_bytes(b"\xff\xd8\xff" + b"0" * 50)
-    info = sim.submit_full(WorkflowRequest(style=style, image_path=photo))
+    info = sim.submit_full(WorkflowRequest(image_path=photo, scene=scene))
     return info, sim.poll(info.request_id, info.meta)
 
 
@@ -112,7 +112,7 @@ def test_scripted_submit_failures(settings, ff, tmp_path, kind, exc):
     photo = tmp_path / "f.jpg"
     photo.write_bytes(b"\xff\xd8\xff")
     with pytest.raises(exc):
-        sim.submit_full(WorkflowRequest("dark", photo))
+        sim.submit_full(WorkflowRequest(photo))
     assert sim.submit_count == 0
 
 

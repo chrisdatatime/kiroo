@@ -76,11 +76,11 @@ class SimulatedFalWorkflow:
 
     # ---------------------------------------------------------------- contrato do gerador
     def params(self, request: WorkflowRequest) -> dict:
-        return {"style": request.style, "workflow": f"simulado/{request.style}"}
+        return {"scene": request.scene, "platform": request.platform, "workflow": "simulado/wf01white"}
 
     def estimate_cost(self, request: WorkflowRequest) -> tuple[float, str]:
         if self._estimator is not None:
-            cost, src = self._estimator(request.style)
+            cost, src = self._estimator()
             return cost, f"SIMULADO - custo equivalente estimado; {src}"
         return self.script.cost_usd, "SIMULADO - custo equivalente estimado"
 
@@ -104,16 +104,16 @@ class SimulatedFalWorkflow:
         self._raise_scripted()
         self.submit_count += 1
         op_id = f"sim-fal-{uuid.uuid4().hex[:10]}"
-        files = self._render(op_id, request.style)
-        self.ops.save(op_id, {"polls_left": self.script.polls_before_done, "style": request.style, "files": files,
+        files = self._render(op_id)
+        self.ops.save(op_id, {"polls_left": self.script.polls_before_done, "scene": request.scene, "platform": request.platform, "files": files,
                               "error": self.script.error_on_complete, "recoverable": sorted(self.script.recoverable),
                               "output_text": self._output_text()})
-        return SubmitInfo(op_id, {"workflow": f"simulado/{request.style}", "style": request.style})
+        return SubmitInfo(op_id, {"workflow": "simulado/wf01white", "scene": request.scene, "platform": request.platform})
 
     def submit(self, request: WorkflowRequest) -> str:
         return self.submit_full(request).request_id
 
-    def poll(self, op_id: str, meta: dict | None = None, style: str | None = None) -> OpResult:
+    def poll(self, op_id: str, meta: dict | None = None) -> OpResult:
         st = self.ops.load(op_id)
         if st["polls_left"] > 0:
             st["polls_left"] -= 1
@@ -147,7 +147,7 @@ class SimulatedFalWorkflow:
             return Path(artifact.path).read_bytes()
         raise PermanentError("artefato simulado sem origem")
 
-    def recover_artifact(self, artifact: Artifact, style: str = "light") -> Artifact | None:
+    def recover_artifact(self, artifact: Artifact) -> Artifact | None:
         """Recupera so este arquivo pelo no (simulado: so se o roteiro de falhas liberou)."""
         self.recover_calls += 1
         rec = artifact.recover or {}
@@ -161,7 +161,7 @@ class SimulatedFalWorkflow:
         return None
 
     # ---------------------------------------------------------------- geracao sintetica (FFmpeg)
-    def _render(self, op_id: str, style: str) -> dict:
+    def _render(self, op_id: str) -> dict:
         d = self.ops.dir / op_id
         d.mkdir(parents=True, exist_ok=True)
         s, w, h = self.script, *self.script.video_size

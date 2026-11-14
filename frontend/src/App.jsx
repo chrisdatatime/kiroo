@@ -35,7 +35,7 @@ import { deriveStage, sceneView, toCredits, creditsToUsd, endedOf, stoppedAt } f
 import { adjustmentGate, pauseKind } from './ui/pause.js';
 import { balanceLabel, needsConfirmation, usedLabel } from './ui/nextVideo.js';
 import { NO_BALANCE_CREATE, emptyMissionsCopy, firstVideoCopy } from './ui/welcome.js';
-import { falActive, falStatus, falStations, falAgentStatus, startFal, continueFal, offerFor, createLabel, endedLabel as falEndedLabel, availableStyles as falStyles, effectiveStyle as falStyleOf, gallery as falGallery, draftErrors as falDraftErrors, createPayload as falCreatePayload, newRequestId, IMAGE_EXT } from './ui/falFlow.js';
+import { falActive, falStatus, falStations, falAgentStatus, startFal, continueFal, offerFor, createLabel, endedLabel as falEndedLabel, availableScenes, availablePlatforms, effectiveScene, effectivePlatform, sceneLabel, platformLabel, receiveLine, gallery as falGallery, draftErrors as falDraftErrors, createPayload as falCreatePayload, newRequestId, IMAGE_EXT } from './ui/falFlow.js';
 import { adjustFunds, noBalanceFromError, noBalanceNotice } from './ui/credits.js';
 import Shell, { VIEWS } from './shell/Shell.jsx';
 import Central from './shell/Central.jsx';
@@ -111,7 +111,7 @@ export default class App extends React.Component {
       // sem sessão: home pública (null) ou tela de acesso ('login' | 'signup'); ?entrar abre direto o login
       entry: new URLSearchParams(window.location.search).has('entrar') ? 'login' : null,
       draft: Object.assign({}, EMPTY_DRAFT, LS.get('bc.draft', {})), files: [],
-      fal: { style: null, file: null, name: '', reqId: null, busy: false, error: null },   // fluxo foto + estilo (só com o motor novo)
+      fal: { scene: null, platform: null, file: null, name: '', reqId: null, busy: false, error: null },   // fluxo foto + cenário + plataforma (só com o motor novo)
       opts: null, creative: null, preview: null, reqText: '', caption: null, pilot: LS.get('bc.autonomy', 'assistido'),
       ui: { win: null, who: null, tab: 'produto', dirSub: 'dir', ctab: 'personagem', revSel: 1, revView: 'scene', adjust: false, issues: [], adjText: '', toast: null, tut: !LS.get('bc.tutDone', false), playing: false, budgetHit: false },
       cenario: normalizeTheme(LS.get(THEME_KEY, DEFAULT_THEME)),
@@ -745,15 +745,15 @@ export default class App extends React.Component {
   async falCreate() {
     const f = this.state.fal;
     if (f.busy) return;
-    const style = falStyleOf(this.state.S, f.style);          // só o Claro liberado: sempre ele, sem seletor
-    const errs = falDraftErrors({ ...f, style });
+    const scene = effectiveScene(this.state.S, f.scene), platform = effectivePlatform(this.state.S, f.platform);   // padrão: Casa Clara + Shopee Vídeo
+    const errs = falDraftErrors({ ...f, scene, platform });
     if (errs.length) { this.setFal({ error: 'Falta ' + errs.join(', ') + '.' }); return; }
     const reqId = f.reqId || newRequestId();
     this.setFal({ busy: true, reqId, error: null, noFunds: false });
-    const body = falCreatePayload({ style, file: f.file, requestId: reqId, name: f.name });
-    const r = await startFal(post, { body, cc: offerFor(this.state.S, style).cc });
+    const body = falCreatePayload({ scene, platform, file: f.file, requestId: reqId, name: f.name });   // só ids; o servidor monta o texto
+    const r = await startFal(post, { body, cc: offerFor(this.state.S).cc });
     if (!r.ok) { this.setFal({ busy: false, error: r.noFunds ? NO_BALANCE_CREATE : r.error, noFunds: !!r.noFunds }); return; }
-    this.setFal({ busy: false, reqId: null, file: null, name: '', style: null, error: null });
+    this.setFal({ busy: false, reqId: null, file: null, name: '', scene: null, platform: null, error: null });
     this.setState({ pid: r.pid, draftMode: false, caption: null, view: 'missao' });
     this.closeWin();
     await this.refresh();
@@ -772,14 +772,16 @@ export default class App extends React.Component {
     const s = this.state;
     if (!falActive(s.S, P, s.draftMode)) return null;
     const f = s.fal;
-    const style = falStyleOf(s.S, f.style);
+    const scene = effectiveScene(s.S, f.scene), platform = effectivePlatform(s.S, f.platform);
     const demo = !!(s.S && s.S.settings.mode !== 'real');
     return { P: P && P.engine === 'fal' ? P : null, draft: !!s.draftMode,
-      style, styles: falStyles(s.S), setStyle: (st) => this.setFal({ style: st }), file: f.file, name: f.name, setName: (e) => this.setFal({ name: e.target.value }),
+      scene, scenes: availableScenes(s.S), setScene: (id) => { const sc = availableScenes(s.S).find((x) => x.id === id); if (sc && !sc.locked) this.setFal({ scene: id }); },
+      platform, platforms: availablePlatforms(s.S), setPlatform: (id) => this.setFal({ platform: id }), receive: receiveLine(platformLabel(s.S, platform)),
+      sceneName: sceneLabel(s.S, scene), file: f.file, name: f.name, setName: (e) => this.setFal({ name: e.target.value }),
       clearFile: () => this.setFal({ file: null, reqId: null }), pick: (e) => this.falPick(e), pickFile: (file) => this.falPickFile(file),
-      errors: falDraftErrors({ ...f, style }), error: f.error || null, noFunds: !!f.noFunds, busy: f.busy, demo,
+      errors: falDraftErrors({ ...f, scene, platform }), error: f.error || null, noFunds: !!f.noFunds, busy: f.busy, demo,
       openBuy: () => { this.setFal({ error: null, noFunds: false }); this.setUI({ win: s.account && s.account.payments && s.account.payments.online ? 'buy' : 'credits' }); },
-      label: createLabel(offerFor(s.S, style), demo), create: () => this.falCreate(),
+      label: createLabel(offerFor(s.S), demo), create: () => this.falCreate(),
       close: () => { if (!f.busy) { this.setFal({ error: null }); this.closeWin(); } } };
   }
   // Missão fal (status real + esteira estimada + entrega).
@@ -1177,7 +1179,7 @@ export default class App extends React.Component {
       // Missão encerrada e cancelamento pela interface (com confirmação dentro do app)
       ended, endedText, canCancel: !!(P && !ended && P.status !== 'completed'),
       // Apresentação e formato ATIVOS (os que o motor usa para roteiro, prompts e revisão)
-      active: P && P.engine === 'fal' ? { presentation: null, label: 'Estilo ' + ((P.fal && P.fal.style_label) || ''), format: '', provisional: false }
+      active: P && P.engine === 'fal' ? { presentation: null, label: [(P.fal && P.fal.scene_label) || '', (P.fal && P.fal.platform_label) || ''].filter(Boolean).join(' · '), format: '', provisional: false }
         : P ? { presentation: P.presentation || null, label: P.presentation_label || (P.awaiting_direction ? 'A definir na Direção' : '—'),
         format: P.format_id || '', provisional: !!P.awaiting_direction } : null,
       // entrega

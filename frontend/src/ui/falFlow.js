@@ -1,20 +1,58 @@
-// Fluxo do motor fal.ai: 1 foto + estilo (Escuro/Claro) → vídeo (com narração) + 1 foto + título e legenda. Lógica pura (tests/falflow.test.mjs).
+// Fluxo do motor fal.ai: 1 foto + cenário + plataforma → vídeo (com narração) + 1 foto + título e legenda. Lógica pura (tests/falflow.test.mjs).
 // Só aparece quando o servidor diz `settings.video_engine === 'fal'` ou a produção aberta é `engine === 'fal'`.
+// O front manda SÓ os ids `scene` e `platform` (o servidor valida a allowlist e monta todo o texto de prompt).
 
-export const STYLES = [
-  { id: 'dark', label: 'Escuro', hint: 'Cinematográfico: iluminação dramática, cenário premium e apresentação de impacto.' },
-  { id: 'light', label: 'Claro', hint: 'Lifestyle: ambientes residenciais claros, luz natural e fundo predominantemente branco.' },
+export const DEFAULT_SCENE = 'home_light';
+export const DEFAULT_PLATFORM = 'shopee_video';
+// Reserva local (a fonte é settings.fal_scenes / fal_platforms, que traz o bloqueio por plano): mesmos ids e textos do servidor.
+export const SCENES = [
+  { id: 'home_light', label: 'Casa Clara', sub: 'Sala iluminada, tons neutros' },
+  { id: 'studio', label: 'Estúdio', sub: 'Cinza pérola, luz editorial' },
+  { id: 'natural', label: 'Natural', sub: 'Luz do dia e vegetação' },
+  { id: 'dark_premium', label: 'Escuro Premium', sub: 'Grafite e luz de luxo' },
 ];
-// Estilos que o servidor libera (settings.fal_styles). Hoje só o Claro: sem seletor, o envio é sempre o Claro.
-export const availableStyles = (S) => {
-  const ids = ((S && S.settings && S.settings.fal_styles) || []).map((x) => x.id);
-  const list = STYLES.filter((s) => ids.includes(s.id));
-  return list.length ? list : STYLES.filter((s) => s.id === 'light');
+export const PLATFORMS = [
+  { id: 'shopee_video', label: 'Shopee Vídeo', sub: 'Promocional, custo-benefício' },
+  { id: 'tiktok_shop', label: 'TikTok Shop', sub: 'Gancho rápido, achadinho' },
+  { id: 'mercado_livre', label: 'Mercado Livre', sub: 'Informativo e confiável' },
+];
+export const NAME_MAX = 80;
+export const sceneImage = (id) => `/assets/scenes/${id}.jpg`;
+export const sceneThumb = (id) => `/assets/scenes/${id}-thumb.jpg`;
+export const platformLogo = (id) => `/assets/platforms/${id}.png`;
+
+// Cenários exibidos: a lista do servidor (com `locked`/`required_plan_label` para acesso antecipado) manda; sem ela, a reserva.
+export const availableScenes = (S) => {
+  const srv = (S && S.settings && S.settings.fal_scenes) || [];
+  const list = srv.length ? srv : SCENES;
+  return list.map((x) => {
+    const base = SCENES.find((s) => s.id === x.id) || {};
+    return { id: x.id, label: x.label || base.label, sub: x.subtitle || x.sub || base.sub, locked: !!x.locked,
+      requiredPlan: x.required_plan_label || null };
+  });
 };
-export const effectiveStyle = (S, chosen) => {
-  const av = availableStyles(S);
-  return av.some((s) => s.id === chosen) ? chosen : (av.length === 1 ? av[0].id : null);
+export const availablePlatforms = (S) => {
+  const srv = (S && S.settings && S.settings.fal_platforms) || [];
+  const list = srv.length ? srv : PLATFORMS;
+  return list.map((x) => {
+    const base = PLATFORMS.find((s) => s.id === x.id) || {};
+    return { id: x.id, label: x.label || base.label, sub: x.subtitle || x.sub || base.sub };
+  });
 };
+// "Disponível no plano Escala" (cadeado): só para cenário de acesso antecipado que este plano ainda não vê.
+export const lockText = (sc) => (sc && sc.locked ? `Disponível no plano ${sc.requiredPlan || 'Escala'}` : null);
+// Escolha efetiva: a feita pelo cliente se existir e estiver liberada; senão o padrão (Casa Clara + Shopee Vídeo).
+export const effectiveScene = (S, chosen) => {
+  const av = availableScenes(S);
+  const ok = (id) => av.some((s) => s.id === id && !s.locked);
+  return ok(chosen) ? chosen : (ok(DEFAULT_SCENE) ? DEFAULT_SCENE : ((av.find((s) => !s.locked) || {}).id || DEFAULT_SCENE));
+};
+export const effectivePlatform = (S, chosen) => {
+  const av = availablePlatforms(S);
+  return av.some((p) => p.id === chosen) ? chosen : DEFAULT_PLATFORM;
+};
+export const sceneLabel = (S, id) => (availableScenes(S).find((s) => s.id === id) || {}).label || '';
+export const platformLabel = (S, id) => (availablePlatforms(S).find((p) => p.id === id) || {}).label || '';
 export const FINAL_FINALIZING = 'Estamos finalizando o seu pacote. Avisaremos quando estiver pronto.';
 export const IMAGE_EXT = /\.(jpe?g|png|webp)$/i;
 
@@ -32,17 +70,23 @@ export function newRequestId(rnd = () => globalThis.crypto && globalThis.crypto.
   return id || `r${Date.now().toString(36)}${Math.random().toString(36).slice(2, 12)}`;
 }
 
-export function draftErrors({ style, file }) {
+export function draftErrors({ scene, platform, file }) {
   const e = [];
   if (!file) e.push('a foto do produto');
   else if (!IMAGE_EXT.test(file.name || '')) e.push('uma foto JPG, PNG ou WEBP');
-  if (!style) e.push('o estilo (Escuro ou Claro)');
+  if (!scene) e.push('o cenário');
+  if (!platform) e.push('a plataforma');
   return e;
 }
 
-export function createPayload({ style, file, requestId, name }) {
-  const body = { style, client_request_id: requestId, files: [{ name: file.name, data: file.data }] };
-  if (name && name.trim()) body.name = name.trim();
+// Nome opcional: sem quebras de linha nem caracteres de controle, no máximo 80 (o servidor repete a limpeza).
+export const cleanName = (name) => String(name || '').replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, NAME_MAX).trim();
+
+// Só ids: nunca texto de prompt.
+export function createPayload({ scene, platform, file, requestId, name }) {
+  const body = { scene, platform, client_request_id: requestId, files: [{ name: file.name, data: file.data }] };
+  const nm = cleanName(name);
+  if (nm) body.name = nm;
   return body;
 }
 
@@ -78,12 +122,14 @@ export async function startFal(post, { body, cc }) {
 }
 
 // Preço do botão "Criar vídeo · N créditos": o mesmo pré-orçamento que o servidor reserva e confere no /confirm.
-export function offerFor(S, styleId) {
-  const o = ((S && S.settings && S.settings.fal_styles) || []).find((x) => x.id === styleId);
+// Preço único: igual para qualquer cenário e plataforma (settings.fal_offer).
+export function offerFor(S) {
+  const o = (S && S.settings && S.settings.fal_offer) || null;
   return o ? { cc: o.cc || 0, credits: o.credits || '0' } : { cc: 0, credits: '0' };
 }
 export const createLabel = (offer, demo) => (demo || !offer.cc ? 'Criar vídeo' : `Criar vídeo · ${offer.credits} créditos`);
-export const RECEIVE_LINE = 'Você recebe: vídeo ~15 s com narração, 1 foto, título e legenda. Se falhar por erro técnico, não é cobrado.';
+export const receiveLine = (platform) => `Você recebe vídeo de ~15 s com narração, 1 foto, título e legenda para ${platform || 'a plataforma escolhida'}. Se falhar por erro técnico, não é cobrado.`;
+export const RECEIVE_SHORT = 'Vídeo de ~15 s, 1 foto, título e legenda. Falhou por erro técnico? Não cobra.';
 
 // ---------------------------------------------------------------- esteira (ESTIMATIVA por tempo + etapas reais do servidor)
 // Os níveis por etapa vêm de falBelt.js (leia o comentário lá): PLANEJAMENTO..VÍDEOS são ESTIMADOS pelo tempo desde o envio
@@ -212,9 +258,9 @@ export function gallery(P) {
   };
 }
 
-// Linhas do "Seu próximo vídeo" no motor fal.ai (o resumo do servidor traz engine/style).
+// Linhas do "Seu próximo vídeo" no motor fal.ai (o resumo do servidor traz engine/scene/platform).
 export function falSummaryRows(sm, credits) {
-  const rows = [['Produto', sm.product || 'A partir da sua foto'], ['Estilo', (STYLES.find((s) => s.id === sm.style) || {}).label || '—'],
+  const rows = [['Produto', sm.product || 'A partir da sua foto'], ['Cenário', (SCENES.find((s) => s.id === sm.scene) || {}).label || '—'], ['Plataforma', (PLATFORMS.find((p) => p.id === sm.platform) || {}).label || '—'],
     ['O que você recebe', 'Vídeo de ~15 s (vertical, com narração) + 1 foto publicitária + título e legenda'],
     ['Custo total autorizado', credits(sm.total_credits) + (sm.total_brl ? ` (≈ R$ ${sm.total_brl})` : '')],
     ['Saldo atual', sm.exempt ? 'Conta isenta' : credits(sm.balance)]];

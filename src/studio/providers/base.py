@@ -66,10 +66,13 @@ class VideoRequest:
 
 @dataclass
 class WorkflowRequest:
-    """Um pedido ao workflow da fal.ai: a foto do produto e o estilo (dark | light). O workflow e escolhido pelo estilo."""
+    """Um pedido ao workflow unico da fal.ai: a foto do produto, o cenario e a plataforma (IDs ja validados) e o nome
+    opcional do produto (dado, nunca instrucao). Os textos de prompt sao montados em prompts/production.py."""
 
-    style: str
     image_path: Path
+    scene: str = "home_light"
+    platform: str = "shopee_video"
+    product_name: str = ""
 
 
 class Generator(Protocol):

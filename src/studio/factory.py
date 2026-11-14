@@ -31,7 +31,7 @@ def _build_fal(settings: Settings, ff: FFmpeg, sim_fal_script):
     """Gerador de workflows do motor fal.ai. Simulado em DEMO; real so com FAL_KEY. Nunca levanta por falta de chave:
     quem precisa dele (producoes engine=fal) recebe o erro claro na hora de usar."""
     from . import budget as budget_mod
-    estimator = lambda style: budget_mod.workflow_cost(style)  # noqa: E731
+    estimator = budget_mod.workflow_cost
     if settings.mode == "simulated":
         from .providers.simulated_fal import FalSimScript, SimulatedFalWorkflow
         return SimulatedFalWorkflow(settings.data_dir, ff, sim_fal_script or FalSimScript(), estimator=estimator)
@@ -44,7 +44,7 @@ def _build_fal(settings: Settings, ff: FFmpeg, sim_fal_script):
     except ContractError:
         return None
     client = FalClient(settings.fal_api_key, settings.fal_billing_key)
-    return FalWorkflowGenerator(client, contract, {"dark": settings.workflow_id_dark, "light": settings.workflow_id_light},
+    return FalWorkflowGenerator(client, contract, settings.workflow_id,
                                 start_timeout_s=settings.fal_timeout_s, estimator=estimator)
 
 

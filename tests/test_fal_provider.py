@@ -10,6 +10,7 @@ import pytest
 from studio import fal_contract as fc, paid_gate
 from studio.config import PROJECT_ROOT
 from studio.providers.base import (OpState, PermanentError, ProviderBillingError, TransientError, WorkflowRequest)
+from studio.prompts.production import ARGUMENT_KEYS, PLATFORMS, SCENES, build_fal_arguments
 from studio.providers.fal import FalClient, FalWorkflowGenerator, UncertainSubmit, billing_total
 
 from .conftest import fal_host_blocked
@@ -17,7 +18,7 @@ from .fal_fixtures import BASE, sample_contract, sample_result
 
 KEY = "fal-FAKE-key-0123456789abcdef"
 WF = "workflows/acme/escuro"
-META = {"workflow": WF, "style": "dark"}
+META = {"workflow": WF}
 
 
 class Fake:
@@ -71,8 +72,7 @@ def fake():
 @pytest.fixture
 def gen(fake):
     client = FalClient(KEY, "bill-FAKE-0123456789", transport=httpx.MockTransport(fake))
-    return FalWorkflowGenerator(client, sample_contract(), {"dark": WF, "light": "workflows/acme/claro"},
-                                start_timeout_s=120, estimator=lambda style: (2.0, "teste"))
+    return FalWorkflowGenerator(client, sample_contract(), WF, start_timeout_s=120, estimator=lambda: (2.0, "teste"))
 
 
 @pytest.fixture
@@ -82,8 +82,8 @@ def photo(tmp_path):
     return p
 
 
-def req(photo, style="dark"):
-    return WorkflowRequest(style=style, image_path=photo)
+def req(photo, scene="home_light", platform="shopee_video", name=""):
+    return WorkflowRequest(image_path=photo, scene=scene, platform=platform, product_name=name)
 
 
 # ---------------------------------------------------------------- envio
@@ -93,7 +93,7 @@ def test_submit_uploads_photo_then_submits_with_contract_input(gen, fake, photo)
     assert info.meta["status_url"].endswith("/requests/req-1/status")
     assert [m for m, _ in fake.calls] == ["POST", "PUT", "POST"]       # iniciar upload, enviar, executar o workflow
     k = f"POST queue.fal.run/{WF}"
-    assert json.loads(fake.bodies[k]) == {"image_url": "https://v3.fal.media/files/up/foto.jpg"}
+    assert json.loads(fake.bodies[k]) == build_fal_arguments("https://v3.fal.media/files/up/foto.jpg", "home_light", "shopee_video")
     h = fake.headers[k]
     assert h["authorization"] == f"Key {KEY}"
     assert h["x-fal-workflow-envelope"] == "true" and h["x-fal-no-retry"] == "1"
@@ -102,9 +102,21 @@ def test_submit_uploads_photo_then_submits_with_contract_input(gen, fake, photo)
     assert "expiration_duration_seconds" in init["x-fal-object-lifecycle-preference"]
 
 
-def test_chosen_workflow_follows_style(gen, fake, photo):
-    gen.submit_full(req(photo, "light"))
-    assert any("queue.fal.run/workflows/acme/claro" in u for _, u in fake.calls)
+@pytest.mark.parametrize("scene", sorted(SCENES))
+@pytest.mark.parametrize("platform", sorted(PLATFORMS))
+def test_one_workflow_for_every_scene_and_platform_with_the_six_arguments(gen, fake, photo, scene, platform):
+    gen.submit_full(req(photo, scene, platform, "Fone X"))
+    k = f"POST queue.fal.run/{WF}"
+    body = json.loads(fake.bodies[k])
+    assert list(body) == list(ARGUMENT_KEYS) and all(isinstance(v, str) and v.strip() for v in body.values())
+    assert body == build_fal_arguments("https://v3.fal.media/files/up/foto.jpg", scene, platform, "Fone X")
+    assert sum("queue.fal.run" in u and m == "POST" for m, u in fake.calls) == 1       # um unico endpoint
+
+
+def test_invalid_scene_never_reaches_the_network(gen, fake, photo):
+    with pytest.raises(PermanentError, match="invalida"):
+        gen.submit_full(req(photo, "neon"))
+    assert fake.calls == []
 
 
 def test_kill_switch_blocks_before_any_network(gen, fake, photo, monkeypatch):
@@ -114,33 +126,33 @@ def test_kill_switch_blocks_before_any_network(gen, fake, photo, monkeypatch):
     assert fake.calls == []
 
 
-CLARO = "workflows/acme/claro"
+CLARO = "workflows/christiandeluco/wf01white"
 
 
 def real_gen(fake, **kw):
     real = fc.load_contract(PROJECT_ROOT / "profiles")
-    return FalWorkflowGenerator(FalClient(KEY, transport=httpx.MockTransport(fake)), real, {"light": CLARO}, **kw)
+    return FalWorkflowGenerator(FalClient(KEY, transport=httpx.MockTransport(fake)), real, CLARO, **kw)
 
 
 def test_real_submit_is_allowed_while_recover_is_pending_and_always_sends_the_envelope_header(fake, photo):
     g = real_gen(fake)
-    assert fc.recover_pending(g.contract, "light")                         # recover.hero e request_id por no seguem pendentes
-    info = g.submit_full(req(photo, "light"))
+    assert fc.recover_pending(g.contract)                         # recover.hero e request_id por no seguem pendentes
+    info = g.submit_full(req(photo, "studio", "tiktok_shop"))
     assert info.request_id == "req-1" and info.meta["workflow"] == CLARO
     k = f"POST queue.fal.run/{CLARO}"
-    assert json.loads(fake.bodies[k]) == {"image_url": "https://v3.fal.media/files/up/foto.jpg"}      # so image_url
+    assert json.loads(fake.bodies[k]) == build_fal_arguments("https://v3.fal.media/files/up/foto.jpg", "studio", "tiktok_shop")
     assert fake.headers[k]["x-fal-workflow-envelope"] == "true"
     r = real_gen(fake)
-    r.poll("req-1", {"workflow": CLARO, "style": "light"}, "light")
+    r.poll("req-1", {"workflow": CLARO})
     get_result = [h for key, h in fake.headers.items() if key.startswith("GET queue.fal.run") and not key.endswith("/status")]
     assert get_result and all(h["x-fal-workflow-envelope"] == "true" for h in get_result)          # tambem ao buscar o resultado
 
 
 def test_pending_in_the_send_path_still_refuses_the_real_submit(fake, photo):
     g = real_gen(fake)
-    g.contract["styles"]["light"]["pending"] = ["output.video: A CONFIRMAR"]          # pendencia de ENVIO (nao de recuperacao)
+    g.contract["workflow"]["pending"] = ["output.video: A CONFIRMAR"]          # pendencia de ENVIO (nao de recuperacao)
     with pytest.raises(PermanentError, match="A CONFIRMAR"):
-        g.submit_full(req(photo, "light"))
+        g.submit_full(req(photo))
     assert fake.calls == []
 
 
@@ -148,7 +160,7 @@ def test_photo_recovery_is_refused_while_recover_is_pending_and_makes_no_call(fa
     g = real_gen(fake)
     art = fc.Artifact(kind="image", recover={"endpoint": "fal-ai/img/a", "request_id": "r-hero", "path": "images.0.url"})
     with pytest.raises(PermanentError, match="recuperacao de foto"):
-        g.recover_artifact(art, "light")
+        g.recover_artifact(art)
     assert fake.calls == []                                                           # nenhum GET no no
 
 
@@ -158,8 +170,8 @@ def test_poll_returns_the_raw_envelope_for_result_json(gen, fake):
 
 
 def test_missing_workflow_id_is_a_clear_error(fake, photo):
-    g = FalWorkflowGenerator(FalClient(KEY, transport=httpx.MockTransport(fake)), sample_contract(), {"dark": None})
-    with pytest.raises(PermanentError, match="WORKFLOW_ID_DARK"):
+    g = FalWorkflowGenerator(FalClient(KEY, transport=httpx.MockTransport(fake)), sample_contract(), None)
+    with pytest.raises(PermanentError, match="WORKFLOW_ID"):
         g.submit_full(req(photo))
 
 
@@ -272,7 +284,7 @@ def test_recover_without_node_info_returns_none(gen):
 
 
 def test_billing_needs_its_own_key(fake):
-    g = FalWorkflowGenerator(FalClient(KEY, None, transport=httpx.MockTransport(fake)), sample_contract(), {"dark": WF})
+    g = FalWorkflowGenerator(FalClient(KEY, None, transport=httpx.MockTransport(fake)), sample_contract(), WF)
     with pytest.raises(PermanentError, match="FAL_BILLING_KEY"):
         g.reconcile_cost(["req-1"])
 
@@ -307,3 +319,11 @@ def test_real_network_to_fal_is_blocked_in_tests():
             socket.create_connection((host, 443), timeout=1)
         with pytest.raises(OSError, match="bloqueada"):
             socket.getaddrinfo(host, 443)
+
+
+def test_poll_logs_and_keeps_the_raw_text_output_of_the_text_node(gen, fake, caplog):
+    import logging
+    with caplog.at_level(logging.INFO, logger="studio"):
+        r = gen.poll("req-1", META)
+    assert r.usage["text_output"] == fake.result["output"]["output"]
+    assert "output bruto do no de texto" in caplog.text

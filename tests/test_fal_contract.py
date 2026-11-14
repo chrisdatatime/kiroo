@@ -16,7 +16,7 @@ C = sample_contract()
 
 
 def parse(**kw):
-    return fc.parse_result(sample_result(**kw), "dark", C)
+    return fc.parse_result(sample_result(**kw), C)
 
 
 def test_complete_package():
@@ -33,7 +33,7 @@ def test_intermediate_audio_output_is_ignored():
 
 
 def test_without_envelope_the_result_is_the_output():
-    pkg = fc.parse_result(sample_result(envelope=False), "light", C)
+    pkg = fc.parse_result(sample_result(envelope=False), C)
     assert pkg.failure_kind() is None and pkg.nodes == {} and pkg.hero.recover is None
 
 
@@ -52,7 +52,7 @@ def test_hero_missing_url_keeps_only_the_recovery_handle():
 
 
 def test_missing_hero_without_recovery_info_is_incomplete():
-    pkg = fc.parse_result(sample_result(drop=["images.0"], envelope=False), "dark", C)
+    pkg = fc.parse_result(sample_result(drop=["images.0"], envelope=False), C)
     assert pkg.missing() == ["hero"] and pkg.failure_kind() == "incomplete"
 
 
@@ -85,7 +85,7 @@ def test_non_url_values_are_ignored():
     r = sample_result(envelope=False)
     r["video"]["url"] = "file:///etc/passwd"
     r["images"][0]["url"] = "javascript:alert(1)"
-    pkg = fc.parse_result(r, "dark", C)
+    pkg = fc.parse_result(r, C)
     assert pkg.video is None and pkg.hero is None and pkg.missing() == ["video", "hero"]
 
 
@@ -101,26 +101,47 @@ def test_get_path_is_safe():
         assert fc.get_path({"a": [{"b": 1}]}, bad) is None
 
 
-def test_build_input_sends_only_the_image_url():
-    assert fc.build_input(C, "dark", "https://x/y.jpg") == {"image_url": "https://x/y.jpg"}
+def _args(**over):
+    from studio.prompts.production import build_fal_arguments
+    return {**build_fal_arguments("https://x/y.jpg", "home_light", "shopee_video", "Fone X"), **over}
+
+
+def test_check_input_accepts_exactly_the_six_fields():
+    args = _args()
+    assert fc.check_input(C, args) is args
+    assert list(args) == C["workflow"]["input"]["fields"]
+
+
+@pytest.mark.parametrize("bad", [{"scene_prompt": ""}, {"video_prompt": "  "}, {"extra_field": "x"}])
+def test_check_input_refuses_missing_empty_or_extra_fields(bad):
+    args = _args(**bad)
+    with pytest.raises(fc.ContractError):
+        fc.check_input(C, args)
 
 
 def test_real_contract_confirmed_fields_and_open_items():
     real = fc.load_contract(PROJECT_ROOT / "profiles")
-    for style in fc.STYLES:
-        cfg = real["styles"][style]
-        assert cfg["input"] == {"image_field": "image_url", "extra": {}}                  # so image_url
-        assert cfg["output"] == {"video": "video.url", "image": "images.0.url", "text": "output"}
-        assert all(k not in cfg["output"] for k in ("narration", "music", "description", "narration_text"))
-        assert cfg["recover"] == {"hero": {"node_id": "node-oTeZSiC32m", "path": "images.0.url"}}
-        # nada bloqueia o ENVIO; os 2 itens abertos bloqueiam SO a recuperacao de foto
-        assert fc.placeholders(real, style, include_recover=False) == [] and cfg["pending"] == []
-        pend = fc.recover_pending(real, style)
-        assert len(pend) == 2 and all("A CONFIRMAR" in p for p in pend)
-        assert "recover.hero" in pend[0] and "request_id" in pend[1]
-        assert fc.placeholders(real, style) == pend
-        assert not any(k in p for p in pend for k in ("image_url", "video.url", "output.image", "indice"))
-        assert fc.build_input(real, style, "https://x/y.jpg") == {"image_url": "https://x/y.jpg"}
+    assert "styles" not in real                                                         # workflow UNICO: nada de dark/light
+    cfg = real["workflow"]
+    assert cfg["workflow_env"] == "WORKFLOW_ID"
+    assert cfg["input"] == {"fields": ["image_url", "scene_prompt", "platform_strategy", "product_context", "video_prompt",
+                                       "copywriting_prompt"]}
+    assert cfg["output"] == {"video": "video.url", "image": "images.0.url", "text": "output"}
+    assert all(k not in cfg["output"] for k in ("narration", "music", "description", "narration_text"))
+    assert cfg["recover"] == {"hero": {"node_id": "node-oTeZSiC32m", "path": "images.0.url"}}
+    # nada bloqueia o ENVIO; os 2 itens abertos bloqueiam SO a recuperacao de foto
+    assert fc.placeholders(real, include_recover=False) == [] and cfg["pending"] == []
+    pend = fc.recover_pending(real)
+    assert len(pend) == 2 and all("A CONFIRMAR" in p for p in pend)
+    assert "recover.hero" in pend[0] and "request_id" in pend[1]
+    assert fc.placeholders(real) == pend
+    assert not any(k in p for p in pend for k in ("image_url", "video.url", "output.image", "indice"))
+    assert fc.check_input(real, _args())
+
+
+def test_narration_in_the_text_output_is_ignored_by_the_parser():
+    t, c, w = fc.parse_text_output('{"narration": "fala", "title": "T", "caption": "C"}')
+    assert (t, c, w) == ("T", "C", [])
 
 
 # ---------------------------------------------------------------- forma real da resposta (fixture SINTETICA)
@@ -134,7 +155,7 @@ def shape():
 
 def parse_shape(**over):
     r = {**shape(), **over}
-    return fc.parse_result(r, "light", REAL)
+    return fc.parse_result(r, REAL)
 
 
 def test_shape_fixture_is_synthetic_and_not_in_the_real_folder():
@@ -200,6 +221,6 @@ def test_fenced_json_with_empty_fields_warns():
     assert (t, c) == ("", "") and "nao identificou" in w[0]
 
 
-def test_unknown_style_is_refused():
+def test_contract_without_the_workflow_block_is_refused():
     with pytest.raises(fc.ContractError):
-        fc.parse_result({}, "neon", C)
+        fc.parse_result({}, {"styles": {}})

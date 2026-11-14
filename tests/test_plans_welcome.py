@@ -100,14 +100,19 @@ def test_whatsapp_only_for_pro_and_escala_and_only_with_the_env(db, monkeypatch)
     assert plans.view(db, wid)["support"]["whatsapp"] is None                         # sem a variável, sem botão
 
 
-def test_early_access_style_only_shows_for_escala(settings):
-    marked = {"styles": {"light": {"early_access_plan": "escala"}}}
-    assert fal_contract.styles_for_plan(settings, "pro", marked) == ()
-    assert fal_contract.styles_for_plan(settings, "escala", marked) == ("light",)
-    # o contrato de verdade não marca nenhum estilo hoje: todos veem o Claro
-    assert fal_contract.styles_for_plan(settings, "free") == ("light",)
-    contract = fal_contract.load_contract(settings.profiles_dir)
-    assert all(fal_contract.early_access_plan(contract, s) is None for s in fal_contract.STYLES)
+def test_early_access_scene_only_shows_for_escala(monkeypatch):
+    from studio.prompts import production as pp
+    monkeypatch.setitem(pp.SCENES["dark_premium"], "early_access_plan", "escala")
+    assert "dark_premium" not in pp.scenes_for_plan("free") and "dark_premium" not in pp.scenes_for_plan("pro")
+    assert "dark_premium" in pp.scenes_for_plan("escala")
+    assert {"home_light", "studio", "natural"} <= set(pp.scenes_for_plan("free"))      # os demais seguem liberados
+    assert pp.scene_early_access("dark_premium") == "escala" and pp.scene_early_access("studio") is None
+
+
+def test_no_scene_is_early_access_today():
+    from studio.prompts import production as pp
+    assert all(pp.scene_early_access(s) is None for s in pp.SCENES)
+    assert pp.scenes_for_plan("free") == tuple(pp.SCENES)
 
 
 # ================================================================= fila prioritária

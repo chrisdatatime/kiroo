@@ -521,6 +521,16 @@ def _m012_tax_doc(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE users ADD COLUMN tax_doc TEXT")
 
 
+def _m013_scene_platform(conn: sqlite3.Connection) -> None:
+    """Workflow único da fal.ai: cenário e plataforma por produção (substituem o estilo Escuro/Claro). NOT NULL com
+    padrão (home_light / shopee_video), para o histórico mostrar a escolha e o reprocesso repetir o mesmo pedido.
+    A coluna `style` antiga fica (linhas antigas); produções do estilo Escuro viram o cenário dark_premium."""
+    for col, decl in (("scene", "TEXT NOT NULL DEFAULT 'home_light'"), ("platform", "TEXT NOT NULL DEFAULT 'shopee_video'")):
+        if col not in _columns(conn, "productions"):
+            conn.execute(f"ALTER TABLE productions ADD COLUMN {col} {decl}")
+    conn.execute("UPDATE productions SET scene='dark_premium' WHERE style='dark' AND scene='home_light'")
+
+
 MIGRATIONS: list[Migration] = [
     Migration(1, "schema completo", _m001_baseline),
     Migration(2, "convites de uso único e consentimento", _m002_invites_consent),
@@ -534,6 +544,7 @@ MIGRATIONS: list[Migration] = [
     Migration(10, "compra de créditos pelo Asaas: payments, payment_events e payment_id no livro", _m010_payments),
     Migration(11, "bônus de boas-vindas: uma decisão por pessoa, únicos por e-mail e dispositivo", _m011_welcome_bonus),
     Migration(12, "CPF/CNPJ para nota fiscal na conta", _m012_tax_doc),
+    Migration(13, "workflow único fal.ai: cenário e plataforma por produção", _m013_scene_platform),
 ]
 LATEST = MIGRATIONS[-1].version
 assert [m.version for m in MIGRATIONS] == list(range(1, LATEST + 1)), "migrações devem ser 1..N em ordem"

@@ -11,14 +11,13 @@ import copy
 SAMPLE_CONTRACT = {
     "version": 2,
     "status": "AMOSTRA DE TESTE",
-    "styles": {
-        style: {
-            "workflow_env": f"WORKFLOW_ID_{style.upper()}",
-            "input": {"image_field": "image_url", "extra": {}},
-            "expected_duration_s": 15,
-            "output": {"video": "video.url", "image": "images.0.url", "text": "output"},
-            "recover": {"hero": {"node_id": "n_hero", "path": "image.url"}},
-        } for style in ("dark", "light")
+    "workflow": {
+        "workflow_env": "WORKFLOW_ID",
+        "input": {"fields": ["image_url", "scene_prompt", "platform_strategy", "product_context", "video_prompt",
+                             "copywriting_prompt"]},
+        "expected_duration_s": 15,
+        "output": {"video": "video.url", "image": "images.0.url", "text": "output"},
+        "recover": {"hero": {"node_id": "n_hero", "path": "image.url"}},
     },
 }
 
@@ -29,7 +28,7 @@ def sample_contract():
     return copy.deepcopy(SAMPLE_CONTRACT)
 
 
-TEXT = '{"title": "Copo azul de aco inox", "caption": "Mantem a bebida gelada por horas."}'
+TEXT = '{"narration": "Fala de 15 s.", "title": "Copo azul de aco inox", "caption": "Mantem a bebida gelada por horas."}'
 
 
 def sample_result(*, drop=(), envelope=True, text=TEXT):

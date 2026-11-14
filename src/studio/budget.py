@@ -130,26 +130,24 @@ def review_cost(op: str = "review_image") -> float:
 WORKFLOW_PLACEHOLDER_NOTE = "PLACEHOLDER até a medição real (Fase 5)"
 
 
-def workflow_cost(style: str) -> tuple[float, str]:
-    """Custo estimado (US$) de UMA execução do workflow do estilo: o pacote completo (vídeo + 3 imagens + áudios).
-    Vem da tabela de custos por operação (workflow_dark / workflow_light), nunca de número solto."""
-    if style not in ("dark", "light"):
-        raise ValueError(f"estilo inválido: {style!r}")
-    row = (cost_table()["operations"] or {}).get(f"workflow_{style}")
+def workflow_cost() -> tuple[float, str]:
+    """Custo estimado (US$) de UMA execução do workflow único: o pacote completo (vídeo + foto + texto).
+    Vem da tabela de custos por operação (`workflow`), nunca de número solto; igual para todo cenário e plataforma."""
+    row = (cost_table()["operations"] or {}).get("workflow")
     if not row or row.get("usd") is None:
-        raise ValueError(f"tabela de custos sem workflow_{style}")
+        raise ValueError("tabela de custos sem workflow")
     note = WORKFLOW_PLACEHOLDER_NOTE if row.get("placeholder") else "tabela de custos por operação"
-    return float(row["usd"]), f"workflow_{style}: {note}"
+    return float(row["usd"]), f"workflow: {note}"
 
 
-def estimate_workflow(settings, style: str) -> dict:
+def estimate_workflow(settings) -> dict:
     """Pré-orçamento do pacote completo do motor fal.ai (mesma forma de `estimate_production`).
-    `cc` = PREÇO FIXO do vídeo em créditos (catálogo, ex.: 20 créditos), igual para Claro e Escuro: a variação do custo
-    da fal não chega ao cliente. `usd` continua sendo o custo estimado interno, base do orçamento operacional e dos
-    tetos (reserva interna em US$, separada do preço em créditos)."""
+    `cc` = PREÇO FIXO do vídeo em créditos (catálogo, ex.: 20 créditos), igual para qualquer cenário e plataforma.
+    `usd` continua sendo o custo estimado interno, base do orçamento operacional e dos tetos (reserva interna em US$,
+    separada do preço em créditos)."""
     from . import catalog
-    usd = round(workflow_cost(style)[0], 4)
-    return {"usd": usd, "cc": catalog.video_price_cc(), "parts_usd": {"workflow": usd}, "scenes": 0, "style": style,
+    usd = round(workflow_cost()[0], 4)
+    return {"usd": usd, "cc": catalog.video_price_cc(), "parts_usd": {"workflow": usd}, "scenes": 0,
             "image_tries_per_scene": 0, "video_tries_per_scene": 0, "included_adjustments_per_scene": 0}
 
 
@@ -212,7 +210,7 @@ def next_video_summary(db, settings, pid: str) -> dict:
     return {
         "product": product.get("name") or "", "format": profile.get("aspect_ratio") or "9:16",
         "scenes": 0 if fal else (len(profile.get("scenes") or []) or 3),
-        "engine": "fal" if fal else "gemini", "style": p["style"] if fal else None,
+        "engine": "fal" if fal else "gemini", "scene": p["scene"] if fal else None, "platform": p["platform"] if fal else None,
         "included_adjustments_per_scene": 0 if fal else included_adjustments_per_scene(),
         "total_cc": total, "total_credits": fmt(total),
         "total_brl": (f"{brl:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") if brl is not None else None),

@@ -9,7 +9,8 @@ Duas camadas, de proposito:
   `profiles/fal/workflow_contract.json` e neste modulo (`parse_result`). O que ainda depende da fixture real (Fase 0)
   fica `A CONFIRMAR` la.
 
-O workflow tem UM input (`image_url`) e devolve `video`, `images` (1 foto hero) e `output` (texto com JSON
+O workflow e UNICO (wf01white, qualquer cenario e plataforma) e recebe 6 inputs (`image_url` + 5 textos montados em
+`prompts/production.py`); devolve `video`, `images` (1 foto hero) e `output` (texto com JSON
 `{"title","caption"}`). A saida `audio` do display e intermediaria de TTS: ignorada, nunca entregue nem validada.
 """
 
@@ -21,8 +22,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 PLACEHOLDER = "A CONFIRMAR"
-STYLES = ("dark", "light")
-STYLE_LABELS = {"dark": "Escuro", "light": "Claro"}
 HERO_LABEL = "Hero Shot"
 HERO_FILE = "product_image_01.jpg"
 FINAL_VIDEO = "final.mp4"
@@ -99,38 +98,12 @@ def _is_placeholder(v) -> bool:
     return isinstance(v, str) and v.strip().upper().startswith(PLACEHOLDER)
 
 
-def enabled_styles(settings) -> tuple[str, ...]:
-    """Estilos que o cliente pode escolher: so o Claro; o Escuro esta pronto no codigo, mas desligado por
-    STUDIO_FAL_DARK_ENABLED (padrao false)."""
-    return tuple(s for s in STYLES if s == "light" or (s == "dark" and getattr(settings, "fal_dark_enabled", False)))
-
-
-def early_access_plan(contract: dict | None, style: str) -> str | None:
-    """`early_access_plan` do estilo no contrato ("escala"): o estilo só aparece para contas com esse plano ou maior
-    (vantagem "Novos estilos antes de todos"). Sem o campo (hoje, nenhum estilo), vale para todos."""
-    cfg = ((contract or {}).get("styles") or {}).get(style) or {}
-    v = cfg.get("early_access_plan")
-    return v if isinstance(v, str) and v else None
-
-
-def styles_for_plan(settings, plan: str, contract: dict | None = None) -> tuple[str, ...]:
-    """Estilos liberados (`enabled_styles`) que ESTE plano vê: os de acesso antecipado só a partir do plano marcado."""
-    from .plans import at_least
-    if contract is None:
-        try:
-            contract = load_contract(settings.profiles_dir)
-        except ContractError:
-            contract = {}
-    return tuple(s for s in enabled_styles(settings)
-                 if (tier := early_access_plan(contract, s)) is None or at_least(plan, tier))
-
-
-def placeholders(contract: dict, style: str, include_recover: bool = True) -> list[str]:
+def placeholders(contract: dict, include_recover: bool = True) -> list[str]:
     """Pendencias do estilo (A CONFIRMAR). Com `include_recover=False` so as que BLOQUEIAM O ENVIO (input, output e
     `pending`); `recover` e `pending_recover` bloqueiam apenas a recuperacao de foto pelo no (ver `recover_pending`)."""
-    cfg = (contract.get("styles") or {}).get(style)
+    cfg = contract.get("workflow")
     if cfg is None:
-        return [f"estilo {style} ausente"]
+        return ["bloco workflow ausente"]
     out: list[str] = []
 
     def walk(prefix, v):
@@ -147,16 +120,16 @@ def placeholders(contract: dict, style: str, include_recover: bool = True) -> li
     return out
 
 
-def recover_pending(contract: dict, style: str) -> list[str]:
+def recover_pending(contract: dict) -> list[str]:
     """Pendencias que bloqueiam SO a recuperacao de foto (recover.* e pending_recover). O envio nao depende delas."""
-    block = set(placeholders(contract, style, include_recover=False))
-    return [x for x in placeholders(contract, style) if x not in block]
+    block = set(placeholders(contract, include_recover=False))
+    return [x for x in placeholders(contract) if x not in block]
 
 
-def style_config(contract: dict, style: str) -> dict:
-    cfg = (contract.get("styles") or {}).get(style)
-    if style not in STYLES or cfg is None:
-        raise ContractError(f"estilo invalido: {style!r}")
+def workflow_config(contract: dict) -> dict:
+    cfg = contract.get("workflow")
+    if not isinstance(cfg, dict):
+        raise ContractError("contrato sem o bloco `workflow`")
     return cfg
 
 
@@ -194,13 +167,18 @@ def _text_of(v) -> str:
     return v.strip() if isinstance(v, str) else ""
 
 
-def build_input(contract: dict, style: str, image_url: str) -> dict:
-    """Corpo do submit: o campo da imagem (A CONFIRMAR) mais os extras fixos do estilo."""
-    cfg = style_config(contract, style)
-    field_ = (cfg.get("input") or {}).get("image_field")
-    if not field_ or _is_placeholder(field_):
-        raise ContractError("campo de entrada da imagem ainda A CONFIRMAR (Fase 0)")
-    return {**((cfg.get("input") or {}).get("extra") or {}), field_: image_url}
+def check_input(contract: dict, payload: dict) -> dict:
+    """Confere o corpo do submit (montado por prompts.production.build_fal_arguments) contra os campos do contrato: todos
+    presentes e nao vazios, nenhum a mais. Devolve o proprio payload."""
+    cfg = workflow_config(contract)
+    fields = (cfg.get("input") or {}).get("fields") or []
+    if not fields or any(_is_placeholder(f) for f in fields):
+        raise ContractError("campos de entrada do workflow ainda A CONFIRMAR (Fase 0)")
+    missing = [f for f in fields if not isinstance(payload.get(f), str) or not payload[f].strip()]
+    extra = [k for k in payload if k not in fields]
+    if missing or extra:
+        raise ContractError("entrada do workflow fora do contrato: faltam %s, sobram %s" % (missing or "nenhum", extra or "nenhum"))
+    return payload
 
 
 _WS = "\ufeff \t\r\n"                                  # BOM, espacos e quebras de linha ao redor
@@ -208,8 +186,9 @@ _FENCE = re.compile(r"^```[a-zA-Z]*\s*|\s*```$")        # cerca markdown, com ou
 
 
 def parse_text_output(raw) -> tuple[str, str, list[str]]:
-    """Saida `output` do workflow -> (titulo, legenda, avisos). O texto traz JSON `{"title","caption"}` (aceita cerca
-    ```json, cerca sem rotulo, espacos ao redor e dict ja decodificado). JSON invalido, vazio ou com campos vazios (o prompt manda devolver strings vazias
+    """Saida `output` do workflow -> (titulo, legenda, avisos). O texto traz JSON `{"narration","title","caption"}`; a
+    narracao e ignorada aqui (o audio ja vem no video). Aceita cerca
+    ```json, cerca sem rotulo, espacos ao redor e dict ja decodificado). JSON invalido, vazio ou com campos vazios (o prompt manda nunca devolver vazio, mas o parser segue defensivo
     quando nao identifica o produto): devolve o que houver, com aviso. NUNCA inventa texto."""
     data = raw
     if isinstance(raw, str):
@@ -237,9 +216,9 @@ def parse_text_output(raw) -> tuple[str, str, list[str]]:
     return title, caption, warns
 
 
-def parse_result(result: dict, style: str, contract: dict) -> WorkflowPackage:
+def parse_result(result: dict, contract: dict) -> WorkflowPackage:
     """Resultado bruto da fal.ai -> pacote canonico. Nao baixa nada."""
-    cfg = style_config(contract, style)
+    cfg = workflow_config(contract)
     out_map = cfg.get("output") or {}
     envelope = isinstance(result, dict) and "output" in result and isinstance(result.get("nodes"), dict)
     output = result.get("output") if envelope else result

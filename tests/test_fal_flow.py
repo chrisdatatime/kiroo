@@ -56,8 +56,8 @@ def funded(settings, tmp_path, cc=50_000, **kw):
     return make(settings, tmp_path, real=True, db=db, **kw), wid
 
 
-def new(orch, product, *, style="dark", crid="req-0001", wid=None, confirm=True):
-    pid, dup = fp.create_production(orch, product, style=style, workspace_id=wid, client_request_id=crid,
+def new(orch, product, *, scene="home_light", platform="shopee_video", crid="req-0001", wid=None, confirm=True):
+    pid, dup = fp.create_production(orch, product, scene=scene, platform=platform, workspace_id=wid, client_request_id=crid,
                                     budget_usd=50.0, prebudget=wid is not None and orch.s.mode == "real")
     if wid and confirm and not dup:
         orch.confirm_cost(pid)
@@ -75,7 +75,7 @@ def delivery(o, pid):
 # ================================================================= entrega
 def test_demo_flow_delivers_video_photo_caption_and_cover(settings, tmp_path, photo_product):
     o = make(settings, tmp_path)
-    pid = new(o, photo_product, style="light")
+    pid = new(o, photo_product)
     assert o.run(pid) == PS.AWAITING_FINAL_REVIEW
     d = delivery(o, pid)
     names = {p.name for p in d.iterdir()}
@@ -87,7 +87,7 @@ def test_demo_flow_delivers_video_photo_caption_and_cover(settings, tmp_path, ph
     cap = (d / "caption.txt").read_text(encoding="utf-8")
     assert cap.startswith("Copo azul de aco inox\n\nMantem a bebida gelada")           # titulo + legenda do JSON do workflow
     row = o.db.production(pid)
-    assert row["engine"] == "fal" and row["style"] == "light" and row["delivery_status"] == "complete"
+    assert row["engine"] == "fal" and (row["scene"], row["platform"]) == ("home_light", "shopee_video") and row["delivery_status"] == "complete"
     att = o.db.attempts(pid)[0]
     assert att["kind"] == "workflow" and att["status"] == "succeeded" and att["scene_idx"] is None
     assert json.loads((o.s.data_dir / "productions" / pid / "workflow/attempt_01/result.json").read_text(encoding="utf-8"))["package"]
@@ -155,12 +155,48 @@ def test_photo_is_resized_to_at_most_2048px(settings, tmp_path):
     assert max(pf.jpeg_info(up.read_bytes())) == 2048
 
 
-def test_each_style_goes_to_its_own_workflow(settings, tmp_path, photo_product):
+def test_scene_and_platform_are_stored_and_reach_the_single_workflow(settings, tmp_path, photo_product):
     o = make(settings, tmp_path)
-    a, b = new(o, photo_product, style="dark", crid="c-dark-1"), new(o, photo_product, style="light", crid="c-light-1")
+    a = new(o, photo_product, scene="dark_premium", platform="tiktok_shop", crid="c-dark-1")
+    b = new(o, photo_product, scene="studio", platform="mercado_livre", crid="c-studio-1")
     o.run(a), o.run(b)
-    assert json.loads(o.db.attempts(a)[0]["params_json"])["workflow"].endswith("dark")
-    assert json.loads(o.db.attempts(b)[0]["params_json"])["workflow"].endswith("light")
+    pa, pb = json.loads(o.db.attempts(a)[0]["params_json"]), json.loads(o.db.attempts(b)[0]["params_json"])
+    assert pa["workflow"] == pb["workflow"] == "simulado/wf01white"                    # um workflow so, qualquer combinacao
+    assert (pa["scene"], pa["platform"]) == ("dark_premium", "tiktok_shop")
+    assert (pb["scene"], pb["platform"]) == ("studio", "mercado_livre")
+    row = o.db.production(a)
+    assert (row["scene"], row["platform"], row["format_id"]) == ("dark_premium", "tiktok_shop", "fal_dark_premium")
+
+
+def test_the_request_carries_scene_platform_and_the_cleaned_name(settings, tmp_path, photo_product):
+    o = make(settings, tmp_path)
+    seen = []
+    orig = o.fal_gen.submit_full
+    o.fal_gen.submit_full = lambda req: (seen.append(req), orig(req))[1]
+    pid = new(o, photo_product, scene="natural", platform="mercado_livre")
+    o.run(pid)
+    assert len(seen) == 1
+    from studio.prompts.production import clean_name
+    assert (seen[0].scene, seen[0].platform) == ("natural", "mercado_livre")
+    assert seen[0].product_name == clean_name(photo_product.name)
+
+
+def test_a_different_scene_or_platform_is_a_different_input_hash(settings, tmp_path, photo_product):
+    o = make(settings, tmp_path)
+    a = new(o, photo_product, scene="studio", crid="h-1")
+    b = new(o, photo_product, scene="natural", crid="h-2")
+    o.run(a), o.run(b)
+    assert o.db.attempts(a)[0]["input_hash"] != o.db.attempts(b)[0]["input_hash"]
+
+
+def test_invalid_scene_or_platform_is_refused_on_creation(settings, tmp_path, photo_product):
+    o = make(settings, tmp_path)
+    with pytest.raises(OrchestratorError):
+        fp.create_production(o, photo_product, scene="neon", platform="shopee_video", workspace_id=None,
+                             client_request_id="x-0001", budget_usd=50.0, prebudget=False)
+    with pytest.raises(OrchestratorError):
+        fp.create_production(o, photo_product, scene="studio", platform="orkut", workspace_id=None,
+                             client_request_id="x-0002", budget_usd=50.0, prebudget=False)
 
 
 # ================================================================= creditos e idempotencia
@@ -180,9 +216,9 @@ def test_success_charges_once_and_final_approval_keeps_the_ledger_exact(settings
 
 def test_double_click_returns_the_same_production_and_reserves_once(settings, tmp_path, photo_product):
     o, wid = funded(settings, tmp_path)
-    p1, d1 = fp.create_production(o, photo_product, style="dark", workspace_id=wid, client_request_id="clique-0001",
+    p1, d1 = fp.create_production(o, photo_product, scene="dark_premium", platform="tiktok_shop", workspace_id=wid, client_request_id="clique-0001",
                                   budget_usd=50.0, prebudget=True)
-    p2, d2 = fp.create_production(o, photo_product, style="dark", workspace_id=wid, client_request_id="clique-0001",
+    p2, d2 = fp.create_production(o, photo_product, scene="dark_premium", platform="tiktok_shop", workspace_id=wid, client_request_id="clique-0001",
                                   budget_usd=50.0, prebudget=True)
     assert p1 == p2 and (d1, d2) == (False, True)
     assert o.db.conn.execute("SELECT COUNT(*) FROM productions").fetchone()[0] == 1
@@ -194,8 +230,8 @@ def test_unique_index_blocks_a_racing_duplicate_even_without_the_lookup(settings
     first = new(o, photo_product, wid=wid, crid="corrida-01")
     with pytest.raises(DuplicateRequest) as e:       # a checagem previa foi "ultrapassada" por outra requisicao
         o.create_production(photo_product, format_id="produto_3cenas_15s", art_direction="ambiente_neutro", presenter="bia",
-                            budget_usd=50, workspace_id=wid, prebudget=True, engine="fal", style="dark",
-                            client_request_id="corrida-01", estimate=budget.estimate_workflow(o.s, "dark"))
+                            budget_usd=50, workspace_id=wid, prebudget=True, engine="fal", scene="dark_premium", platform="tiktok_shop",
+                            client_request_id="corrida-01", estimate=budget.estimate_workflow(o.s))
     assert e.value.pid == first
     assert Ledger(o.db).balance(wid) == 50_000 - CHARGE and Ledger(o.db).held(wid) == CHARGE
     orphans = o.db.conn.execute("SELECT status FROM productions WHERE workspace_id IS NULL").fetchall()
@@ -206,7 +242,7 @@ def test_same_client_request_id_in_another_workspace_is_a_different_production(s
     o, wid = funded(settings, tmp_path)
     other = Accounts(o.db).create_user("outro@example.com", "senha-forte-123")[1]
     a = new(o, photo_product, wid=wid, crid="mesmo-id-01")
-    b, dup = fp.create_production(o, photo_product, style="dark", workspace_id=other, client_request_id="mesmo-id-01",
+    b, dup = fp.create_production(o, photo_product, scene="dark_premium", platform="tiktok_shop", workspace_id=other, client_request_id="mesmo-id-01",
                                   budget_usd=50.0, prebudget=False)
     assert a != b and dup is False
 
@@ -345,7 +381,7 @@ def test_admin_adopt_polls_the_existing_remote_execution(settings, tmp_path, pho
     pid = new(o, photo_product)
     o.run(pid)
     ghost = o.fal_gen.submit_full(__import__("studio.providers.base", fromlist=["x"]).WorkflowRequest(
-        "dark", o.s.data_dir / "productions" / pid / "inputs" / "workflow_photo.jpg"))
+        o.s.data_dir / "productions" / pid / "inputs" / "workflow_photo.jpg"))
     fp.admin_action(o, pid, "adopt", request_id=ghost.request_id)
     assert o.run(pid) == PS.AWAITING_FINAL_REVIEW and o.fal_gen.submit_count == 1       # so o "fantasma"; nada novo
 
@@ -519,11 +555,11 @@ def test_reconcile_records_supplier_cost_without_any_new_debit(settings, tmp_pat
     out = fp.reconcile_costs(o.db, gen, pid=pid)
     assert out[0]["status"] == "ok" and gen.calls[0] == [att["remote_op_id"]]
     a2 = o.db.attempt(att["id"])
-    assert a2["confirmed_cost_usd"] == 1.7 and a2["cost_reconciled_at"] and a2["estimated_cost_usd"] == 2.0
+    assert a2["confirmed_cost_usd"] == 1.7 and a2["cost_reconciled_at"] and a2["estimated_cost_usd"] == budget.workflow_cost()[0]
     o._settle(pid)
     assert o.db.conn.execute("SELECT COUNT(*) FROM credit_entries").fetchone()[0] == entries and led.balance(wid) == bal
     assert fp.reconcile_costs(o.db, gen, pid=pid) == []                   # idempotente
-    assert [c["cost_usd"] for c in led.charges(pid)] == [2.0]             # o cliente segue pagando o fixo por estilo
+    assert [c["cost_usd"] for c in led.charges(pid)] == [budget.workflow_cost()[0]]   # o cliente segue pagando o fixo do video
 
 
 def test_reconcile_skips_attempts_not_yet_decided_in_the_ledger(settings, tmp_path, photo_product):
@@ -631,15 +667,15 @@ def test_view_lists_the_package_when_complete(settings, tmp_path, photo_product)
     assert set(P["delivery"]) == {"final.mp4", "product_image_01.jpg", "cover.jpg", "caption.txt"}
     assert P["fal"]["title"] == "Titulo do video" and P["fal"]["caption"] == "Legenda do video."
     assert P["fal"]["image"]["label"] == "Hero Shot" and P["fal"]["image"]["url"]
-    assert P["fal"]["finalizing"] is False and P["fal"]["style_label"] == "Escuro"
+    assert P["fal"]["finalizing"] is False and P["fal"]["scene_label"] == "Casa Clara" and P["fal"]["platform_label"] == "Shopee Vídeo"
 
 
-def test_next_video_summary_is_the_fixed_package_price_per_style(settings, tmp_path, photo_product):
+def test_next_video_summary_is_the_fixed_package_price_for_any_scene(settings, tmp_path, photo_product):
     from studio.web import view
     o, wid = funded(settings, tmp_path)
     pid = new(o, photo_product, wid=wid, confirm=False)
     sm = view.snapshot(o.s, o.db, pid, workspace_id=wid)["production"]["confirmation"]["summary"]
-    assert sm["engine"] == "fal" and sm["style"] == "dark" and sm["total_cc"] == CHARGE and sm["scenes"] == 0
+    assert sm["engine"] == "fal" and (sm["scene"], sm["platform"]) == ("home_light", "shopee_video") and sm["total_cc"] == CHARGE and sm["scenes"] == 0
     assert sm["included_adjustments_per_scene"] == 0
 
 
@@ -672,7 +708,7 @@ def test_photo_recovery_refused_by_the_provider_ends_as_an_incomplete_delivery(s
     o = make(settings, tmp_path, fal_script=FalSimScript(missing={"image:hero"}, recoverable={"hero"}))
     orig = o.fal_gen.recover_artifact
 
-    def refuse(art, style="light"):
+    def refuse(art):
         raise __import__("studio.providers.base", fromlist=["x"]).PermanentError("recuperacao de foto pelo no ainda A CONFIRMAR")
     o.fal_gen.recover_artifact = refuse
     pid = new(o, photo_product)

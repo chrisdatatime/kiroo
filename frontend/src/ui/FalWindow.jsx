@@ -1,108 +1,203 @@
 import React from 'react';
-import { CloseButton } from './bits.jsx';
-import { AlertCircle, Camera, RefreshCw, X } from 'lucide-react';
-import { RECEIVE_LINE } from './falFlow.js';
+import { AlertCircle, Camera, Check, Lock, X } from 'lucide-react';
+import { NAME_MAX, RECEIVE_SHORT, lockText, platformLogo, sceneImage, sceneThumb } from './falFlow.js';
 import { usePhone } from '../hooks/use-phone.js';
 import { SEE_PACKS } from './welcome.js';
+import './falModal.css';
 
-// "Nova produção" no fluxo foto + estilo: SÓ o envio. Foto (solte ou escolha), nome opcional, estilo (só aparece com
-// mais de um liberado) e UM botão "Criar vídeo · N créditos". Clicar = consentimento: o App faz create → confirm → run;
-// se algo falhar, esta janela continua aberta com a mensagem do servidor. O acompanhamento e a entrega ficam na Missão.
-// Nenhuma tela cita fornecedor, modelo ou fila técnica.
-const card = { padding: 16, display: 'flex', flexDirection: 'column', gap: 10 };
+// "Nova produção" no fluxo foto + cenário + plataforma: SÓ o envio. Desktop (> 640 px): modal horizontal (prévia à esquerda,
+// escolhas à direita, rodapé com o botão). Celular (<= 640 px): bottom sheet. Clicar em "Criar vídeo" = consentimento: o App faz
+// create → confirm → run; se algo falhar, esta janela continua aberta com a mensagem do servidor. O front manda SÓ os ids
+// `scene` e `platform`. A prévia é ilustrativa (composição em CSS, nenhuma geração). Nenhuma tela cita fornecedor, modelo ou fila.
 
-function DropZone({ f }) {
+// Imagem que pode não existir ainda (assets opcionais): some em vez de mostrar o ícone de imagem quebrada.
+function Img({ src, className, ...rest }) {
+  const [bad, setBad] = React.useState(false);
+  React.useEffect(() => { setBad(false); }, [src]);
+  if (bad) return null;
+  return <img src={src} className={className} alt="" onError={() => setBad(true)} {...rest} />;
+}
+
+function Preview({ f, sceneName, phone, pickRef }) {
   const [over, setOver] = React.useState(false);
-  const drop = (e) => { e.preventDefault(); setOver(false); const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; if (file) f.pickFile(file); };
+  const drop = (e) => { e.preventDefault(); setOver(false); const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; if (file && !f.busy) f.pickFile(file); };
   return (
-    <label className="g-pick" onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)} onDrop={drop}
-      style={{ position: 'relative', padding: 18, minHeight: 200, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8,
-        cursor: 'pointer', borderStyle: 'dashed', background: over ? '#F2F2EF' : undefined }}>
-      {f.file ? <img src={f.file.data} alt={'Sua foto: ' + f.file.name} style={{ maxWidth: 220, maxHeight: 240, borderRadius: 10, objectFit: 'contain' }} />
-        : <><strong style={{ fontSize: 15 }}>Solte a foto do produto aqui</strong><span className="g-muted" style={{ fontSize: 12.5 }}>ou clique para escolher · JPG, PNG ou WEBP</span></>}
-      <input type="file" accept="image/jpeg,image/png,image/webp" onChange={f.pick} style={{ position: 'absolute', opacity: 0, width: 1, height: 1 }} aria-label="Foto do produto" />
-    </label>
+    <div className="fm-prev" onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)} onDrop={drop}
+      style={over ? { outline: '2px dashed #5b5bd6', outlineOffset: -4 } : undefined}>
+      <Img src={sceneImage(f.scene)} className="fm-prev-bg" />
+      {f.file ? (
+        <>
+          <span className="fm-prev-shadow" aria-hidden="true" />
+          <img className="fm-prev-prod" src={f.file.data} alt={'Sua foto: ' + f.file.name} />
+        </>
+      ) : (
+        <button type="button" className="fm-prev-empty" onClick={() => pickRef.current && pickRef.current.click()} disabled={f.busy}>
+          <Camera size={28} aria-hidden="true" />
+          <strong>Adicionar foto do produto</strong>
+          <small>{phone ? 'Use a câmera ou escolha uma foto salva' : 'Solte aqui ou clique · JPG, PNG ou WEBP'}</small>
+        </button>
+      )}
+      <span className="fm-prev-badge">Prévia · {sceneName}</span>
+      {phone && f.file && (
+        <button type="button" className="fm-prev-swap" onClick={() => pickRef.current && pickRef.current.click()} disabled={f.busy}>
+          <Camera size={18} aria-hidden="true" />Trocar foto
+        </button>
+      )}
+    </div>
   );
 }
 
-// Celular: tela cheia (sobe de baixo), foto grande, "Criar vídeo" fixo no rodapé e o erro logo acima dele.
-// accept="image/*" sem `capture`: o celular oferece a câmera OU as fotos salvas.
+function SceneCard({ s, on, f }) {
+  const locked = !!s.locked;
+  const lt = lockText(s);
+  return (
+    <button type="button" className="fm-card" aria-pressed={on} aria-disabled={locked || undefined} disabled={f.busy}
+      onClick={() => { if (!locked) f.setScene(s.id); }} title={lt || undefined}>
+      <span className="fm-scene-thumb">
+        <Img src={sceneThumb(s.id)} />
+        {on && <span className="fm-check" aria-hidden="true"><Check size={14} strokeWidth={3} /></span>}
+        {locked && <span className="fm-lock"><Lock size={16} aria-hidden="true" />{lt}</span>}
+      </span>
+      <span className="fm-scene-body">
+        <span className="fm-scene-name">{s.label}</span>
+        <span className="fm-scene-sub">{s.sub}</span>
+      </span>
+    </button>
+  );
+}
+
+function PlatformCard({ p, on, f, list }) {
+  return (
+    <button type="button" className="fm-card fm-plat" aria-pressed={on} disabled={f.busy} onClick={() => f.setPlatform(p.id)}>
+      <span className="fm-logo"><Img src={platformLogo(p.id)} /></span>
+      {list ? (
+        <>
+          <span className="fm-plat-name">{p.label}</span>
+          <span className="fm-plat-sub">{p.sub}</span>
+        </>
+      ) : (
+        <span className="fm-plat-txt"><span className="fm-plat-name">{p.label}</span><span className="fm-plat-sub">{p.sub}</span></span>
+      )}
+    </button>
+  );
+}
+
+function NameField({ f, id }) {
+  return (
+    <div>
+      <label className="fm-label" htmlFor={id}>Nome do produto <span>(opcional)</span></label>
+      <input id={id} className="fm-field" value={f.name} onChange={f.setName} disabled={f.busy} maxLength={NAME_MAX} autoComplete="off" enterKeyHint="done"
+        placeholder="Se ficar vazio, o Kiroo descreve pela foto" />
+    </div>
+  );
+}
+
+function Problems({ f }) {
+  return (
+    <>
+      {f.error && <div role="alert" className="fm-err"><AlertCircle size={18} aria-hidden="true" style={{ flex: 'none', marginTop: 1 }} />{f.error}</div>}
+      {f.noFunds && <button type="button" className="fm-btn2" onClick={f.openBuy}>{SEE_PACKS}</button>}
+    </>
+  );
+}
+
+function useEscape(f) {
+  React.useEffect(() => {
+    const on = (e) => { if (e.key === 'Escape') f.close(); };
+    window.addEventListener('keydown', on);
+    return () => window.removeEventListener('keydown', on);
+  });
+}
+
 function PhoneSheet({ f }) {
   const pickRef = React.useRef(null);
+  useEscape(f);
+  const create = f.file ? f.create : () => pickRef.current && pickRef.current.click();
   return (
-    <section role="dialog" aria-modal="true" aria-labelledby="fal-h" className="pv-sheet">
-      <header className="pv-sheet-head">
-        <h2 id="fal-h">Nova produção</h2>
-        {f.demo && <span className="pv-status pv-status-demo">DEMO</span>}
-        <button type="button" className="pv-sheet-x" onClick={f.close} aria-label="Fechar" disabled={f.busy}><X size={22} aria-hidden="true" /></button>
-      </header>
-      <div className="pv-sheet-body">
-        <input ref={pickRef} id="fal-photo" type="file" accept="image/*" onChange={f.pick} className="pv-file" aria-label="Foto do produto" disabled={f.busy} />
-        {f.file ? (
-          <figure className="pv-photo">
-            <img src={f.file.data} alt={'Sua foto: ' + f.file.name} />
-            <label htmlFor="fal-photo" className="pv-photo-swap" aria-disabled={f.busy || undefined}><RefreshCw size={18} aria-hidden="true" />Trocar foto</label>
-          </figure>
-        ) : (
-          <label htmlFor="fal-photo" className="pv-photo-empty">
-            <span className="pv-photo-ic" aria-hidden="true"><Camera size={30} /></span>
-            <strong>Adicionar foto do produto</strong>
-            <span>Use a câmera ou escolha uma foto salva</span>
-          </label>
-        )}
-        <label className="pv-sheet-label" htmlFor="fal-name">Nome do produto <span>(opcional)</span></label>
-        <input id="fal-name" className="pv-sheet-field" value={f.name} onChange={f.setName} disabled={f.busy} placeholder="Se ficar vazio, o Kiroo descreve pela foto" autoComplete="off" enterKeyHint="done" />
-        {f.styles.length > 1 ? (
-          <div role="radiogroup" aria-label="Estilo do vídeo" className="pv-sheet-styles">
-            {f.styles.map((s) => (
-              <button key={s.id} type="button" role="radio" aria-checked={f.style === s.id} onClick={() => f.setStyle(s.id)} disabled={f.busy}>{s.label}</button>
-            ))}
+    <div className="fm fm-sheet-wrap" onMouseDown={(e) => { if (e.target === e.currentTarget) f.close(); }}>
+      <section role="dialog" aria-modal="true" aria-labelledby="fal-h" className="fm-sheet">
+        <header className="fm-sheet-head">
+          <h2 id="fal-h">Nova produção</h2>
+          {f.demo && <span className="fm-demo">DEMO</span>}
+          <button type="button" className="fm-x" onClick={f.close} aria-label="Fechar" disabled={f.busy}><X size={22} aria-hidden="true" /></button>
+        </header>
+        <div className="fm-sheet-body">
+          <input ref={pickRef} type="file" accept="image/*" onChange={f.pick} className="fm-file" aria-label="Foto do produto" disabled={f.busy} />
+          <Preview f={f} sceneName={f.sceneName} phone pickRef={pickRef} />
+          <NameField f={f} id="fal-name" />
+          <div>
+            <div className="fm-sec"><span className="fm-label" id="fal-scenes-l">Cenário</span><span className="fm-hint">O produto fica igual, só o ambiente muda</span></div>
+            <div className="fm-carousel" role="group" aria-labelledby="fal-scenes-l">
+              {f.scenes.map((s) => <SceneCard key={s.id} s={s} on={f.scene === s.id} f={f} />)}
+            </div>
           </div>
-        ) : <div className="pv-sheet-static">Estilo <strong>{f.styles[0].label}</strong></div>}
-        <p className="pv-sheet-note">{RECEIVE_LINE}</p>
-      </div>
-      <footer className="pv-sheet-foot">
-        {f.error && <div role="alert" className="pv-dock-err"><AlertCircle size={18} aria-hidden="true" />{f.error}</div>}
-        {f.noFunds && <button type="button" className="pv-act pv-act-wide" onClick={f.openBuy}>{SEE_PACKS}</button>}
-        <button type="button" className="pv-dock-btn" onClick={f.file ? f.create : () => pickRef.current && pickRef.current.click()} disabled={f.busy || (!!f.file && f.errors.length > 0)}>
-          {f.busy ? 'Começando…' : f.file ? f.label : 'Escolher foto'}
-        </button>
-      </footer>
-    </section>
+          <div>
+            <div className="fm-sec"><span className="fm-label" id="fal-plats-l">Onde vai postar</span></div>
+            <div className="fm-plat-list" role="group" aria-labelledby="fal-plats-l">
+              {f.platforms.map((p) => <PlatformCard key={p.id} p={p} on={f.platform === p.id} f={f} list />)}
+            </div>
+          </div>
+        </div>
+        <footer className="fm-sheet-foot">
+          <Problems f={f} />
+          <button type="button" className="fm-primary" onClick={create} disabled={f.busy || (!!f.file && f.errors.length > 0)}>
+            {f.busy ? 'Começando…' : f.file ? f.label : 'Escolher foto'}
+          </button>
+          <p>{RECEIVE_SHORT}</p>
+        </footer>
+      </section>
+    </div>
   );
 }
 
 export default function FalWindow({ v }) {
   const phone = usePhone();
-  if (phone) return <PhoneSheet f={v.fal} />;
   const f = v.fal;
+  const pickRef = React.useRef(null);
+  useEscape(f);
+  if (phone) return <PhoneSheet f={f} />;
+  const plat = (f.platforms.find((p) => p.id === f.platform) || {}).label || 'a plataforma escolhida';
   return (
-    <section role="dialog" aria-modal="true" aria-labelledby="fal-h" className="g-panel pop" style={{ position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', zIndex: 60, width: 'min(520px,calc(100vw - 24px))', maxHeight: 'calc(100vh - 24px)', display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
-      <div style={{ padding: '14px 16px', borderBottom: '1px solid #E7E7E4', display: 'flex', alignItems: 'center', gap: 10 }}>
-        <h2 id="fal-h" className="fred" style={{ margin: 0, fontSize: 20, fontWeight: 600, flex: 1 }}>Nova produção</h2>
-        {f.demo && <span className="g-sim">DEMO: nada é cobrado</span>}
-        <CloseButton onClick={f.close} label="Fechar" />
-      </div>
-      <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <DropZone f={f} />
-        {f.file && <button className="g-btn g-sm g-quiet" onClick={f.clearFile} disabled={f.busy} style={{ alignSelf: 'flex-start' }}>Trocar foto</button>}
-        <label className="g-label" htmlFor="fal-name">Nome do produto <span className="g-muted">(opcional)</span></label>
-        <input id="fal-name" className="g-field" value={f.name} onChange={f.setName} disabled={f.busy} placeholder="Se ficar vazio, o Kiroo descreve pela foto" />
-        {f.styles.length > 1 ? (
-          <div role="radiogroup" aria-label="Estilo do vídeo" style={{ display: 'flex', gap: 8 }}>
-            {f.styles.map((s) => (
-              <button key={s.id} type="button" role="radio" aria-checked={f.style === s.id} className="g-btn" onClick={() => f.setStyle(s.id)} disabled={f.busy}
-                style={{ flex: 1, minHeight: 44, border: f.style === s.id ? '2px solid #0E0E10' : '1px solid #E7E7E4' }}>{s.label}{f.style === s.id ? ' ✓' : ''}</button>
-            ))}
+    <div className="fm fm-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) f.close(); }}>
+      <section role="dialog" aria-modal="true" aria-labelledby="fal-h" className="fm-modal">
+        <header className="fm-head">
+          <h2 id="fal-h">Nova produção</h2>
+          {f.demo && <span className="fm-demo">DEMO: nada é cobrado</span>}
+          <button type="button" className="fm-x" onClick={f.close} aria-label="Fechar" disabled={f.busy}><X size={22} aria-hidden="true" /></button>
+        </header>
+        <div className="fm-body">
+          <div className="fm-left">
+            <input ref={pickRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={f.pick} className="fm-file" aria-label="Foto do produto" disabled={f.busy} />
+            <Preview f={f} sceneName={f.sceneName} pickRef={pickRef} />
+            <p className="fm-left-note">Exemplo do ambiente com o seu produto</p>
+            <button type="button" className="fm-btn2" onClick={() => pickRef.current && pickRef.current.click()} disabled={f.busy}>
+              <Camera size={18} aria-hidden="true" />{f.file ? 'Trocar foto' : 'Escolher foto'}
+            </button>
           </div>
-        ) : <span className="g-muted" style={{ fontSize: 13 }}>Estilo: <strong style={{ color: '#0E0E10' }}>{f.styles[0].label}</strong></span>}
-        {f.error && <div role="alert" className="g-card" style={{ ...card, padding: 12, background: '#FFE7C2', border: '2px solid #7A4300', fontSize: 14 }}>{f.error}</div>}
-        {f.noFunds && <button className="g-btn" onClick={f.openBuy} style={{ minHeight: 44 }}>{SEE_PACKS}</button>}
-        <button className="g-btn g-lime" onClick={f.create} disabled={f.busy || f.errors.length > 0} style={{ minHeight: 48, fontSize: 16 }}>
-          {f.busy ? 'Começando…' : f.label}
-        </button>
-        <span className="g-muted" style={{ fontSize: 12.5, lineHeight: 1.45 }}>{RECEIVE_LINE}</span>
-      </div>
-    </section>
+          <div className="fm-right">
+            <NameField f={f} id="fal-name" />
+            <div>
+              <div className="fm-sec"><span className="fm-label" id="fal-scenes-l">Cenário</span><span className="fm-hint">O produto fica igual, só o ambiente muda</span></div>
+              <div className="fm-scenes" role="group" aria-labelledby="fal-scenes-l">
+                {f.scenes.map((s) => <SceneCard key={s.id} s={s} on={f.scene === s.id} f={f} />)}
+              </div>
+            </div>
+            <div>
+              <div className="fm-sec"><span className="fm-label" id="fal-plats-l">Onde vai postar</span><span className="fm-hint">Ajusta roteiro, título e legenda</span></div>
+              <div className="fm-plats" role="group" aria-labelledby="fal-plats-l">
+                {f.platforms.map((p) => <PlatformCard key={p.id} p={p} on={f.platform === p.id} f={f} />)}
+              </div>
+            </div>
+            <Problems f={f} />
+          </div>
+        </div>
+        <footer className="fm-foot">
+          <p className="fm-foot-txt">Você recebe vídeo de ~15 s com narração, 1 foto, título e legenda para <strong>{plat}</strong>. Se falhar por erro técnico, não é cobrado.</p>
+          <div className="fm-foot-act">
+            <button type="button" className="fm-primary" onClick={f.create} disabled={f.busy || f.errors.length > 0}>{f.busy ? 'Começando…' : f.label}</button>
+          </div>
+        </footer>
+      </section>
+    </div>
   );
 }

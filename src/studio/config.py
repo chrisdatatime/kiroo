@@ -75,14 +75,12 @@ class Settings:
     # --- motor fal.ai (workflows). Tudo aditivo: com video_engine="gemini" nada disto é usado.
     fal_api_key: str | None = field(default=None, repr=False)        # FAL_KEY (segredo)
     fal_billing_key: str | None = field(default=None, repr=False)    # FAL_BILLING_KEY (segredo, opcional; escopo billing)
-    workflow_id_dark: str | None = None                              # WORKFLOW_ID_DARK ("workflows/<usuario>/<nome>")
-    workflow_id_light: str | None = None                             # WORKFLOW_ID_LIGHT
+    workflow_id: str = "workflows/christiandeluco/wf01white"        # WORKFLOW_ID: o ÚNICO workflow (WORKFLOW_ID_LIGHT = alias legado)
     video_engine: str = "gemini"                                     # STUDIO_VIDEO_ENGINE: gemini | fal
     fal_poll_s: float = 10.0                                         # STUDIO_FAL_POLL_S
     fal_timeout_s: float = 1800.0                                    # STUDIO_FAL_TIMEOUT_S (prazo total de uma execução)
     fal_max_inflight: int = 2                                        # STUDIO_FAL_MAX_INFLIGHT
     fal_retention_days: int = 7                                      # STUDIO_FAL_RETENTION_DAYS (só workflow/attempt_NN)
-    fal_dark_enabled: bool = False                                   # STUDIO_FAL_DARK_ENABLED: estilo Escuro (pronto, mas desligado)
 
     @property
     def reference_root(self) -> Path:
@@ -156,14 +154,12 @@ def load_settings(env_file: Path | None = None, **overrides) -> Settings:
         reference_dir=_path(env("STUDIO_REFERENCE_DIR"), PROJECT_ROOT / "assets") if env("STUDIO_REFERENCE_DIR") else None,
         fal_api_key=env("FAL_KEY") or None,
         fal_billing_key=env("FAL_BILLING_KEY") or None,
-        workflow_id_dark=(env("WORKFLOW_ID_DARK") or "").strip() or None,
-        workflow_id_light=(env("WORKFLOW_ID_LIGHT") or "").strip() or None,
+        workflow_id=((env("WORKFLOW_ID") or env("WORKFLOW_ID_LIGHT") or "").strip() or "workflows/christiandeluco/wf01white"),
         video_engine=(env("STUDIO_VIDEO_ENGINE") or "gemini").strip().lower(),
         fal_poll_s=float(env("STUDIO_FAL_POLL_S") or 10),
         fal_timeout_s=float(env("STUDIO_FAL_TIMEOUT_S") or 1800),
         fal_max_inflight=int(env("STUDIO_FAL_MAX_INFLIGHT") or 2),
         fal_retention_days=int(env("STUDIO_FAL_RETENTION_DAYS") or 7),
-        fal_dark_enabled=_bool(env("STUDIO_FAL_DARK_ENABLED"), False),
     )
     # Ajustes feitos pela interface (data/agents.json): só campos não sensíveis e já validados.
     from .agent_config import load as load_agent_config, validate_settings

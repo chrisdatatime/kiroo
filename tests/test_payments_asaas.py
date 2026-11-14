@@ -148,10 +148,9 @@ def asaas_id(app, kpay):
 
 # ------------------------------------------------------------------ preço fixo do vídeo
 def test_video_costs_fixed_20_credits_and_usd_estimate_stays_separate(settings):
-    for style in ("light", "dark"):
-        est = budget.estimate_workflow(settings, style)
-        assert est["cc"] == 2000 == catalog.video_price_cc()                  # 20 créditos, não a conversão do custo
-        assert est["usd"] == budget.workflow_cost(style)[0]                   # reserva interna em US$ continua
+    est = budget.estimate_workflow(settings)
+    assert est["cc"] == 2000 == catalog.video_price_cc()                      # 20 créditos, não a conversão do custo
+    assert est["usd"] == budget.workflow_cost()[0] == 0.6                     # reserva interna em US$ continua (US$ 0,60)
 
 
 def test_catalog_public_view_savings_and_videos():

@@ -8,7 +8,8 @@ Vantagens (precisam existir de verdade, não só no texto):
   * fila prioritária (pro, escala): com produções esperando vaga no motor fal.ai (STUDIO_FAL_MAX_INFLIGHT), saem antes;
     ordem de chegada dentro do mesmo nível; o teto nunca é ultrapassado (`SlotQueue`, usado por fal_pipeline).
   * suporte por WhatsApp (pro, escala): link wa.me de STUDIO_SUPPORT_WHATSAPP (sem a variável, o botão não aparece).
-  * novos estilos antes (escala): estilo com `early_access_plan` no contrato do workflow só aparece para quem tem o plano.
+  * novos estilos antes (escala): cenário com `early_access_plan` em `prompts.production.SCENES` só é liberado para quem tem o plano (hoje nenhum cenário
+    tem: todos liberados; o servidor recusa com 403 e a tela mostra o cadeado).
 """
 
 from __future__ import annotations

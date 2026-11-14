@@ -37,6 +37,7 @@ from .agents import composer
 from .agents.product_prep import prepare_product
 from .db import now
 from .models import ProductInput
+from .prompts import production as prompts
 from .orchestrator import BACKOFF_BASE_S, BACKOFF_MAX_S, BudgetExceeded, OrchestratorError
 from .providers.base import OpState, PermanentError, ProviderBillingError, TransientError, WorkflowRequest
 from .providers.fal import UncertainSubmit
@@ -76,27 +77,28 @@ def engine_of(row) -> str:
 
 
 # =================================================================== criacao
-def create_production(o, product: ProductInput, *, style: str, workspace_id: str | None, client_request_id: str | None,
-                      budget_usd: float, prebudget: bool) -> tuple[str, bool]:
+def create_production(o, product: ProductInput, *, scene: str, platform: str, workspace_id: str | None,
+                      client_request_id: str | None, budget_usd: float, prebudget: bool) -> tuple[str, bool]:
     """Cria a producao do motor fal.ai. Devolve (pid, duplicado). O mesmo `client_request_id` no mesmo workspace devolve
     a producao que ja existe, sem reservar nem cobrar de novo (duplo clique)."""
     from .orchestrator import DuplicateRequest
-    if style not in fc.STYLES:
-        raise OrchestratorError("escolha o estilo: Escuro ou Claro")
+    if scene not in prompts.SCENES or platform not in prompts.PLATFORMS:
+        raise OrchestratorError("escolha o cenário e a plataforma")
     if workspace_id and client_request_id:
         row = o.db.conn.execute("SELECT id FROM productions WHERE workspace_id=? AND client_request_id=?",
                                 (workspace_id, client_request_id)).fetchone()
         if row:
             return row["id"], True
-    estimate = budget_mod.estimate_workflow(o.s, style)
+    estimate = budget_mod.estimate_workflow(o.s)
     try:
         pid = o.create_production(product, format_id="produto_3cenas_15s", art_direction="ambiente_neutro", presenter="bia",
                                   budget_usd=budget_usd, go_ahead="all", autonomy="classico", workspace_id=workspace_id,
-                                  prebudget=prebudget, engine="fal", style=style, client_request_id=client_request_id,
+                                  prebudget=prebudget, engine="fal", scene=scene, platform=platform, client_request_id=client_request_id,
                                   estimate=estimate)
     except DuplicateRequest as dup:
         return dup.pid, True
-    o.db.add_event(pid, "fal_created", f"motor fal.ai, estilo {fc.STYLE_LABELS[style]}", data={"style": style})
+    o.db.add_event(pid, "fal_created", f"motor fal.ai, cenário {prompts.scene_label(scene)}, plataforma {prompts.platform_label(platform)}",
+                   data={"scene": scene, "platform": platform})
     return pid, False
 
 
@@ -164,8 +166,15 @@ class FalRunner:
         self.db.update_production(pid, delivery_json=json.dumps(dj, ensure_ascii=False))
         return dj
 
-    def _style(self, pid: str) -> str:
-        return self.db.production(pid)["style"]
+    def _choice(self, pid: str) -> tuple[str, str]:
+        """(cenario, plataforma) gravados na producao: o reprocesso repete exatamente o mesmo pedido."""
+        row = self.db.production(pid)
+        return row["scene"], row["platform"]
+
+    def _request(self, pid: str, photo: Path) -> WorkflowRequest:
+        scene, platform = self._choice(pid)
+        name = prompts.clean_name(ProductInput.model_validate_json(self.db.production(pid)["product_json"]).name)
+        return WorkflowRequest(image_path=photo, scene=scene, platform=platform, product_name=name)
 
     def _adir_rel(self, att) -> str:
         return f"workflow/attempt_{att['attempt_no']:02d}"
@@ -205,7 +214,7 @@ class FalRunner:
             elif status in {PS.VALIDATED, PS.SCRIPTED, PS.PRODUCING} and o.needs_confirmation(pid):
                 break   # "Seu proximo video": sem a confirmacao do cliente nada e gasto
             elif status == PS.VALIDATED:
-                self.db.set_production_status(pid, PS.SCRIPTED, f"workflow do estilo {fc.STYLE_LABELS[self._style(pid)]}")
+                self.db.set_production_status(pid, PS.SCRIPTED, f"workflow: {prompts.scene_label(self._choice(pid)[0])}")
             elif status == PS.SCRIPTED:
                 self.db.set_production_status(pid, PS.PRODUCING)
             elif status == PS.PRODUCING:
@@ -321,15 +330,15 @@ class FalRunner:
 
     def _start_admitted(self, pid: str, dj: dict) -> str:
         o = self.o
-        style = self._style(pid)
         try:
             photo, sha = self._photo(pid)
         except Exception as exc:  # noqa: BLE001 — foto ilegivel: nada foi enviado nem cobrado
             return self._pause(pid, "Nao foi possivel preparar a foto. Envie outra e tente de novo.", REFUSED,
                                f"foto: {type(exc).__name__}: {exc}", alert=False)
-        req = WorkflowRequest(style=style, image_path=photo)
+        req = self._request(pid, photo)
         params = self.gen.params(req)
-        input_hash = _hash({"provider": self.gen.provider, "style": style, "photo": sha, "workflow": params.get("workflow")})
+        input_hash = _hash({"provider": self.gen.provider, "scene": req.scene, "platform": req.platform, "name": req.product_name,
+                            "photo": sha, "workflow": params.get("workflow")})
         reusable = self.db.reusable_attempt(pid, "workflow", input_hash)
         if reusable is not None:
             self.db.add_event(pid, "attempt_reused", "workflow: resultado identico ja pago reaproveitado",
@@ -348,7 +357,7 @@ class FalRunner:
                                         estimated_cost_usd=estimate, pricing_source=source)
         if hold:
             o.ledger().attach(hold, att_id)
-        self._set_meta(att_id, style=style, stage="created")
+        self._set_meta(att_id, scene=req.scene, platform=req.platform, stage="created")
         if dj.get("resubmit_authorized"):
             self._set_dj(pid, resubmit_authorized=False)      # a autorizacao vale para UMA execucao
         return self._submit(pid, self.db.attempt(att_id))
@@ -356,12 +365,11 @@ class FalRunner:
     def _submit(self, pid: str, att) -> str:
         o = self.o
         att_id = att["id"]
-        style = self._meta(att).get("style") or self._style(pid)
         photo, _ = self._photo(pid)
         # gravado ANTES da chamada: se o processo cair daqui ate a resposta, o envio e tratado como incerto (nunca repetido)
         self._set_meta(att_id, stage="submitting", submit_started_at=now())
         try:
-            info = self.gen.submit_full(WorkflowRequest(style=style, image_path=photo))
+            info = self.gen.submit_full(self._request(pid, photo))
         except paid_gate.PaidCallsBlocked as exc:
             self.db.update_attempt(att_id, status="failed", error=str(exc)[:500], error_permanent=0, superseded=1,
                                    finished_at=now(), estimated_cost_usd=0.0)
@@ -416,7 +424,7 @@ class FalRunner:
                                f"a execucao passou de {o.s.fal_timeout_s:g}s. Confira na fal.ai; nada foi reenviado "
                                "(nova execucao so com `studio fal resubmit`).")
         try:
-            res = self.gen.poll(att["remote_op_id"], meta, meta.get("style"))
+            res = self.gen.poll(att["remote_op_id"], meta)
         except TransientError as exc:   # a execucao remota segue: nao falha a tentativa por erro de CONSULTA
             retries = att["transient_retries"] + 1
             delay = min(BACKOFF_BASE_S * 2 ** (retries - 1), BACKOFF_MAX_S)
@@ -444,7 +452,7 @@ class FalRunner:
         pkg = res.package
         adir = self._st(pid).dir(self._adir_rel(att))
         (adir / "result.json").write_text(json.dumps({
-            "request_id": att["remote_op_id"], "style": meta.get("style"), "package": fc.package_to_dict(pkg),
+            "request_id": att["remote_op_id"], "scene": meta.get("scene"), "platform": meta.get("platform"), "package": fc.package_to_dict(pkg),
             "raw": res.raw,      # resposta BRUTA do workflow (com o envelope), para confirmar recover.hero e request_id por no
             "usage": res.usage, "completed_at": now()}, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
         self._set_dj(pid, title=pkg.title, caption=pkg.caption, warnings=list(pkg.warnings))
@@ -502,7 +510,7 @@ class FalRunner:
                     tries["hero"] = tries.get("hero", 0) + 1
                     self._set_dj(pid, recover_tries=tries)
                     try:
-                        again = self.gen.recover_artifact(art, style=self._style(pid))
+                        again = self.gen.recover_artifact(art)
                     except (TransientError, PermanentError) as exc:
                         self.db.add_event(pid, "fal_recover", f"foto hero: busca pelo no falhou ({type(exc).__name__})")
                 if again is not None and self._try_image(adir, again):
@@ -582,6 +590,8 @@ class FalRunner:
             self._pause(pid, CLIENT_FINALIZING, INCOMPLETE, "foto hero ausente na entrega")
             return
         work = st.dir("work/compose")
+        # TODO(musica): a mixagem da trilha sera feita depois, no backend Kiroo, neste ponto (video do workflow ja baixado e
+        # validado, antes da composicao final). Fora do escopo do workflow unico: hoje o video segue so com a narracao.
         cfg = composer.ComposeConfig.from_env()
         try:
             rep = composer.compose(o.ffmpeg, video, work / "final.mp4", work, cfg)
@@ -610,7 +620,7 @@ class FalRunner:
         warnings = list(dict.fromkeys([*list(dj.get("warnings") or []), *rep.warnings, *cwarn]))
         status = "partial" if missing else "complete"      # texto faltando e AVISO (a entrega segue completa)
         st.write_json("delivery/delivery_meta.json", {
-            "engine": "fal", "style": self._style(pid), "simulated": bool(self.gen.simulated), "delivery_status": status,
+            "engine": "fal", "scene": self._choice(pid)[0], "platform": self._choice(pid)[1], "simulated": bool(self.gen.simulated), "delivery_status": status,
             "final_probe": rep.checks, "compose": {"video_action": rep.plan.video_action},
             "missing": missing, "text_status": "ok" if text_ok else "partial", "warnings": warnings, "files": manifest,
             "title": dj.get("title", ""), "caption": dj.get("caption", "")})
@@ -675,9 +685,9 @@ def admin_action(o, pid: str, action: str, *, request_id: str | None = None, rea
     if action == "adopt":   # envio incerto que existe na fal.ai: adota o request_id (sem novo envio)
         if att is None or runner._meta(att).get("stage") != "uncertain" or not request_id:
             raise OrchestratorError("adopt so vale para um envio incerto e exige --request-id")
-        wf = runner.gen.workflow_ids.get(runner._style(pid)) if hasattr(runner.gen, "workflow_ids") else None
+        wf = getattr(runner.gen, "workflow_id", None)
         o.db.update_attempt(att["id"], status="submitted", remote_op_id=request_id, submitted_at=now(), next_retry_at=None)
-        runner._set_meta(att["id"], stage="submitted", workflow=wf, style=runner._style(pid))
+        runner._set_meta(att["id"], stage="submitted", workflow=wf, scene=runner._choice(pid)[0], platform=runner._choice(pid)[1])
         o.db.add_event(pid, "admin_decision", f"execucao adotada pelo administrador: {request_id}")
         o.db.resume_production(pid, "execucao adotada pelo administrador")
         return "resumed"

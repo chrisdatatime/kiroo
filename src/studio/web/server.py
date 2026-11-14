@@ -37,6 +37,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlencode, urlparse
 
 from .. import agent_config, asaas as asaas_mod, creative_options, fal_contract, mailer, paid_gate, payments, plans, site_info, welcome
+from ..prompts import production as prompts
 from ..agent_chat import AgentChat
 from ..accounts import (LOGIN_WINDOW_MIN, RESET_MINUTES, TERMS_VERSION, VERIFY_MINUTES, Accounts, AuthError, GoogleAuthError, mask_tax_doc,
                         verify_password)
@@ -891,7 +892,10 @@ class App:
             finally:
                 db.close()
             data["settings"]["video_engine"] = self._engine_for(ctx["ws"], s)   # a interface so mostra o fluxo fal.ai com "fal"
-            data["settings"]["fal_styles"] = self._fal_offer(s, data["settings"].get("mode"), plan)
+            data["settings"]["fal_offer"] = self._fal_offer(s, data["settings"].get("mode"))
+            data["settings"]["fal_scenes"] = self._fal_scenes(plan)
+            data["settings"]["fal_platforms"] = [{"id": k, "label": v["label"], "subtitle": v["subtitle"]}
+                                                 for k, v in prompts.PLATFORMS.items()]
             return _json(200, data)
         if path.startswith("/media/"):
             return self._media(path, ctx, url.query)
@@ -1166,15 +1170,28 @@ class App:
         return own if own in ("gemini", "fal") else s.video_engine
 
     @staticmethod
-    def _fal_offer(s, mode, plan: str = "free") -> list[dict]:
-        """Estilos liberados com o preco EXATO do botao "Criar video · N creditos" (o mesmo pre-orcamento reservado na
-        criacao e conferido no /confirm). No DEMO nada e cobrado: cc 0."""
+    def _fal_offer(s, mode) -> dict:
+        """Preco EXATO do botao "Criar video · N creditos" (o mesmo pre-orcamento reservado na criacao e conferido no
+        /confirm), igual para qualquer cenario e plataforma. No DEMO nada e cobrado: cc 0."""
         from .. import budget as budget_mod
         from ..credits import fmt as fmt_cc
+        cc = budget_mod.estimate_workflow(s)["cc"] if mode == "real" else 0
+        return {"cc": cc, "credits": fmt_cc(cc)}
+
+    @staticmethod
+    def _fal_scenes(plan: str) -> list[dict]:
+        """Todos os cenarios, com `locked` para os de acesso antecipado que ESTE plano ainda nao ve (a tela mostra o
+        cadeado e "Disponivel no plano Escala"). `required_plan` so vem quando bloqueado."""
+        open_ids = prompts.scenes_for_plan(plan)
         out = []
-        for k in fal_contract.styles_for_plan(s, plan):   # acesso antecipado: só para o plano marcado no contrato
-            cc = budget_mod.estimate_workflow(s, k)["cc"] if mode == "real" else 0
-            out.append({"id": k, "label": fal_contract.STYLE_LABELS[k], "cc": cc, "credits": fmt_cc(cc)})
+        for k, v in prompts.SCENES.items():
+            locked = k not in open_ids
+            row = {"id": k, "label": v["label"], "subtitle": v["subtitle"], "locked": locked}
+            if locked:
+                tier = prompts.scene_early_access(k)
+                row["required_plan"] = tier
+                row["required_plan_label"] = plans.LABELS.get(tier or "", "")
+            out.append(row)
         return out
 
     def _fal_guard(self, pid: str, action: str, s) -> Response | None:
@@ -1199,7 +1216,7 @@ class App:
         try:
             if orch.needs_confirmation(pid):
                 return _json(409, {"error": "Confirme o custo antes de começar.", "code": "needs_confirmation"})
-            limit = orch.spend_block_message(pid, budget_mod.estimate_workflow(s, row["style"])["usd"])
+            limit = orch.spend_block_message(pid, budget_mod.estimate_workflow(s)["usd"])
             if limit:
                 return _json(409, {"error": limit, "code": "spend_limit"})
         finally:
@@ -1207,21 +1224,24 @@ class App:
         return None
 
     def _create_fal(self, payload: dict, ctx) -> Response:
-        """Criacao do motor fal.ai: UMA foto, o estilo (Escuro/Claro) e um id do cliente (anti duplo clique)."""
+        """Criacao do motor fal.ai: UMA foto, o cenario e a plataforma (IDs da allowlist; nunca texto de prompt), o nome
+        opcional do produto e um id do cliente (anti duplo clique)."""
         s = ctx["s"]
-        style = payload.get("style") or "light"          # sem seletor por enquanto: o cliente envia sempre o Claro
-        if style not in fal_contract.STYLES:
-            return _json(400, {"error": "Escolha o estilo: Escuro ou Claro."})
-        if style not in fal_contract.enabled_styles(s):
-            return _json(400, {"error": "Este estilo ainda nao esta disponivel. Use o estilo Claro."})
+        try:
+            scene = prompts.normalize_scene(payload.get("scene"))
+            platform = prompts.normalize_platform(payload.get("platform"))
+        except prompts.PromptInputError as exc:
+            what = "uma plataforma" if "plataforma" in str(exc) else "um cenário"
+            return _json(400, {"error": f"Escolha {what} da lista."})
         db = Database(s.db_path)
         try:
             plan = plans.plan_of(db, ctx["wid"])
         finally:
             db.close()
-        if style not in fal_contract.styles_for_plan(s, plan):
-            return _json(403, {"error": "Este estilo novo ainda está em acesso antecipado do plano Escala.",
-                               "code": "early_access"})
+        if scene not in prompts.scenes_for_plan(plan):
+            tier = plans.LABELS.get(prompts.scene_early_access(scene) or "", "")
+            return _json(403, {"error": f"Este cenário está disponível no plano {tier}.", "code": "early_access",
+                               "required_plan": prompts.scene_early_access(scene)})
         crid = str(payload.get("client_request_id") or "")
         if not re.fullmatch(r"[A-Za-z0-9_-]{8,64}", crid):
             return _json(400, {"error": "pedido sem identificador (client_request_id)"})
@@ -1246,24 +1266,24 @@ class App:
             from .. import budget as budget_mod
             db = Database(s.db_path)
             try:
-                Ledger(db).can_reserve(ctx["wid"], budget_mod.estimate_workflow(s, style)["cc"])
+                Ledger(db).can_reserve(ctx["wid"], budget_mod.estimate_workflow(s)["cc"])
             except InsufficientCreditsError as exc:
                 return self._no_credits(exc, fixed=True)
             finally:
                 db.close()
         refs = save_uploads(s.data_dir, [{"name": files[0]["name"], "data": files[0].get("data", ""), "role": "front",
                                           "source": "official_listing"}])
-        product = build_product({"name": str(payload.get("name") or "").strip()}, refs)
+        product = build_product({"name": prompts.clean_name(payload.get("name"))}, refs)
         orch = build(s)
         try:
             from .. import billing, budget as budget_mod, fal_pipeline
             if s.mode != "real":
                 budget_usd = billing.default_production_budget_usd(None)
             else:   # orcamento operacional: folga sobre o pre-orcamento, nunca acima do teto efetivo do estudio
-                ops = budget_mod.ops_budget_usd(budget_mod.estimate_workflow(s, style)["usd"], billing.policy().usd(
+                ops = budget_mod.ops_budget_usd(budget_mod.estimate_workflow(s)["usd"], billing.policy().usd(
                     billing.default_production_cap_credits()))
                 budget_usd = min(ops, max(float(s.monthly_cap_usd or 0), 0.0))
-            pid, dup = fal_pipeline.create_production(orch, product, style=style, workspace_id=ctx["wid"],
+            pid, dup = fal_pipeline.create_production(orch, product, scene=scene, platform=platform, workspace_id=ctx["wid"],
                                                       client_request_id=crid, budget_usd=budget_usd, prebudget=prebudget)
         except InsufficientCreditsError as exc:
             return self._no_credits(exc, fixed=True)
