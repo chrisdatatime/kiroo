@@ -270,3 +270,23 @@ def test_state_offers_the_single_price_with_the_exact_button_value(app):
     real = app._fal_offer(app.settings(), "real")
     assert real["cc"] == budget.estimate_workflow(app.settings())["cc"] == 2000 and fmt(2000) == "20"
     assert real["credits"] == "20"                                        # botão "Criar vídeo · 20 créditos"
+
+
+@requires_ffmpeg
+def test_fal_view_exposes_narration_and_elapsed_when_available(app):
+    pid = start(app)
+    wait_idle(app, pid)
+    F = state(app, pid)["production"]["fal"]
+    assert F["narration"] is None                              # o workflow simulado nao expoe o texto: o card some
+    assert isinstance(F["elapsed_s"], int) and F["elapsed_s"] >= 0
+    s, db, _ = app._db()
+    try:
+        row = db.conn.execute("SELECT id, usage_json FROM attempts WHERE production_id=? AND kind='workflow'", (pid,)).fetchone()
+        u = json.loads(row["usage_json"] or "{}")
+        u.update(narration_text="  Olha esse achadinho. Clica no carrinho.  ", narration_seconds=12.4, narration_words=6)
+        db.conn.execute("UPDATE attempts SET usage_json=? WHERE id=?", (json.dumps(u), row["id"]))
+        db.conn.commit()
+    finally:
+        db.close()
+    F = state(app, pid)["production"]["fal"]
+    assert F["narration"] == {"text": "Olha esse achadinho. Clica no carrinho.", "seconds": 12.4, "words": 6}

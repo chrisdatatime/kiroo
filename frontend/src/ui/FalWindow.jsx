@@ -109,8 +109,24 @@ function useEscape(f) {
   });
 }
 
+// "Outra plataforma" / "Outro cenário" (tela Missão concluída): rola e foca a seção pedida; o contorno accent vem de .fm-hl.
+function useReuseFocus(f, platRef, sceneRef) {
+  const kind = f.reuse ? f.reuse.kind : null;
+  React.useEffect(() => {
+    const el = kind === 'platform' ? platRef.current : kind === 'scene' ? sceneRef.current : null;
+    if (!el) return;
+    if (typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'center' });
+    const target = el.querySelector("button[aria-pressed='true']:not(:disabled)") || el.querySelector('button:not(:disabled)');
+    if (target) target.focus({ preventScroll: true });
+  }, [kind]);   // eslint-disable-line react-hooks/exhaustive-deps
+}
+const hl = (f, kind) => (f.reuse && f.reuse.kind === kind ? 'fm-hl' : undefined);
+const ctaLabel = (f, text) => (f.reuseBlocked ? f.reuseLabel : text);
+
 function PhoneSheet({ f }) {
   const pickRef = React.useRef(null);
+  const platRef = React.useRef(null), sceneRef = React.useRef(null);
+  useReuseFocus(f, platRef, sceneRef);
   useEscape(f);
   const create = f.file ? f.create : () => pickRef.current && pickRef.current.click();
   return (
@@ -125,13 +141,13 @@ function PhoneSheet({ f }) {
           <input ref={pickRef} type="file" accept="image/*" onChange={f.pick} className="fm-file" aria-label="Foto do produto" disabled={f.busy} />
           <Preview f={f} sceneName={f.sceneName} phone pickRef={pickRef} />
           <NameField f={f} id="fal-name" />
-          <div>
+          <div ref={sceneRef} className={hl(f, 'scene')}>
             <div className="fm-sec"><span className="fm-label" id="fal-scenes-l">Cenário</span><span className="fm-hint">O produto fica igual, só o ambiente muda</span></div>
             <div className="fm-carousel" role="group" aria-labelledby="fal-scenes-l">
               {f.scenes.map((s) => <SceneCard key={s.id} s={s} on={f.scene === s.id} f={f} />)}
             </div>
           </div>
-          <div>
+          <div ref={platRef} className={hl(f, 'platform')}>
             <div className="fm-sec"><span className="fm-label" id="fal-plats-l">Onde vai postar</span></div>
             <div className="fm-plat-list" role="group" aria-labelledby="fal-plats-l">
               {f.platforms.map((p) => <PlatformCard key={p.id} p={p} on={f.platform === p.id} f={f} list />)}
@@ -140,8 +156,8 @@ function PhoneSheet({ f }) {
         </div>
         <footer className="fm-sheet-foot">
           <Problems f={f} />
-          <button type="button" className="fm-primary" onClick={create} disabled={f.busy || (!!f.file && f.errors.length > 0)}>
-            {f.busy ? 'Começando…' : f.file ? f.label : 'Escolher foto'}
+          <button type="button" className="fm-primary" onClick={create} disabled={f.busy || f.reuseBlocked || (!!f.file && f.errors.length > 0)}>
+            {f.busy ? 'Começando…' : f.reuseBlocked ? f.reuseLabel : f.file ? f.label : 'Escolher foto'}
           </button>
           <p>{RECEIVE_SHORT}</p>
         </footer>
@@ -154,6 +170,8 @@ export default function FalWindow({ v }) {
   const phone = usePhone();
   const f = v.fal;
   const pickRef = React.useRef(null);
+  const platRef = React.useRef(null), sceneRef = React.useRef(null);
+  useReuseFocus(f, platRef, sceneRef);
   useEscape(f);
   if (phone) return <PhoneSheet f={f} />;
   const plat = (f.platforms.find((p) => p.id === f.platform) || {}).label || 'a plataforma escolhida';
@@ -176,13 +194,13 @@ export default function FalWindow({ v }) {
           </div>
           <div className="fm-right">
             <NameField f={f} id="fal-name" />
-            <div>
+            <div ref={sceneRef} className={hl(f, 'scene')}>
               <div className="fm-sec"><span className="fm-label" id="fal-scenes-l">Cenário</span><span className="fm-hint">O produto fica igual, só o ambiente muda</span></div>
               <div className="fm-scenes" role="group" aria-labelledby="fal-scenes-l">
                 {f.scenes.map((s) => <SceneCard key={s.id} s={s} on={f.scene === s.id} f={f} />)}
               </div>
             </div>
-            <div>
+            <div ref={platRef} className={hl(f, 'platform')}>
               <div className="fm-sec"><span className="fm-label" id="fal-plats-l">Onde vai postar</span><span className="fm-hint">Ajusta roteiro, título e legenda</span></div>
               <div className="fm-plats" role="group" aria-labelledby="fal-plats-l">
                 {f.platforms.map((p) => <PlatformCard key={p.id} p={p} on={f.platform === p.id} f={f} />)}
@@ -194,7 +212,7 @@ export default function FalWindow({ v }) {
         <footer className="fm-foot">
           <p className="fm-foot-txt">Você recebe vídeo de ~15 s com narração, 1 foto, título e legenda para <strong>{plat}</strong>. Se falhar por erro técnico, não é cobrado.</p>
           <div className="fm-foot-act">
-            <button type="button" className="fm-primary" onClick={f.create} disabled={f.busy || f.errors.length > 0}>{f.busy ? 'Começando…' : f.label}</button>
+            <button type="button" className="fm-primary" onClick={f.create} disabled={f.busy || f.reuseBlocked || f.errors.length > 0}>{f.busy ? 'Começando…' : ctaLabel(f, f.label)}</button>
           </div>
         </footer>
       </section>

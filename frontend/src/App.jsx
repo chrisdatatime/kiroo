@@ -35,7 +35,7 @@ import { deriveStage, sceneView, toCredits, creditsToUsd, endedOf, stoppedAt } f
 import { adjustmentGate, pauseKind } from './ui/pause.js';
 import { balanceLabel, needsConfirmation, usedLabel } from './ui/nextVideo.js';
 import { NO_BALANCE_CREATE, emptyMissionsCopy, firstVideoCopy } from './ui/welcome.js';
-import { falActive, falStatus, falStations, falAgentStatus, startFal, continueFal, offerFor, createLabel, endedLabel as falEndedLabel, availableScenes, availablePlatforms, effectiveScene, effectivePlatform, sceneLabel, platformLabel, receiveLine, gallery as falGallery, draftErrors as falDraftErrors, createPayload as falCreatePayload, newRequestId, IMAGE_EXT } from './ui/falFlow.js';
+import { falActive, falStatus, falStations, falAgentStatus, startFal, continueFal, offerFor, createLabel, endedLabel as falEndedLabel, availableScenes, availablePlatforms, effectiveScene, effectivePlatform, sceneLabel, platformLabel, receiveLine, gallery as falGallery, draftErrors as falDraftErrors, createPayload as falCreatePayload, newRequestId, IMAGE_EXT, canCancelFal, reuseDraft, reuseBlocked, reuseFileName, REUSE_LABEL } from './ui/falFlow.js';
 import { adjustFunds, noBalanceFromError, noBalanceNotice } from './ui/credits.js';
 import Shell, { VIEWS } from './shell/Shell.jsx';
 import Central from './shell/Central.jsx';
@@ -111,7 +111,7 @@ export default class App extends React.Component {
       // sem sessão: home pública (null) ou tela de acesso ('login' | 'signup'); ?entrar abre direto o login
       entry: new URLSearchParams(window.location.search).has('entrar') ? 'login' : null,
       draft: Object.assign({}, EMPTY_DRAFT, LS.get('bc.draft', {})), files: [],
-      fal: { scene: null, platform: null, file: null, name: '', reqId: null, busy: false, error: null },   // fluxo foto + cenário + plataforma (só com o motor novo)
+      fal: { scene: null, platform: null, file: null, name: '', reqId: null, busy: false, error: null, reuse: null },   // fluxo foto + cenário + plataforma (só com o motor novo)
       opts: null, creative: null, preview: null, reqText: '', caption: null, pilot: LS.get('bc.autonomy', 'assistido'),
       ui: { win: null, who: null, tab: 'produto', dirSub: 'dir', ctab: 'personagem', revSel: 1, revView: 'scene', adjust: false, issues: [], adjText: '', toast: null, tut: !LS.get('bc.tutDone', false), playing: false, budgetHit: false },
       cenario: normalizeTheme(LS.get(THEME_KEY, DEFAULT_THEME)),
@@ -746,6 +746,7 @@ export default class App extends React.Component {
     const f = this.state.fal;
     if (f.busy) return;
     const scene = effectiveScene(this.state.S, f.scene), platform = effectivePlatform(this.state.S, f.platform);   // padrão: Casa Clara + Shopee Vídeo
+    if (reuseBlocked(f.reuse, scene, platform)) return;   // "Outra plataforma/Outro cenário": a escolha ainda é a original
     const errs = falDraftErrors({ ...f, scene, platform });
     if (errs.length) { this.setFal({ error: 'Falta ' + errs.join(', ') + '.' }); return; }
     const reqId = f.reqId || newRequestId();
@@ -753,7 +754,7 @@ export default class App extends React.Component {
     const body = falCreatePayload({ scene, platform, file: f.file, requestId: reqId, name: f.name });   // só ids; o servidor monta o texto
     const r = await startFal(post, { body, cc: offerFor(this.state.S).cc });
     if (!r.ok) { this.setFal({ busy: false, error: r.noFunds ? NO_BALANCE_CREATE : r.error, noFunds: !!r.noFunds }); return; }
-    this.setFal({ busy: false, reqId: null, file: null, name: '', scene: null, platform: null, error: null });
+    this.setFal({ busy: false, reqId: null, file: null, name: '', scene: null, platform: null, error: null, reuse: null });
     this.setState({ pid: r.pid, draftMode: false, caption: null, view: 'missao' });
     this.closeWin();
     await this.refresh();
@@ -774,6 +775,7 @@ export default class App extends React.Component {
     const f = s.fal;
     const scene = effectiveScene(s.S, f.scene), platform = effectivePlatform(s.S, f.platform);
     const demo = !!(s.S && s.S.settings.mode !== 'real');
+    const reuseBlocked = this.reuseIsBlocked(scene, platform);
     return { P: P && P.engine === 'fal' ? P : null, draft: !!s.draftMode,
       scene, scenes: availableScenes(s.S), setScene: (id) => { const sc = availableScenes(s.S).find((x) => x.id === id); if (sc && !sc.locked) this.setFal({ scene: id }); },
       platform, platforms: availablePlatforms(s.S), setPlatform: (id) => this.setFal({ platform: id }), receive: receiveLine(platformLabel(s.S, platform)),
@@ -781,8 +783,35 @@ export default class App extends React.Component {
       clearFile: () => this.setFal({ file: null, reqId: null }), pick: (e) => this.falPick(e), pickFile: (file) => this.falPickFile(file),
       errors: falDraftErrors({ ...f, scene, platform }), error: f.error || null, noFunds: !!f.noFunds, busy: f.busy, demo,
       openBuy: () => { this.setFal({ error: null, noFunds: false }); this.setUI({ win: s.account && s.account.payments && s.account.payments.online ? 'buy' : 'credits' }); },
+      reuse: f.reuse ? { kind: f.reuse.kind } : null,
+      reuseBlocked, reuseLabel: reuseBlocked ? REUSE_LABEL[f.reuse.kind] : null,
       label: createLabel(offerFor(s.S), demo), create: () => this.falCreate(),
-      close: () => { if (!f.busy) { this.setFal({ error: null }); this.closeWin(); } } };
+      close: () => {
+        if (f.busy) return;
+        this.setFal({ error: null, reuse: null });
+        if (f.reuse) this.setState({ draftMode: false });   // voltou da escolha de outra versão: reabre a missão que estava aberta
+        this.closeWin();
+      } };
+  }
+  reuseIsBlocked(scene, platform) { return reuseBlocked(this.state.fal.reuse, scene, platform); }
+  // "Outra plataforma" / "Outro cenário" (tela Missão concluída): reabre o modal Nova produção com a MESMA foto, nome, cenário e
+  // plataforma do vídeo atual. O modal foca a seção pedida e só libera "Criar vídeo" quando a escolha mudar.
+  async falReuse(kind) {
+    const P = this.prodP(); const d = reuseDraft(P, kind);
+    if (!d || this.state.fal.busy) return;
+    if (!d.photoUrl) { this.toast('Não achei a foto desta missão. Envie a foto de novo.'); return; }
+    this.setFal({ busy: true, error: null });
+    try {
+      const r = await fetch(d.photoUrl, { credentials: 'same-origin' });
+      if (!r.ok) throw new Error('foto');
+      const blob = await r.blob();
+      const name = reuseFileName(d.photoUrl, blob.type);
+      const data = await readFile(new File([blob], name, { type: blob.type || 'image/jpeg' }));
+      this.setFal({ busy: false, file: { name, size: blob.size, data }, name: d.name, scene: d.scene, platform: d.platform, reqId: null, error: null, noFunds: false,
+        reuse: { kind, original: d.original } });
+    } catch (e) { this.setFal({ busy: false }); this.toast('Não deu para abrir a foto desta missão. Tente de novo.'); return; }
+    this.setState({ draftMode: true });
+    this.setUI({ win: 'prod', tab: 'produto' });
   }
   // Missão fal (status real + esteira estimada + entrega).
   falMission(P) {
@@ -793,14 +822,17 @@ export default class App extends React.Component {
     const credits = P.confirmation && P.confirmation.summary ? P.confirmation.summary.total_credits : null;
     return { P, status: belt.status, stations: belt.stations, progress: belt.progress, gallery: falGallery(P),
       start: () => this.falStart(), startLabel: cc > 0 && credits ? `Criar vídeo · ${credits} créditos` : 'Criar vídeo',
-      busy: s.fal.busy || !!s.busy, error: s.fal.error, exportVideo: () => this.exportVideo() };
+      busy: s.fal.busy || !!s.busy, error: s.fal.error, exportVideo: () => this.exportVideo(),
+      chips: { scene: { id: P.fal && P.fal.scene, label: (P.fal && P.fal.scene_label) || '' }, platform: { id: P.fal && P.fal.platform, label: (P.fal && P.fal.platform_label) || '' } },
+      reuse: (kind) => this.falReuse(kind), variantCredits: offerFor(s.S).credits,
+      support: s.account && s.account.plan ? s.account.plan.support : null };
   }
   exportVideo() {
     const P = this.prodP(); if (!P) return;
     this.act('exportar', () => post(`/api/productions/${P.id}/final`, { decision: 'approve', note: 'exportado pelo estúdio' }), 'Exportado! Baixe os arquivos e publique pelo app da Shopee.');
   }
   newProduction() {
-    this.setFal({ style: null, file: null, name: '', reqId: null, busy: false, error: null });
+    this.setFal({ style: null, file: null, name: '', reqId: null, busy: false, error: null, reuse: null });
     this.setState({ pid: null, draftMode: true, files: [], creative: null, preview: null, opts: null, caption: null, draft: Object.assign({}, EMPTY_DRAFT) });
     this.setUI({ win: 'prod', tab: 'produto' });
     this.toast('Nova produção! A Nina está esperando o produto.');
@@ -1177,7 +1209,7 @@ export default class App extends React.Component {
       pause: this.pauseInfo(), raiseMonthly: (n) => this.raiseMonthly(n), resumeOnly: () => this.resumeOnly(),
       cancelProd: () => this.cancelProd(), confirmCancel: !!ui.confirmCancel, keepProd: () => this.setUI({ confirmCancel: false }),
       // Missão encerrada e cancelamento pela interface (com confirmação dentro do app)
-      ended, endedText, canCancel: !!(P && !ended && P.status !== 'completed'),
+      ended, endedText, canCancel: P && P.engine === 'fal' ? canCancelFal(P) : !!(P && !ended && P.status !== 'completed'),   // fal: só em andamento
       // Apresentação e formato ATIVOS (os que o motor usa para roteiro, prompts e revisão)
       active: P && P.engine === 'fal' ? { presentation: null, label: [(P.fal && P.fal.scene_label) || '', (P.fal && P.fal.platform_label) || ''].filter(Boolean).join(' · '), format: '', provisional: false }
         : P ? { presentation: P.presentation || null, label: P.presentation_label || (P.awaiting_direction ? 'A definir na Direção' : '—'),

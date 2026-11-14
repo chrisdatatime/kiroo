@@ -13,6 +13,7 @@ import Icon from './icons.jsx';
 import { Avatar, AGENT_STATE } from './Central.jsx';
 import { AgentHead } from './AgentHead.jsx';
 import { usePhone } from '../hooks/use-phone.js';
+import { FalChips } from '../ui/FalMission.jsx';
 import compactLogo from '../assets/brand/icone-app-preto.svg';
 import wordmark from '../assets/brand/wordmark-preto-laranja.svg';
 import './shell.css';
@@ -253,6 +254,7 @@ export default function Shell({ v, rootRef, stageRef, onKeyDown, onKeyUp, onBlur
   React.useEffect(() => { document.title = `Kiroo — ${cur.label}`; }, [cur.label]);
   const bal = v.wallet ? (v.wallet.exempt ? 'Isento' : `${v.wallet.balance} créditos`) : '';
   const newMission = () => { v.setView('missao'); v.newProd(); };
+  const falTop = v.view === 'missao' && v.falMission ? v.falMission : null;   // missão fal: topo com chips e Nova missão em accent
 
   return (
     <div ref={rootRef} tabIndex={-1} onKeyDown={onKeyDown} onKeyUp={onKeyUp} onBlur={onBlur} className="pv" data-panel={panel ? 'open' : 'closed'} data-phone={phone || undefined}
@@ -269,15 +271,17 @@ export default function Shell({ v, rootRef, stageRef, onKeyDown, onKeyUp, onBlur
               {v.mode === 'simulated' && <span className="pv-status pv-status-demo">DEMO</span>}
               <span className="pv-rail-fill" />
               {bal && <button type="button" className="pv-top-credits" onClick={() => v.openPrefs('credits')} aria-label={`Saldo: ${bal}. Abrir créditos`}><CircleDollarSign size={17} aria-hidden="true" />{v.wallet.exempt ? 'Isento' : v.wallet.balance}</button>}
+              {falTop && <button type="button" className="pv-cta pv-cta-accent pv-cta-icon" onClick={newMission} aria-label="Nova missão"><Plus size={18} aria-hidden="true" /></button>}
             </header>
           ) : (
           <header className="pv-top">
             {!panel && <RailTip label="Abrir painel"><button type="button" className="pv-icon-btn" onClick={() => setPanel(true)} aria-label="Abrir painel"><PanelLeft size={18} aria-hidden="true" /></button></RailTip>}
-            <h1>{cur.title}{v.view !== 'central' && v.prodName ? <span> · {v.prodName}</span> : null}</h1>
+            <h1>{falTop ? 'Missão' : cur.title}{!falTop && v.view !== 'central' && v.prodName ? <span> · {v.prodName}</span> : null}</h1>
+            {falTop && <FalChips chips={falTop.chips} />}
             {v.conn === 'erro' && <span role="alert" className="pv-status pv-status-error">Sem conexão</span>}
             {v.mode === 'simulated' && <span className="pv-status pv-status-demo" title="Nada é cobrado; imagens e vídeos são de exemplo">DEMO</span>}
             {v.ended && <span className="pv-status pv-status-ended" role="status">{v.ended === 'cancelled' ? 'Cancelada' : 'Falhou'}</span>}
-            {v.active && v.view !== 'central' && (
+            {!falTop && v.active && v.view !== 'central' && (
               <span className="pv-status pv-status-format pv-hide-sm" data-testid="active-format"
                 title={'Apresentação e formato ativos: ' + v.active.label + ' · ' + v.active.format + (v.active.provisional ? ' (formato provisório até a Direção)' : '')}>
                 {v.active.label}{v.active.format && !v.active.provisional ? <code>{v.active.format}</code> : null}
@@ -288,7 +292,7 @@ export default function Shell({ v, rootRef, stageRef, onKeyDown, onKeyUp, onBlur
               {bal && <button type="button" className="pv-top-btn pv-hide-sm" onClick={() => v.openPrefs('credits')}><CircleDollarSign size={15} aria-hidden="true" />{bal}</button>}
               <button type="button" className="pv-top-btn pv-hide-md" onClick={() => v.openPrefs('pilot')}><Bot size={15} aria-hidden="true" />{v.pilot.label}</button>
             </span>
-            <button type="button" className="pv-cta pv-cta-sm" data-tour="new-mission" onClick={newMission}><Plus size={16} aria-hidden="true" /><span className="pv-hide-sm">Nova missão</span></button>
+            <button type="button" className={'pv-cta pv-cta-sm' + (falTop ? ' pv-cta-accent' : '')} data-tour="new-mission" onClick={newMission}><Plus size={16} aria-hidden="true" /><span className="pv-hide-sm">Nova missão</span></button>
           </header>
           )}
           <div className="pv-body" ref={stageRef} data-tour={v.view === 'escritorio' ? 'office' : undefined}>{children}</div>

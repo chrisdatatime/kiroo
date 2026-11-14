@@ -123,3 +123,6 @@
 .fm-sheet .fm-sec { flex-wrap: wrap; row-gap: 2px; }
 
 @media (prefers-reduced-motion: reduce) { .fm-sheet { animation: none; } .fm-card { transition: none; } }
+
+/* "Outra plataforma" / "Outro cenário": a seção pedida fica com contorno accent (rolada e focada pelo FalWindow) */
+.fm-hl { outline: 2px solid var(--accent); outline-offset: 6px; border-radius: 14px; }

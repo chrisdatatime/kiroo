@@ -407,10 +407,33 @@ def _fal_view(settings, db, p, pid: str, st, delivery: dict) -> dict:
     finalizing = st == PS.PAUSED and (code in FAL_FINALIZING_CODES or p["delivery_status"] == "incomplete")
     image = {"role": "hero", "label": fal_contract.HERO_LABEL, "file": fal_contract.HERO_FILE,
              "url": delivery.get(fal_contract.HERO_FILE)}
+    try:
+        usage = json.loads(att["usage_json"] or "{}") if att is not None else {}
+    except ValueError:
+        usage = {}
+    if not isinstance(usage, dict):
+        usage = {}
+    nar_s = usage.get("narration_seconds")
+    nar_txt = usage.get("narration_text")
     return {"scene": p["scene"], "scene_label": prompts.scene_label(p["scene"]),
             "platform": p["platform"], "platform_label": prompts.platform_label(p["platform"]),
             "stage": meta.get("stage"), "queue_position": meta.get("queue"), "remote_status": meta.get("remote_status"),
             "finalizing": finalizing, "delivery_status": p["delivery_status"],
             "image": image, "missing_images": dj.get("missing", []) if p["delivery_status"] in ("incomplete", "partial") else [],
             "title": dj.get("title", ""), "caption": dj.get("caption", ""),
-            "warnings": dj.get("warnings", []), "submitted_at": att["submitted_at"] if att is not None else None}
+            "warnings": dj.get("warnings", []), "submitted_at": att["submitted_at"] if att is not None else None,
+            # Narracao (so existe se o workflow expoe `narration_text`/`narration_audio`) e tempo total da equipe.
+            "narration": ({"text": nar_txt.strip(), "seconds": nar_s if isinstance(nar_s, (int, float)) else None,
+                           "words": usage.get("narration_words") if isinstance(usage.get("narration_words"), int) else None}
+                          if isinstance(nar_txt, str) and nar_txt.strip() else None),
+            "elapsed_s": _elapsed_s(att["submitted_at"], att["finished_at"]) if att is not None else None}
+
+
+def _elapsed_s(start, end) -> int | None:
+    """Segundos entre o envio e a entrega (None se faltar uma das pontas ou nao fizer sentido)."""
+    try:
+        a, b = datetime.fromisoformat(start), datetime.fromisoformat(end)
+    except (TypeError, ValueError):
+        return None
+    secs = int((b - a).total_seconds())
+    return secs if secs >= 0 else None

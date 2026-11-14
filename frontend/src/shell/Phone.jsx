@@ -1,13 +1,14 @@
 import React from 'react';
-import { AlertCircle, ArrowRight, Check, ChevronRight, Copy, Download, Plus } from 'lucide-react';
+import { AlertCircle, ArrowRight, Check, ChevronRight, Plus } from 'lucide-react';
 import Boneco from '../Boneco.jsx';
 import { Avatar } from './Central.jsx';
 import CancelMission from './CancelMission.jsx';
 import { useReducedMotion } from './Conveyor.jsx';
 import { stationAria } from './conveyor.js';
 import { usePhone } from '../hooks/use-phone.js';
-import { useFalBelt } from '../ui/FalMission.jsx';
-import { missionWord, canShareFile, shareSupported, shareFallback, shareName } from '../ui/mobile.js';
+import { useFalBelt, FalDone } from '../ui/FalMission.jsx';
+import { isDone } from '../ui/falFlow.js';
+import { missionWord } from '../ui/mobile.js';
 import { UpsellNote } from '../ui/UpsellNote.jsx';
 
 // Celular (<= 640 px): telas pensadas para o polegar, uma ação principal por tela (fixa no rodapé, acima da barra
@@ -115,85 +116,16 @@ export function BeltVertical({ stations, team, ended = null, missionKey = null, 
   );
 }
 
-// ---------------------------------------------------------------- entrega
-function triggerDownload(href) {
-  if (!href) return;
-  const a = document.createElement('a');
-  a.href = href; a.download = ''; a.rel = 'noopener';
-  document.body.appendChild(a); a.click(); a.remove();
-}
-
-// Busca o arquivo ANTES do toque quando o navegador compartilha arquivos: o iOS só abre o "Compartilhar" se o share
-// sair direto do gesto, sem esperar um download. Sem suporte (ou falhou): o botão baixa o arquivo.
-function useShareFile(url, name, mime) {
-  const [file, setFile] = React.useState(null);
-  React.useEffect(() => {
-    setFile(null);
-    const nav = typeof navigator !== 'undefined' ? navigator : null;
-    if (!url || !shareSupported(nav) || typeof File === 'undefined') return undefined;
-    let on = true;
-    fetch(url, { credentials: 'same-origin' }).then((r) => (r.ok ? r.blob() : null)).then((b) => {
-      if (!on || !b) return;
-      const f = new File([b], name, { type: b.type || mime });
-      if (canShareFile(nav, f)) setFile(f);
-    }).catch(() => {});
-    return () => { on = false; };
-  }, [url, name, mime]);
-  return file;
-}
-
-function ShareButton({ url, download, name, mime, label }) {
-  const file = useShareFile(url, name, mime);
-  const go = () => {
-    if (file) { navigator.share({ files: [file], title: name }).catch((e) => { if (shareFallback(e)) triggerDownload(download); }); return; }
-    triggerDownload(download);
-  };
-  return <button type="button" className="pv-act" onClick={go} disabled={!download}><Download size={20} aria-hidden="true" />{label}</button>;
-}
-
-function CopyButton({ text, label }) {
-  const [ok, setOk] = React.useState(false);
-  const copy = async () => {
-    try { await navigator.clipboard.writeText(text); setOk(true); setTimeout(() => setOk(false), 2000); } catch { /* sem área de transferência: o texto está logo abaixo para copiar à mão */ }
-  };
-  return <button type="button" className="pv-act" onClick={copy} disabled={!text} aria-live="polite">{ok ? <Check size={20} aria-hidden="true" /> : <Copy size={20} aria-hidden="true" />}{ok ? 'Copiado!' : label}</button>;
-}
-
-function PhoneDelivery({ m, product }) {
-  const g = m.gallery;
-  return (
-    <section aria-label="Entrega" className="pv-ph-deliv">
-      <video className="pv-ph-video" src={g.video.url} poster={g.cover || undefined} controls playsInline preload="metadata" aria-label="Vídeo final" />
-      <div className="pv-acts">
-        <ShareButton url={g.video.url} download={g.video.download} name={shareName(product, 'video', '.mp4')} mime="video/mp4" label="Baixar vídeo" />
-        {g.image && g.image.url
-          ? <ShareButton url={g.image.url} download={g.image.download} name={shareName(product, 'foto', '.jpg')} mime="image/jpeg" label="Baixar foto" />
-          : <button type="button" className="pv-act" disabled><Download size={20} aria-hidden="true" />Sem foto</button>}
-        <CopyButton text={g.title} label="Copiar título" />
-        <CopyButton text={g.caption} label="Copiar legenda" />
-      </div>
-      {g.image && g.image.url && <img className="pv-ph-photo" src={g.image.url} alt="Foto do produto" />}
-      {g.title && <div className="pv-ph-text"><span>Título</span><p>{g.title}</p></div>}
-      {g.caption && <div className="pv-ph-text"><span>Legenda</span><p>{g.caption}</p></div>}
-      {g.textMissing && <div className="pv-ph-note">O vídeo veio sem título e legenda. Escreva os seus antes de publicar.</div>}
-      {g.captionFile && <a className="pv-act pv-act-wide" href={g.captionFile.download} download>Baixar legenda com aviso de publicidade</a>}
-      {g.partial && <div className="pv-ph-note">Entrega parcial: a foto não ficou pronta.</div>}
-      <div className="pv-ph-note">Ao publicar na Shopee, marque o conteúdo como publicidade. A publicação é manual.</div>
-      {m.P.status === 'awaiting_final_review' && <button type="button" className="pv-act pv-act-wide" onClick={m.exportVideo} disabled={m.busy}>Marcar como exportado</button>}
-    </section>
-  );
-}
-
 // ---------------------------------------------------------------- missão (fluxo foto + estilo)
 export function PhoneFalMission({ v, m: m0 }) {
   const belt = useFalBelt(m0.P);       // esteira animada: mesma fonte (falBelt) e mesmo estado do desktop
   const m = { ...m0, status: belt.status, stations: belt.stations, progress: belt.progress };
   const st = m.status || {};
-  const done = !!(m.gallery && m.gallery.video) && belt.allDone;   // a entrega sobe só depois das 6 etapas cheias
+  const done = !!(m.gallery && m.gallery.video) && belt.allDone && isDone(m.P);   // o resultado sobe só depois das 6 etapas cheias
   const ended = ['failed', 'cancelled', 'partial'].includes(st.kind);
   return (
     <div className="pv-scroll"><div className="pv-wrap pv-ph">
-      {done && <PhoneDelivery m={m} product={v.prodName} />}
+      {done && <FalDone m={m} team={v.team} product={v.prodName} stations={belt.stations} phone />}
       {done && v.firstVideo && <UpsellNote copy={v.firstVideo} onClick={v.openBuy} />}
       {!done && (
         <section className="pv-ph-status" role="status" data-kind={st.kind}>
@@ -202,15 +134,10 @@ export function PhoneFalMission({ v, m: m0 }) {
           {st.kind === 'running' && <span className="pv-ph-pct">{m.progress}%</span>}
         </section>
       )}
-      <BeltVertical stations={m.stations} team={v.team} ended={v.ended} missionKey={v.prodId} autoScroll={!done} />
-      {(v.balanceText || v.canCancel) && (
-        <section className="pv-ph-foot" aria-label="Custo">
-          {v.balanceText && <span>{v.balanceText}</span>}
-          <CancelMission v={v} />
-        </section>
-      )}
+      {!done && <BeltVertical stations={m.stations} team={v.team} ended={v.ended} missionKey={v.prodId} autoScroll />}
+      {!done && v.canCancel && <section className="pv-ph-foot" aria-label="Cancelar"><CancelMission v={v} /></section>}
       {st.action === 'start' && <Dock error={m.error}><button type="button" className="pv-dock-btn" onClick={m.start} disabled={m.busy}>{m.busy ? 'Começando…' : m.startLabel}</button></Dock>}
-      {st.action !== 'start' && (done || ended) && <Dock><button type="button" className="pv-dock-btn pv-dock-quiet" onClick={v.newProd}><Plus size={20} aria-hidden="true" />Nova produção</button></Dock>}
+      {st.action !== 'start' && !done && ended && <Dock><button type="button" className="pv-dock-btn pv-dock-quiet" onClick={v.newProd}><Plus size={20} aria-hidden="true" />Nova produção</button></Dock>}
     </div></div>
   );
 }

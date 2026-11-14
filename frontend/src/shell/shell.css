@@ -61,6 +61,11 @@
 .pv-cta:hover { background: var(--primary-hover); } .pv-cta:active { transform: translateY(1px); }
 .pv-cta:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .pv-cta-sm { min-height: 34px; padding: 0 12px; }
+/* "Nova missão" em accent (tela da missão fal): mesmo #5b5bd6 do modal Nova produção, nunca preto */
+.pv-cta.pv-cta-accent { background: #5b5bd6; color: #fff; }
+.pv-cta.pv-cta-accent:hover { background: #4f4fc4; }
+.pv-cta.pv-cta-accent:focus-visible { outline: 2px solid #5b5bd6; outline-offset: 2px; }
+.pv-cta.pv-cta-icon { width: 44px; min-height: 44px; padding: 0; border-radius: 12px; flex: none; }
 .pv-search { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 10px; border-radius: 10px; background: #F2F2EF; color: var(--ink-3); border: 1px solid transparent; transition: border-color .15s, background .15s; }
 .pv-search:focus-within { background: #fff; border-color: var(--primary); }
 .pv-search input { flex: 1; min-width: 0; border: 0; background: transparent; outline: none; font: 500 13px 'Instrument Sans', sans-serif; color: var(--ink); }

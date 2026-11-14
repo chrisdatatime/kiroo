@@ -1,0 +1,129 @@
+/* Tela "Missão concluída" (motor fal). Escopo .fd; mesmo padrão do falModal.css: destaque #5b5bd6, cartões brancos com
+   borda #ececef e raio 16, rótulos de seção de 12 px (13 px no celular). Celular = <= 640 px (mesmo limite do usePhone). */
+.fd {
+  --accent: #5b5bd6;
+  --accent-ink: #4b4bc0;
+  --fd-line: #ececef;
+  --fd-ink: #18181b;
+  --fd-mute: #52525b;
+  --fd-soft: #71717a;
+  --fd-av: 40px;
+  --fd-scale: 1;
+  width: 100%;
+  max-width: 1180px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  color: var(--fd-ink);
+  font-family: inherit;
+}
+.fd *, .fd *::before, .fd *::after { box-sizing: border-box; }
+.fd :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.fd button { font-family: inherit; }
+
+/* ---------- banner + esteira compacta ---------- */
+.fd-banner { background: #fff; border: 1px solid var(--fd-line); border-radius: 16px; padding: 18px 22px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 20px; }
+.fd-banner-head { display: flex; align-items: center; gap: 14px; min-width: 260px; }
+.fd-bigcheck { flex: none; width: 44px; height: 44px; border-radius: 50%; background: #dcfce7; color: #15803d; display: grid; place-items: center; }
+.fd-banner-txt { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.fd-banner-txt h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -.01em; line-height: 1.2; }
+.fd-banner-txt span { font-size: 14px; color: var(--fd-mute); }
+
+.fd-belt { flex: 0 1 520px; min-width: 300px; list-style: none; margin: 0; padding: 0; display: flex; align-items: flex-start; gap: 0; }
+.fd-step { flex: none; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.fd-av { position: relative; flex: none; width: var(--fd-av); height: var(--fd-av); border-radius: 10px; background: #f4f4f5; display: grid; place-items: center; }
+.fd-av .pv-avatar { transform: scale(var(--fd-scale)); }
+.fd-ok { position: absolute; right: -4px; bottom: -4px; width: 18px; height: 18px; border-radius: 50%; background: #16a34a; border: 2px solid #fff; color: #fff; display: grid; place-items: center; }
+.fd-step-name { font-size: 11px; font-weight: 600; color: #3f3f46; white-space: nowrap; }
+.fd-link { flex: 1 1 12px; min-width: 8px; height: 2px; margin-top: calc(var(--fd-av) / 2 - 1px); background: #bbf7d0; list-style: none; }
+
+/* ---------- chips (cenário e plataforma) ---------- */
+.fd-chips { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.fd-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 4px; border-radius: 999px; background: #f4f4f5; font-size: 13px; font-weight: 600; color: #3f3f46; white-space: nowrap; }
+.fd-chip img { display: block; flex: none; }
+.fd-chip .fd-chip-scene { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; }
+.fd-chip .fd-chip-logo { width: 16px; height: 16px; margin-left: 2px; object-fit: contain; }
+
+/* ---------- conteúdo: 2 colunas com quebra ---------- */
+.fd-grid { display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start; }
+.fd-left { flex: 0 1 340px; min-width: 280px; display: flex; flex-direction: column; gap: 14px; }
+.fd-right { flex: 999 1 480px; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+
+.fd-player { position: relative; width: 100%; max-width: 340px; aspect-ratio: 9 / 16; margin: 0 auto; border-radius: 18px; overflow: hidden; background: #0f1a0f; }
+.fd-player video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #0f1a0f; }
+.fd-badge { position: absolute; left: 12px; top: 12px; padding: 4px 10px; border-radius: 999px; background: rgba(255, 255, 255, .9); color: var(--fd-ink); font-size: 12px; font-weight: 600; pointer-events: none; }
+.fd-acts { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 340px; margin: 0 auto; }
+
+/* ---------- botões (alvos >= 44 px) ---------- */
+.fd-btn { min-height: 44px; padding: 0 14px; border: 1px solid #e4e4e7; border-radius: 10px; background: #fff; color: var(--fd-ink); font-size: 14px; font-weight: 600;
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px; text-decoration: none; cursor: pointer; transition: background-color .12s, border-color .12s; -webkit-tap-highlight-color: transparent; }
+.fd-btn:hover:not(:disabled) { background: #fafafa; border-color: #d4d4d8; }
+.fd-btn:disabled { opacity: .55; cursor: default; }
+.fd-btn.fd-primary { min-height: 50px; border: 0; border-radius: 12px; background: var(--accent); color: #fff; font-size: 15px; font-weight: 700; }
+.fd-btn.fd-primary:hover { background: #4f4fc4; }
+.fd-btn.fd-secondary { min-height: 46px; border-radius: 12px; }
+.fd-copy { font-size: 13.5px; flex: none; }
+.fd-copy[data-ok] { border-color: #86efac; background: #f0fdf4; color: #15803d; }
+
+/* ---------- cartões ---------- */
+.fd-card { background: #fff; border: 1px solid var(--fd-line); border-radius: 16px; padding: 18px 20px; display: flex; flex-direction: column; gap: 10px; }
+.fd-rhead { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; }
+.fd-rhead h2 { margin: 0; font-size: 18px; font-weight: 700; }
+.fd-rhead span { font-size: 13.5px; color: var(--fd-mute); }
+.fd-label { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--fd-soft); }
+.fd-title { margin: 0; font-size: 17px; font-weight: 600; line-height: 1.4; overflow-wrap: anywhere; }
+.fd-caption { margin: 0; font-size: 15px; line-height: 1.6; color: #27272a; white-space: pre-wrap; overflow-wrap: anywhere; }
+.fd-tags { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.fd-tags li { padding: 4px 10px; border-radius: 999px; background: rgba(91, 91, 214, .08); color: var(--accent-ink); font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.fd-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.fd-rowtop { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.fd-count { font-size: 13px; color: var(--fd-soft); }
+.fd-nar { margin: 0; font-size: 14px; line-height: 1.55; color: #3f3f46; overflow-wrap: anywhere; }
+.fd-link-sm { align-self: flex-start; min-height: 44px; display: inline-flex; align-items: center; font-size: 13px; font-weight: 600; color: var(--accent-ink); }
+.fd-pair { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+.fd-pair-2 { grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+.fd-pair:empty { display: none; }
+.fd-photo { flex-direction: row; align-items: center; gap: 14px; padding: 16px 18px; }
+.fd-photo img { flex: none; width: 72px; height: 96px; object-fit: cover; border-radius: 10px; }
+.fd-photo > div { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.fd-photo .fd-btn { align-self: flex-start; font-size: 13.5px; }
+.fd-note { font-size: 13.5px; color: var(--fd-mute); }
+
+.fd-variants { border: 1px dashed #d4d4d8; border-radius: 16px; padding: 16px 18px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.fd-variants > div:first-child { display: flex; flex-direction: column; gap: 3px; min-width: 200px; }
+.fd-variants h3 { margin: 0; font-size: 15px; font-weight: 700; }
+.fd-variants span { font-size: 13px; color: var(--fd-mute); }
+.fd-variant-btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.fd-export { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.fd-export span { font-size: 13px; color: var(--fd-mute); }
+.fd-report { display: flex; align-items: flex-start; gap: 8px; margin: 0; color: var(--fd-mute); font-size: 13.5px; line-height: 1.45; }
+.fd-report svg { flex: none; margin-top: 2px; }
+.fd-report a { color: var(--accent-ink); font-weight: 600; }
+.fd-report a:hover { color: #3a3aa6; }
+
+/* ---------- topo e cancelar (fora da tela concluída) ---------- */
+.fd-cancel { display: flex; }
+.pv-top .fd-chips { margin-left: 2px; }
+
+/* ---------- celular (<= 640 px): tudo empilhado, rótulos 13 px, esteira sem nomes ---------- */
+@media (max-width: 640px) {
+  .fd { --fd-av: 34px; --fd-scale: .85; gap: 14px; }
+  .fd-banner { padding: 14px 16px; gap: 12px; flex-direction: column; align-items: stretch; }
+  .fd-banner-head { min-width: 0; gap: 12px; }
+  .fd-bigcheck { width: 36px; height: 36px; }
+  .fd-banner-txt h1 { font-size: 18px; }
+  .fd-banner-txt span { font-size: 13px; }
+  .fd-belt { flex: none; min-width: 0; width: 100%; }
+  .fd-step-name { display: none; }
+  .fd-ok { width: 18px; height: 18px; }
+  .fd-grid { flex-direction: column; flex-wrap: nowrap; align-items: stretch; gap: 14px; }
+  .fd-left, .fd-right { flex: none; min-width: 0; width: 100%; }
+  .fd-player, .fd-acts { max-width: 300px; }
+  .fd-rhead h2 { font-size: 16px; }
+  .fd-label { font-size: 13px; }
+  .fd-title { font-size: 16px; }
+  .fd-card { padding: 16px; }
+  .fd-pair-2 { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) { .fd-btn { transition: none; } }

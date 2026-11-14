@@ -223,4 +223,81 @@ assert.match(modal, /aria-pressed=\{on\}/); assert.match(modal, /alt=""/); asser
 assert.match(css, /--accent: #5b5bd6/); assert.match(css, /:focus-visible \{ outline: 2px solid var\(--accent\)/);
 assert.match(css, /\.fm-x \{ width: 44px; height: 44px/);
 assert.ok(!/scene_prompt|platform_strategy|CRITICAL OBJECT|copywriting/.test(modal + read('App.jsx') + read('ui/falFlow.js')), 'texto de prompt no front');
+
+// ---------------------------------------------------------------- tela "Missão concluída" (lógica pura)
+import { isDone, canCancelFal, splitCaption, titleCount, charsLabel, wordCount, fmtDuration, doneSubtitle, narrationMeta, copyWithFeedback, reuseDraft, reuseBlocked, reuseFileName, REUSE_LABEL, IMAGE_EXT } from '../src/ui/falFlow.js';
+const mk = (status, over = {}) => ({ engine: 'fal', status, ended: null, ...over });
+// concluída = entregue e não encerrada; "Cancelar missão" só em andamento
+for (const st of ['received', 'validated', 'scripted', 'producing', 'editing', 'paused']) { assert.equal(canCancelFal(mk(st)), true, st); assert.equal(isDone(mk(st)), false, st); }
+for (const st of ['awaiting_final_review', 'completed', 'failed', 'cancelled']) assert.equal(canCancelFal(mk(st)), false, st);
+assert.equal(canCancelFal(mk('producing', { ended: 'cancelled' })), false); assert.equal(canCancelFal(mk('producing', { ended: 'failed' })), false);
+assert.equal(isDone(mk('awaiting_final_review')), true); assert.equal(isDone(mk('completed')), true);
+assert.equal(isDone(mk('awaiting_final_review', { ended: 'cancelled' })), false); assert.equal(isDone({ engine: 'gemini', status: 'completed' }), false);
+assert.equal(canCancelFal({ engine: 'gemini', status: 'producing' }), false);
+// hashtags viram chips; o texto exibido não as repete; a contagem é do texto completo
+const capt = splitCaption('Descubra o fone! 🎧 Clica no carrinho. #FoneDeOuvido #TikTokAchados #FoneDeOuvido');
+assert.deepEqual(capt.tags, ['#FoneDeOuvido', '#TikTokAchados']); assert.equal(capt.body, 'Descubra o fone! 🎧 Clica no carrinho.');
+assert.equal(capt.full, 'Descubra o fone! 🎧 Clica no carrinho. #FoneDeOuvido #TikTokAchados #FoneDeOuvido'); assert.equal(capt.count, [...capt.full].length);
+assert.deepEqual(splitCaption('Sem tags.').tags, []); assert.deepEqual(splitCaption(null).tags, []); assert.equal(splitCaption(null).count, 0);
+assert.deepEqual(splitCaption('Olá #promoção_2026 e #Café').tags, ['#promoção_2026', '#Café']);          // acentos e números
+assert.equal(titleCount('Fone 🎧'), 6); assert.equal(charsLabel(1), '1 caractere'); assert.equal(charsLabel(57), '57 caracteres'); assert.equal(charsLabel(312, true), '312 caracteres com hashtags');
+// duração e créditos reais no banner; narração só com o que existe
+assert.equal(fmtDuration(45), '45 s'); assert.equal(fmtDuration(0.2), '1 s'); assert.equal(fmtDuration(60), '1 min'); assert.equal(fmtDuration(178), '3 min'); assert.equal(fmtDuration(null), ''); assert.equal(fmtDuration(-5), '');
+assert.equal(doneSubtitle({ elapsedS: 180, creditsUsed: 20 }), 'Feito pela equipe em 3 min · 20 créditos usados');
+assert.equal(doneSubtitle({ elapsedS: null, creditsUsed: 20 }), '20 créditos usados'); assert.equal(doneSubtitle({ elapsedS: 40, creditsUsed: 0 }), 'Feito pela equipe em 40 s'); assert.equal(doneSubtitle({}), '');
+assert.equal(narrationMeta({ text: 'a b c', seconds: 12.4, words: 27 }), '12 s · 27 palavras'); assert.equal(narrationMeta({ text: 'um dois', seconds: null }), '2 palavras');
+assert.equal(narrationMeta({ text: 'oi', seconds: 3 }), '3 s · 1 palavra'); assert.equal(narrationMeta(null), ''); assert.equal(narrationMeta({ text: '' }), '');
+assert.equal(wordCount('Clica no carrinho e garante o seu!'), 7);
+const withNar = (n) => gallery({ engine: 'fal', status: 'awaiting_final_review', delivery: {}, fal: { narration: n } }).narration;
+assert.equal(withNar({ text: ' Fala. ', seconds: 5 }).text, 'Fala.'); assert.equal(withNar({ text: '  ' }), null); assert.equal(withNar(null), null); assert.equal(withNar(undefined), null);
+const gx = gallery({ engine: 'fal', status: 'awaiting_final_review', delivery: {}, credits: { spent: 20 }, fal: { elapsed_s: 180, scene: 'natural', platform: 'tiktok_shop' } });
+assert.equal(gx.elapsedS, 180); assert.equal(gx.creditsUsed, 20); assert.equal(gallery({ engine: 'fal', mode: 'simulated', status: 'completed', delivery: {}, credits: { spent: 10 }, fal: {} }).creditsUsed, null); assert.equal(gx.sceneId, 'natural'); assert.equal(gx.platformId, 'tiktok_shop');
+
+// copiar (clipboard simulado): grava o texto completo, liga "Copiado" e desliga depois de ~2 s; sem clipboard ou com recusa, não liga
+{
+  const writes = []; const states = []; const timers = [];
+  const clip = { writeText: async (t) => { writes.push(t); } };
+  const ok = await copyWithFeedback(clip, 'Fone de Ouvido Azul', (v) => states.push(v), (fn, ms) => timers.push([fn, ms]));
+  assert.equal(ok, true); assert.deepEqual(writes, ['Fone de Ouvido Azul']); assert.deepEqual(states, [true]); assert.equal(timers.length, 1); assert.equal(timers[0][1], 2000);
+  timers[0][0](); assert.deepEqual(states, [true, false]);
+  const full = splitCaption('Texto. #A #B').full;                                   // "Copiar legenda" copia o texto COMPLETO, com hashtags
+  await copyWithFeedback(clip, full, () => {}, () => {}); assert.equal(writes[1], 'Texto. #A #B');
+  const st2 = []; assert.equal(await copyWithFeedback({ writeText: async () => { throw new Error('negado'); } }, 'x', (v) => st2.push(v), () => {}), false); assert.deepEqual(st2, []);
+  assert.equal(await copyWithFeedback(null, 'x', () => {}), false); assert.equal(await copyWithFeedback(clip, '', () => {}), false);
+  // clipboard negado (navegador embutido): cai no plano B, que também liga "Copiado"; sem plano B, nada liga
+  const denied = { writeText: async () => { throw new Error('NotAllowedError'); } }; const st3 = []; const copied = [];
+  assert.equal(await copyWithFeedback(denied, 'Texto', (v) => st3.push(v), () => {}, 2000, (t) => { copied.push(t); return true; }), true); assert.deepEqual(copied, ['Texto']); assert.deepEqual(st3, [true]);
+  assert.equal(await copyWithFeedback(denied, 'Texto', () => {}, () => {}, 2000, () => false), false);
+  assert.equal(await copyWithFeedback(null, 'Texto', () => {}, () => {}, 2000, () => true), true);
+}
+
+// "Outra plataforma" / "Outro cenário": mesma foto, nome, cenário e plataforma; botão travado até a escolha pedida mudar
+const Pdone = { engine: 'fal', status: 'awaiting_final_review', scene: 'natural', platform: 'tiktok_shop', product: { name: ' Fone \n azul ' },
+  sheet: { references: [{ url: null }, { url: '/media/p1/references/ref_01.PNG' }] }, fal: { scene: 'natural', platform: 'tiktok_shop' } };
+const dp = reuseDraft(Pdone, 'platform');
+assert.deepEqual(dp, { kind: 'platform', scene: 'natural', platform: 'tiktok_shop', name: 'Fone azul', photoUrl: '/media/p1/references/ref_01.PNG', original: { scene: 'natural', platform: 'tiktok_shop' } });
+assert.equal(reuseDraft(Pdone, 'scene').kind, 'scene'); assert.equal(reuseDraft(Pdone, 'tudo'), null); assert.equal(reuseDraft({ engine: 'gemini' }, 'scene'), null);
+assert.equal(reuseDraft({ ...Pdone, sheet: { references: [] } }, 'scene').photoUrl, null);
+assert.deepEqual(REUSE_LABEL, { platform: 'Escolha outra plataforma', scene: 'Escolha outro cenário' });
+const rp = { kind: 'platform', original: { scene: 'natural', platform: 'tiktok_shop' } }, rs = { kind: 'scene', original: { scene: 'natural', platform: 'tiktok_shop' } };
+assert.equal(reuseBlocked(rp, 'natural', 'tiktok_shop'), true);        // ainda é a plataforma original
+assert.equal(reuseBlocked(rp, 'studio', 'tiktok_shop'), true);         // mudar só o cenário não destrava "outra plataforma"
+assert.equal(reuseBlocked(rp, 'natural', 'shopee_video'), false);
+assert.equal(reuseBlocked(rs, 'natural', 'shopee_video'), true); assert.equal(reuseBlocked(rs, 'studio', 'tiktok_shop'), false);
+assert.equal(reuseBlocked(null, 'natural', 'tiktok_shop'), false);     // fluxo normal (Nova produção): nunca trava
+assert.equal(reuseFileName('/media/p1/ref_01.PNG'), 'foto.png'); assert.equal(reuseFileName('/media/p1/x.jpeg?v=2'), 'foto.jpeg'); assert.equal(reuseFileName('/media/p1/x', 'image/webp'), 'foto.webp'); assert.equal(reuseFileName('/x', ''), 'foto.jpg');
+assert.ok(IMAGE_EXT.test(reuseFileName('/media/p1/ref_01.PNG')));      // o nome passa na validação do envio
+
+// telas: sem "SEU VÍDEO"/saldo/cartão Pronto no código novo; nada de copiar link de /media; Nova missão em accent; modal com foco e botão travado
+const missionSrc = read('ui/FalMission.jsx').replace(/\/\/.*$/gm, '') + read('shell/MissionView.jsx').replace(/\/\/.*$/gm, '').split('export function FalMissionView')[1].split('export default function MissionView')[0] + read('shell/Phone.jsx').replace(/\/\/.*$/gm, '');
+assert.ok(!/Usado neste vídeo|FalDelivery|PhoneDelivery|Entrega<\/div>/.test(missionSrc), 'sobrou o cartão de saldo ou a entrega antiga');
+assert.ok(!/writeText\([^)]*(url|href)/i.test(missionSrc), 'não copie link de /media');
+assert.match(read('shell/shell.css'), /\.pv-cta\.pv-cta-accent \{ background: #5b5bd6/);
+const dcss = read('ui/falDone.css');
+assert.match(dcss, /--accent: #5b5bd6/); assert.match(dcss, /--fd-line: #ececef/); assert.match(dcss, /border: 1px solid var\(--fd-line\)/); assert.match(dcss, /border-radius: 16px/);
+assert.match(dcss, /\.fd-btn \{ min-height: 44px/); assert.match(dcss, /\.fd :focus-visible \{ outline: 2px solid var\(--accent\)/);
+assert.match(read('ui/falModal.css'), /\.fm-hl \{ outline: 2px solid var\(--accent\)/);
+const win = read('ui/FalWindow.jsx').replace(/\/\/.*$/gm, '');
+assert.match(win, /f\.reuseBlocked \? f\.reuseLabel/); assert.match(win, /disabled=\{f\.busy \|\| f\.reuseBlocked/); assert.match(win, /scrollIntoView/);
+
 console.log('falflow.test ok');

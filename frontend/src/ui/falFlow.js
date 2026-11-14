@@ -255,7 +255,90 @@ export function gallery(P) {
     partial: f.delivery_status === 'partial', missing: f.missing_images || [],
     title: f.title || '', caption: f.caption || '', textMissing: !f.title && !f.caption, warnings: f.warnings || [],
     captionFile: d['caption.txt'] ? { download: downloadUrl(d['caption.txt']) } : null,
+    narration: f.narration && typeof f.narration.text === 'string' && f.narration.text.trim() ? { ...f.narration, text: f.narration.text.trim() } : null,           // some do card quando o workflow não expõe o texto
+    elapsedS: typeof f.elapsed_s === 'number' ? f.elapsed_s : null,
+    creditsUsed: P.mode !== 'simulated' && P.credits && typeof P.credits.spent === 'number' ? P.credits.spent : null,   // DEMO: nada é cobrado, não mostra créditos
+    sceneId: f.scene || P.scene || null, platformId: f.platform || P.platform || null,
   };
+}
+
+// ---------------------------------------------------------------- tela "Missão concluída"
+// Concluída = entregue (aguardando revisão final ou exportada) e não encerrada. Falha/cancelada/parcial NÃO entram aqui.
+export const isDone = (P) => isFalProduction(P) && ['awaiting_final_review', 'completed'].includes(P.status) && !endedOfStatus(P);
+// "Cancelar missão" só existe enquanto a missão está em andamento: não concluída, não falhada, não cancelada.
+export const canCancelFal = (P) => isFalProduction(P) && !endedOfStatus(P) && !['awaiting_final_review', 'completed', 'failed', 'cancelled'].includes(P.status);
+
+// Hashtags da legenda como chips; o texto exibido fica sem elas. A contagem é do texto completo (com hashtags).
+const TAG = /#[\p{L}\p{N}_]+/gu;
+export function splitCaption(caption) {
+  const full = String(caption || '');
+  const tags = [...new Set(full.match(TAG) || [])];
+  const body = full.replace(TAG, '').replace(/[ \t]+\n/g, '\n').replace(/[ \t]{2,}/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+  return { full, body, tags, count: [...full].length };
+}
+export const titleCount = (t) => [...String(t || '')].length;
+export const charsLabel = (n, withTags = false) => `${n} ${n === 1 ? 'caractere' : 'caracteres'}${withTags ? ' com hashtags' : ''}`;
+export const wordCount = (t) => (String(t || '').match(/[\p{L}\p{N}]+(?:['’-][\p{L}\p{N}]+)*/gu) || []).length;
+
+// "45 s" abaixo de 1 min; a partir daí, minutos inteiros arredondados ("3 min").
+export function fmtDuration(s) {
+  if (typeof s !== 'number' || !Number.isFinite(s) || s < 0) return '';
+  return s < 60 ? `${Math.max(1, Math.round(s))} s` : `${Math.round(s / 60)} min`;
+}
+// Linha do banner. Só entra o que existe de verdade (duração e créditos reais da produção).
+export function doneSubtitle(g) {
+  const parts = [];
+  const d = fmtDuration(g && g.elapsedS);
+  if (d) parts.push(`Feito pela equipe em ${d}`);
+  if (g && typeof g.creditsUsed === 'number' && g.creditsUsed > 0) parts.push(`${g.creditsUsed} créditos usados`);
+  return parts.join(' · ');
+}
+// "12 s · 27 palavras" (de usage_json.narration_seconds e do texto); sem segundos, só as palavras.
+export function narrationMeta(n) {
+  if (!n || !n.text) return '';
+  const words = typeof n.words === 'number' ? n.words : wordCount(n.text);
+  const secs = typeof n.seconds === 'number' && n.seconds > 0 ? `${Math.round(n.seconds)} s · ` : '';
+  return `${secs}${words} ${words === 1 ? 'palavra' : 'palavras'}`;
+}
+
+// Plano B de cópia (navegadores que negam o clipboard assíncrono, como o embutido): textarea temporário + execCommand dentro do toque.
+export function legacyCopy(text) {
+  if (typeof document === 'undefined' || !document.body || typeof document.execCommand !== 'function') return false;
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.setAttribute('readonly', ''); ta.setAttribute('aria-hidden', 'true');
+  ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;pointer-events:none';
+  document.body.appendChild(ta);
+  try { ta.select(); ta.setSelectionRange(0, text.length); return !!document.execCommand('copy'); } catch (e) { return false; } finally { ta.remove(); }
+}
+// Copiar com retorno: grava no clipboard (ou no plano B) e liga "Copiado" por ~2 s. Tudo entra por parâmetro (testável).
+export async function copyWithFeedback(clip, text, setCopied, schedule = setTimeout, ms = 2000, legacy = legacyCopy) {
+  if (!text) return false;
+  let ok = false;
+  if (clip && typeof clip.writeText === 'function') { try { await clip.writeText(text); ok = true; } catch (e) { ok = false; } }
+  if (!ok && typeof legacy === 'function') ok = !!legacy(text);
+  if (!ok) return false;
+  setCopied(true);
+  schedule(() => setCopied(false), ms);
+  return true;
+}
+
+// "Outra plataforma" / "Outro cenário": reabre o modal Nova produção com a MESMA foto, nome, cenário e plataforma do vídeo atual.
+// O botão "Criar vídeo" fica desligado, com o texto do pedido, até a escolha pedida ser diferente da original.
+export const REUSE_LABEL = { platform: 'Escolha outra plataforma', scene: 'Escolha outro cenário' };
+export function reuseDraft(P, kind) {
+  if (!isFalProduction(P) || !REUSE_LABEL[kind]) return null;
+  const refs = (P.sheet && P.sheet.references) || [];
+  const photo = refs.find((r) => r && r.url) || null;
+  const scene = (P.fal && P.fal.scene) || P.scene || null, platform = (P.fal && P.fal.platform) || P.platform || null;
+  return { kind, scene, platform, name: cleanName((P.product && P.product.name) || ''), photoUrl: photo ? photo.url : null,
+    original: { scene, platform } };
+}
+export const reuseBlocked = (reuse, scene, platform) => !!reuse && (reuse.kind === 'platform' ? platform === reuse.original.platform : scene === reuse.original.scene);
+// Nome do arquivo da foto reaproveitada (precisa de extensão válida para a validação do envio).
+export function reuseFileName(url, mime) {
+  const m = /\.(jpe?g|png|webp)(?:$|\?)/i.exec(String(url || ''));
+  if (m) return `foto.${m[1].toLowerCase()}`;
+  return /png/i.test(mime || '') ? 'foto.png' : /webp/i.test(mime || '') ? 'foto.webp' : 'foto.jpg';
 }
 
 // Linhas do "Seu próximo vídeo" no motor fal.ai (o resumo do servidor traz engine/scene/platform).
