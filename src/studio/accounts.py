@@ -113,8 +113,10 @@ class Accounts:
                                     " WHERE m.user_id=? ORDER BY w.created_at", (uid,)).fetchall()
 
     def set_workspace(self, wid: str, **fields) -> None:
-        allowed = {"name", "mode", "allow_real", "monthly_cap_usd", "credits_exempt"}
+        allowed = {"name", "mode", "allow_real", "monthly_cap_usd", "credits_exempt", "video_engine"}
         fields = {k: v for k, v in fields.items() if k in allowed}
+        if "video_engine" in fields and fields["video_engine"] not in (None, "gemini", "fal"):
+            raise AuthError("motor inválido (gemini ou fal)")
         if "mode" in fields and fields["mode"] not in {"simulated", "real"}:
             raise AuthError("modo inválido")
         if fields:

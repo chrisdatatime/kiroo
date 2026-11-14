@@ -427,6 +427,25 @@ def _m008_direction_required(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE productions ADD COLUMN direction_required INTEGER NOT NULL DEFAULT 0")
 
 
+def _m009_fal_engine(conn: sqlite3.Connection) -> None:
+    """Motor fal.ai (workflows). Tudo aditivo e com padrão que preserva o comportamento atual:
+    productions.engine ('gemini' por padrão), style (dark|light), client_request_id (anti duplo clique, único por
+    workspace), delivery_status (none|pending|incomplete|complete|partial) e delivery_json (arquivos entregues, papéis,
+    faltantes, avisos, tentativas de recuperação). workspaces.video_engine escolhe o motor por conta (NULL = o global).
+    attempts.remote_meta_json guarda workflow, URLs de consulta, estágio e nós do envelope; cost_reconciled_at marca a
+    conferência do custo real (que nunca gera novo débito)."""
+    for table, col, decl in (("productions", "engine", "TEXT NOT NULL DEFAULT 'gemini'"),
+                             ("productions", "style", "TEXT"), ("productions", "client_request_id", "TEXT"),
+                             ("productions", "delivery_status", "TEXT NOT NULL DEFAULT 'none'"),
+                             ("productions", "delivery_json", "TEXT"),
+                             ("workspaces", "video_engine", "TEXT"),
+                             ("attempts", "remote_meta_json", "TEXT"), ("attempts", "cost_reconciled_at", "TEXT")):
+        if col not in _columns(conn, table):
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_prod_client_request ON productions(workspace_id, client_request_id) "
+                 "WHERE client_request_id IS NOT NULL")
+
+
 MIGRATIONS: list[Migration] = [
     Migration(1, "schema completo", _m001_baseline),
     Migration(2, "convites de uso único e consentimento", _m002_invites_consent),
@@ -436,6 +455,7 @@ MIGRATIONS: list[Migration] = [
     Migration(6, "provedor de IA em chat_log", _m006_chat_provider),
     Migration(7, "ficha técnica, âncora e correções acumulativas", _m007_product_fidelity),
     Migration(8, "Direção obrigatória antes do roteiro nas produções do app", _m008_direction_required),
+    Migration(9, "motor fal.ai: engine/style/entrega por produção, id do cliente único e metadados da tentativa", _m009_fal_engine),
 ]
 LATEST = MIGRATIONS[-1].version
 assert [m.version for m in MIGRATIONS] == list(range(1, LATEST + 1)), "migrações devem ser 1..N em ordem"

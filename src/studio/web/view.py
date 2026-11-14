@@ -10,6 +10,7 @@ import json
 from datetime import datetime, timezone
 from urllib.parse import quote
 
+from .. import fal_contract
 from ..agent_config import agents_with_overrides, field_options
 from ..config import Settings
 from ..db import Database
@@ -94,7 +95,7 @@ def _media(pid: str, rel: str | None) -> str | None:
 
 
 _KIND_PT = {"image": "imagem", "video": "vídeo", "plan": "roteiro", "review_image": "revisão da imagem",
-            "review_video": "revisão do vídeo"}
+            "review_video": "revisão do vídeo", "workflow": "pacote de vídeo e fotos"}
 
 
 def say(e) -> str:
@@ -225,7 +226,9 @@ def snapshot(settings: Settings, db: Database, pid: str | None, *, since: int = 
     productions = [{"id": r["id"], "mode": r["mode"], "status": r["status"],
                     "label": PRODUCTION_LABELS[PS(r["status"])], "format_id": r["format_id"],
                     "ended": r["status"] if r["status"] in (PS.CANCELLED, PS.FAILED) else None,
-                    "name": json.loads(r["product_json"]).get("name", ""), "created_at": r["created_at"]}
+                    "name": json.loads(r["product_json"]).get("name", ""), "created_at": r["created_at"],
+                    "engine": r["engine"] if "engine" in r.keys() else "gemini",
+                    "style": r["style"] if "style" in r.keys() else None}
                    for r in db.productions(workspace_id)]
     if pid is None and productions:
         pid = productions[0]["id"]
@@ -305,6 +308,11 @@ def snapshot(settings: Settings, db: Database, pid: str | None, *, since: int = 
             edit_meta = {k: m.get(k) for k in ("edit_style", "transitions", "music", "sfx", "no_music_version")}
         except ValueError:
             pass
+    engine = p["engine"] if "engine" in p.keys() else "gemini"
+    if engine == "fal":   # entrega do motor fal.ai: vídeo + 3 fotos publicitárias + capa + legenda (só o que existe em disco)
+        ddir = settings.data_dir / "productions" / pid / "delivery"
+        names = ["final.mp4", *fal_contract.IMAGE_FILES.values(), "cover.jpg", "caption.txt"]
+        delivery = {n: f"/media/{pid}/delivery/{n}" for n in names if (ddir / n).is_file()}             if st in (PS.AWAITING_FINAL_REVIEW, PS.COMPLETED) else {}
     costs = cost_summary(db, pid)
     committed = 0.0
     for a in db.attempts(pid):
@@ -374,5 +382,31 @@ def snapshot(settings: Settings, db: Database, pid: str | None, *, since: int = 
             "name": product.get("name"), "variant": product.get("variant"), "link": product.get("affiliate_link")},
         "costs": {**costs, "committed_usd": round(committed, 4)}, "scenes": scenes, "delivery": delivery,
         "running": running and not ended, "error": error,
+        "engine": engine, "style": p["style"] if "style" in p.keys() else None,
+        "delivery_status": p["delivery_status"] if "delivery_status" in p.keys() else "none",
+        "fal": _fal_view(settings, db, p, pid, st, delivery) if engine == "fal" else None,
     }
     return data
+
+
+FAL_FINALIZING_CODES = {"delivery_incomplete", "compose_review", "fal_submit_uncertain", "fal_timeout", "fal_admin_required",
+                        "fal_refused", "fal_poll_failed", "fal_download"}
+
+
+def _fal_view(settings, db, p, pid: str, st, delivery: dict) -> dict:
+    """Pacote do motor fal.ai para a interface: estilo, etapa, fotos com papel, descrição/narração e se está "em
+    finalização" (entrega incompleta ou à espera do administrador: o cliente nunca vê o detalhe técnico)."""
+    dj = json.loads(p["delivery_json"]) if p["delivery_json"] else {}
+    att = db.conn.execute("SELECT * FROM attempts WHERE production_id=? AND kind='workflow' AND superseded=0 "
+                          "ORDER BY created_at DESC, rowid DESC LIMIT 1", (pid,)).fetchone()
+    meta = json.loads(att["remote_meta_json"] or "{}") if att is not None else {}
+    code = p["pause_code"] if "pause_code" in p.keys() else None
+    finalizing = st == PS.PAUSED and (code in FAL_FINALIZING_CODES or p["delivery_status"] == "incomplete")
+    images = [{"role": r, "label": fal_contract.ROLE_LABELS[r], "file": fal_contract.IMAGE_FILES[r],
+               "url": delivery.get(fal_contract.IMAGE_FILES[r])} for r in fal_contract.ROLES]
+    return {"style": p["style"], "style_label": fal_contract.STYLE_LABELS.get(p["style"], ""),
+            "stage": meta.get("stage"), "queue_position": meta.get("queue"), "remote_status": meta.get("remote_status"),
+            "finalizing": finalizing, "delivery_status": p["delivery_status"],
+            "images": images, "missing_images": dj.get("missing", []) if p["delivery_status"] in ("incomplete", "partial") else [],
+            "description": dj.get("description", ""), "narration_text": dj.get("narration_text", ""),
+            "warnings": dj.get("warnings", []), "submitted_at": att["submitted_at"] if att is not None else None}

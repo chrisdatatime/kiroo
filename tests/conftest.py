@@ -87,10 +87,10 @@ def product(refs_dir) -> ProductInput:
 
 @pytest.fixture
 def make_orch(settings, tmp_path):
-    def _make(script: SimulationScript | None = None, **overrides):
+    def _make(script: SimulationScript | None = None, fal_script=None, **overrides):
         s = dataclasses.replace(settings, **overrides)
         return build(s, sim_script=script or SimulationScript(video_polls_before_done=0), sleep=lambda _: None,
-                     base_dir=tmp_path)
+                     base_dir=tmp_path, sim_fal_script=fal_script)
     return _make
 
 

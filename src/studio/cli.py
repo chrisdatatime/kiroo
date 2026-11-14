@@ -215,6 +215,45 @@ def _admin(settings, args) -> int:
         db.close()
 
 
+def _fal(settings, args) -> int:
+    """Motor fal.ai: decisões do administrador sobre produções pausadas, custo real e retenção. Nada reexecuta o workflow
+    sozinho: `resubmit` é a única ação que gasta de novo e passa pelo portão de chamadas pagas e pelo orçamento."""
+    from . import fal_pipeline
+    orch = build(settings)
+    try:
+        if args.fal_cmd == "list":
+            rows = orch.db.conn.execute("SELECT id, status, style, delivery_status, pause_code, status_reason, updated_at FROM "
+                                        "productions WHERE engine='fal' ORDER BY created_at DESC LIMIT 50").fetchall()
+            for r in rows:
+                print(f"{r['id']}  {r['status']:22} estilo={r['style']:5} entrega={r['delivery_status']:10} "
+                      f"pausa={r['pause_code'] or '-':22} {(r['status_reason'] or '')[:90]}")
+            return 0
+        if args.fal_cmd == "reconcile":
+            if orch.fal_gen is None:
+                print("erro: motor fal.ai indisponível (FAL_KEY, chamadas pagas liberadas e FAL_BILLING_KEY)", file=sys.stderr)
+                return 2
+            out = fal_pipeline.reconcile_costs(orch.db, orch.fal_gen, pid=args.pid)
+            for r in out:
+                print(json.dumps(r, ensure_ascii=False))
+            print(f"{len(out)} tentativa(s) conferida(s)")
+            return 0
+        if args.fal_cmd == "cleanup":
+            r = fal_pipeline.cleanup_intermediates(settings.data_dir, orch.db, args.days or settings.fal_retention_days)
+            print(f"removidos {r['removed']} arquivo(s) intermediário(s), {r['freed_bytes']} bytes (delivery/ não é tocada)")
+            return 0
+        if not args.pid:
+            print("erro: informe o id da produção", file=sys.stderr)
+            return 2
+        print(fal_pipeline.admin_action(orch, args.pid, args.fal_cmd, request_id=args.request_id, reason=args.reason or ""))
+        print("a produção volta a andar na próxima execução do servidor (ou `studio run <id>`)")
+        return 0
+    except OrchestratorError as exc:
+        print(f"erro: {exc}", file=sys.stderr)
+        return 2
+    finally:
+        orch.db.close()
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="studio", description="Esteira de vídeos Shopee Vídeo")
     ap.add_argument("-v", "--verbose", action="store_true")
@@ -301,6 +340,15 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("publish", help="coloca o estúdio na internet por um túnel da Cloudflare (cadastro só por convite)")
     p.add_argument("--port", type=int, default=None)
 
+    p = sub.add_parser("fal", help="motor fal.ai: list | recover | deliver-partial | resubmit | waive | adopt | not-sent | "
+                                   "reconcile | cleanup")
+    p.add_argument("fal_cmd", choices=["list", "recover", "deliver-partial", "resubmit", "waive", "adopt", "not-sent",
+                                        "reconcile", "cleanup"])
+    p.add_argument("pid", nargs="?")
+    p.add_argument("--request-id", default=None, help="adopt: id da execução que existe na fal.ai")
+    p.add_argument("--reason", default="", help="motivo da decisão (fica no histórico)")
+    p.add_argument("--days", type=int, default=None, help="cleanup: retenção em dias (padrão STUDIO_FAL_RETENTION_DAYS)")
+
     p = sub.add_parser("final")
     p.add_argument("pid")
     p.add_argument("decision", choices=["approve", "reject"])
@@ -319,6 +367,17 @@ def main(argv: list[str] | None = None) -> int:
         print(f"portão de chamadas pagas ({g['environment']}): {'BLOQUEADO (' + g['reason'] + ')' if g['blocked'] else 'aberto'}"
               f" | teto da plataforma US${g['platform_cap_usd']:.2f}/mês | teto por agente US${g['agent_daily_cap_usd']:.2f}/dia")
         print(f"GEMINI_API_KEY definida: {'sim' if settings.gemini_api_key else 'não'}")
+        from . import fal_contract
+        try:
+            contract = fal_contract.load_contract(settings.profiles_dir)
+            pend = {st: len(fal_contract.placeholders(contract, st)) for st in fal_contract.STYLES}
+        except fal_contract.ContractError:
+            pend = None
+        print(f"motor fal.ai: padrão={settings.video_engine} | FAL_KEY: {'sim' if settings.fal_api_key else 'não'} | "
+              f"FAL_BILLING_KEY: {'sim' if settings.fal_billing_key else 'não'} | WORKFLOW_ID_DARK: "
+              f"{'definido' if settings.workflow_id_dark else 'não'} | WORKFLOW_ID_LIGHT: "
+              f"{'definido' if settings.workflow_id_light else 'não'} | contrato A CONFIRMAR: "
+              f"{'ilegível' if pend is None else ', '.join(f'{k}={v} campos' for k, v in pend.items())}")
         print(f"ffmpeg: {settings.ffmpeg_bin or 'NÃO ENCONTRADO'}")
         print(f"ffprobe: {settings.ffprobe_bin or 'NÃO ENCONTRADO'}")
         print(f"fonte: {settings.font_file or 'NÃO ENCONTRADA'}")
@@ -335,6 +394,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "admin":
         return _admin(settings, args)
+
+    if args.cmd == "fal":
+        return _fal(settings, args)
 
     if args.cmd == "ui":
         from .web.server import serve

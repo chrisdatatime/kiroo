@@ -204,3 +204,36 @@ def parse_result(result: dict, style: str, contract: dict) -> WorkflowPackage:
     if pkg.music is None:
         pkg.warnings.append("workflow nao devolveu trilha: o video sai so com a narracao")
     return pkg
+
+
+# ------------------------------------------------------------------ persistencia (result.json)
+def _artifact_to_dict(a: Artifact | None) -> dict | None:
+    if a is None:
+        return None
+    return {"kind": a.kind, "role": a.role, "url": a.url, "path": str(a.path) if a.path else None, "mime": a.mime,
+            "recover": a.recover}
+
+
+def _artifact_from_dict(d: dict | None) -> Artifact | None:
+    if not d:
+        return None
+    return Artifact(kind=d["kind"], role=d.get("role"), url=d.get("url"), path=Path(d["path"]) if d.get("path") else None,
+                    mime=d.get("mime"), recover=d.get("recover"))
+
+
+def package_to_dict(pkg: WorkflowPackage) -> dict:
+    """Pacote canonico -> JSON (so enderecos e metadados; os bytes ficam em arquivos). Guardado em result.json."""
+    return {"video": _artifact_to_dict(pkg.video), "narration": _artifact_to_dict(pkg.narration),
+            "music": _artifact_to_dict(pkg.music), "description": pkg.description, "narration_text": pkg.narration_text,
+            "images": {r: _artifact_to_dict(pkg.images.get(r)) for r in ROLES}, "nodes": pkg.nodes,
+            "warnings": list(pkg.warnings)}
+
+
+def package_from_dict(d: dict) -> WorkflowPackage:
+    pkg = WorkflowPackage(video=_artifact_from_dict(d.get("video")), narration=_artifact_from_dict(d.get("narration")),
+                          music=_artifact_from_dict(d.get("music")), description=d.get("description") or "",
+                          narration_text=d.get("narration_text") or "", nodes=d.get("nodes") or {},
+                          warnings=list(d.get("warnings") or []))
+    for r in ROLES:
+        pkg.images[r] = _artifact_from_dict((d.get("images") or {}).get(r))
+    return pkg

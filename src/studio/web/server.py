@@ -36,7 +36,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlencode, urlparse
 
-from .. import agent_config, creative_options, mailer, paid_gate, payments
+from .. import agent_config, creative_options, fal_contract, mailer, paid_gate, payments
 from ..agent_chat import AgentChat
 from ..accounts import (LOGIN_WINDOW_MIN, RESET_MINUTES, TERMS_VERSION, VERIFY_MINUTES, Accounts, AuthError, GoogleAuthError,
                         verify_password)
@@ -293,7 +293,8 @@ class App:
         except Exception:  # noqa: BLE001
             pass
         cap = paid_gate.effective_cap(ws["monthly_cap_usd"])   # o menor entre o teto da conta e o da plataforma
-        real = ws["mode"] == "real" and bool(ws["allow_real"]) and bool(s.gemini_api_key) and cap > 0   # teto 0 = DEMO
+        real = (ws["mode"] == "real" and bool(ws["allow_real"]) and bool(s.gemini_api_key or s.fal_api_key)
+                and cap > 0)   # teto 0 = DEMO
         return dataclasses.replace(s, mode="real" if real else "simulated", allow_paid_calls=real,
                                    monthly_cap_usd=cap,
                                    assets_dir=s.assets_dir if owner_admin else assets,
@@ -314,7 +315,9 @@ class App:
         if mode == "simulated":
             s = dataclasses.replace(s, mode="simulated", poll_interval_s=0.8 if self.sim_pacing else 0.0)
             pacing = SimulationScript(video_polls_before_done=1 if self.sim_pacing else 0)
-            return build(s, sim_script=pacing, sleep=time.sleep if self.sim_pacing else (lambda _: None))
+            from ..providers.simulated_fal import FalSimScript
+            return build(s, sim_script=pacing, sleep=time.sleep if self.sim_pacing else (lambda _: None),
+                         sim_fal_script=FalSimScript(polls_before_done=2 if self.sim_pacing else 0))
         if s.mode != "real" or not s.allow_paid_calls:
             raise OrchestratorError("Modo DEMO ligado neste estúdio: produções reais ficam paradas até desligar o DEMO.")
         return build(s)
@@ -850,9 +853,11 @@ class App:
                 data["credits"] = Ledger(db).summary(wid)
             finally:
                 db.close()
+            data["settings"]["video_engine"] = self._engine_for(ctx["ws"], s)   # a interface so mostra o fluxo fal.ai com "fal"
+            data["settings"]["fal_styles"] = [{"id": k, "label": v} for k, v in fal_contract.STYLE_LABELS.items()]
             return _json(200, data)
         if path.startswith("/media/"):
-            return self._media(path, ctx)
+            return self._media(path, ctx, url.query)
         if path == "/api/creative/options":
             q = parse_qs(url.query)
             has_bia = (s.reference_root / "bia" / "PERFIL BIA.jpg").is_file()
@@ -1019,7 +1024,7 @@ class App:
                     return _json(409, {"error": paid_gate.MESSAGES[paid_gate.blocked_reason()], "paid_calls_blocked": True})
                 if not ws["allow_real"]:
                     return _json(403, {"error": "Este estúdio está em DEMO até a cobrança por créditos ser liberada."})
-                if not base.gemini_api_key:
+                if not (base.gemini_api_key or base.fal_api_key):
                     raise ValueError("defina GEMINI_API_KEY no .env antes de desligar o DEMO")
                 if fields.get("monthly_cap_usd", ws["monthly_cap_usd"]) <= 0:
                     raise ValueError("defina um teto mensal de gastos maior que zero antes de desligar o DEMO")
@@ -1091,8 +1096,70 @@ class App:
                                     "começou: adicione créditos e tente de novo.",
                            "insufficient_credits": True, "needed_cc": exc.needed_cc, "balance_cc": exc.balance_cc})
 
+    @staticmethod
+    def _engine_for(ws, s) -> str:
+        """Motor das producoes NOVAS: o da conta (workspaces.video_engine) ou, sem ele, o global (STUDIO_VIDEO_ENGINE)."""
+        own = ws["video_engine"] if ws is not None and "video_engine" in ws.keys() else None
+        return own if own in ("gemini", "fal") else s.video_engine
+
+    def _create_fal(self, payload: dict, ctx) -> Response:
+        """Criacao do motor fal.ai: UMA foto, o estilo (Escuro/Claro) e um id do cliente (anti duplo clique)."""
+        s = ctx["s"]
+        style = payload.get("style")
+        if style not in fal_contract.STYLES:
+            return _json(400, {"error": "Escolha o estilo: Escuro ou Claro."})
+        crid = str(payload.get("client_request_id") or "")
+        if not re.fullmatch(r"[A-Za-z0-9_-]{8,64}", crid):
+            return _json(400, {"error": "pedido sem identificador (client_request_id)"})
+        files = payload.get("files") or []
+        if not isinstance(files, list) or len(files) != 1 or not isinstance(files[0], dict)                 or not re.search(r"\.(jpe?g|png|webp)$", str(files[0].get("name", "")), re.I):
+            return _json(400, {"error": "Envie exatamente uma foto do produto (JPG, PNG ou WEBP)."})
+        db = Database(s.db_path)
+        try:   # duplo clique: a producao ja existe, nada e recebido, reservado nem cobrado de novo
+            row = db.conn.execute("SELECT id FROM productions WHERE workspace_id=? AND client_request_id=?",
+                                  (ctx["wid"], crid)).fetchone()
+            if row:
+                return _json(200, {"ok": True, "pid": row["id"], "mode": s.mode, "duplicate": True})
+        finally:
+            db.close()
+        if s.mode == "real" and paid_gate.blocked_reason():
+            return _json(409, {"error": paid_gate.MESSAGES[paid_gate.blocked_reason()], "paid_calls_blocked": True})
+        prebudget = s.mode == "real"
+        if prebudget:
+            from .. import budget as budget_mod
+            db = Database(s.db_path)
+            try:
+                Ledger(db).can_reserve(ctx["wid"], budget_mod.estimate_workflow(s, style)["cc"])
+            except InsufficientCreditsError as exc:
+                return self._no_credits(exc)
+            finally:
+                db.close()
+        refs = save_uploads(s.data_dir, [{"name": files[0]["name"], "data": files[0].get("data", ""), "role": "front",
+                                          "source": "official_listing"}])
+        product = build_product({"name": str(payload.get("name") or "").strip()}, refs)
+        orch = build(s)
+        try:
+            from .. import billing, budget as budget_mod, fal_pipeline
+            if s.mode != "real":
+                budget_usd = billing.default_production_budget_usd(None)
+            else:   # orcamento operacional: folga sobre o pre-orcamento, nunca acima do teto efetivo do estudio
+                ops = budget_mod.ops_budget_usd(budget_mod.estimate_workflow(s, style)["usd"], billing.policy().usd(
+                    billing.default_production_cap_credits()))
+                budget_usd = min(ops, max(float(s.monthly_cap_usd or 0), 0.0))
+            pid, dup = fal_pipeline.create_production(orch, product, style=style, workspace_id=ctx["wid"],
+                                                      client_request_id=crid, budget_usd=budget_usd, prebudget=prebudget)
+        except InsufficientCreditsError as exc:
+            return self._no_credits(exc)
+        finally:
+            orch.db.close()
+        if not dup:
+            self.start_run(pid)
+        return _json(200, {"ok": True, "pid": pid, "mode": s.mode, "duplicate": dup})
+
     def _create(self, payload: dict, ctx) -> Response:
         s = ctx["s"]
+        if self._engine_for(ctx["ws"], s) == "fal":
+            return self._create_fal(payload, ctx)
         if s.mode == "real" and paid_gate.blocked_reason():   # aviso antes de receber fotos e criar a produção
             return _json(409, {"error": paid_gate.MESSAGES[paid_gate.blocked_reason()], "paid_calls_blocked": True})
         prebudget = s.mode == "real"
@@ -1131,7 +1198,7 @@ class App:
             self.start_run(pid)
         return _json(200, {"ok": True, "pid": pid, "mode": s.mode})
 
-    def _media(self, path: str, ctx) -> Response:
+    def _media(self, path: str, ctx, query: str = "") -> Response:
         parts = path.split("/", 3)
         if len(parts) < 4 or not PID_RE.match(parts[2]):
             return _json(404, {"error": "não encontrado"})
@@ -1152,7 +1219,11 @@ class App:
         ctype = mimetypes.guess_type(f.name)[0] or "application/octet-stream"
         if ctype.startswith("text/") or f.suffix in (".md", ".json"):
             ctype = ("text/markdown" if f.suffix == ".md" else ctype) + "; charset=utf-8"
-        return Response(200, ctype, file=f, headers={"Cache-Control": "private, no-store"})
+        headers = {"Cache-Control": "private, no-store"}
+        if parse_qs(query).get("download", [""])[0] == "1":   # download individual (mesma checagem de dono acima)
+            safe = re.sub(r"[^A-Za-z0-9._-]", "_", f.name)[:120] or "arquivo"
+            headers["Content-Disposition"] = f'attachment; filename="{safe}"'
+        return Response(200, ctype, file=f, headers=headers)
 
     def _action(self, pid: str, action: str, payload: dict, s) -> Response:
         if action != "cancel":   # missão cancelada/falhou: nenhuma ação de avançar (nem por uma tela antiga aberta)
@@ -1516,6 +1587,18 @@ def serve(port: int | None = None, open_browser: bool = True, public_host: str |
             log.info("retomando %d produção(ões) interrompida(s)", len(resumed), extra={"event": "resume"})
     except Exception as exc:  # noqa: BLE001
         log.error("falha ao retomar produções (%s)", type(exc).__name__)
+    try:   # retenção dos artefatos INTERMEDIÁRIOS do motor fal.ai (workflow/attempt_NN); delivery/ nunca é tocada
+        from .. import fal_pipeline
+        cs = app.settings()
+        db0 = Database(cs.db_path)
+        try:
+            done = fal_pipeline.cleanup_intermediates(cs.data_dir, db0, cs.fal_retention_days)
+        finally:
+            db0.close()
+        if done["removed"]:
+            log.info("limpeza de intermediários fal.ai: %d arquivo(s), %d bytes", done["removed"], done["freed_bytes"])
+    except Exception as exc:  # noqa: BLE001
+        log.error("falha na limpeza de intermediários fal.ai (%s)", type(exc).__name__)
 
     def drain():   # em outra thread: httpd.shutdown() não pode ser chamado de quem roda serve_forever
         log.info("SIGTERM: parando de aceitar jobs; aguardando até %ss", app.cfg.shutdown_grace_s, extra={"event": "stop"})

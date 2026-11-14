@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import sqlite3
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
@@ -63,6 +64,15 @@ class OrchestratorError(Exception):
     pass
 
 
+class DuplicateRequest(OrchestratorError):
+    """O mesmo pedido de criacao (client_request_id) ja existe no workspace: protecao contra duplo clique. `pid` e o
+    da producao que ja foi criada; nada novo foi reservado nem cobrado."""
+
+    def __init__(self, pid: str):
+        super().__init__("pedido duplicado: a producao ja existe")
+        self.pid = pid
+
+
 def _hash(obj) -> str:
     return hashlib.sha256(json.dumps(obj, sort_keys=True, ensure_ascii=False, default=str).encode()).hexdigest()
 
@@ -97,7 +107,8 @@ class Orchestrator:
     def create_production(self, product: ProductInput, *, format_id: str, art_direction: str, presenter: str,
                           budget_usd: float, go_ahead: str = "all", autonomy: str = "classico",
                           workspace_id: str | None = None, prebudget: bool = False,
-                          direction_required: bool = False) -> str:
+                          direction_required: bool = False, engine: str = "gemini", style: str | None = None,
+                          client_request_id: str | None = None, estimate: dict | None = None) -> str:
         """go_ahead="none" exige liberação explícita (set_go_ahead) antes de gerar imagens e antes dos vídeos.
 
         `budget_usd` é o ORÇAMENTO OPERACIONAL (freio interno). Com `prebudget=True` (modo real, com estúdio), o custo
@@ -117,23 +128,40 @@ class Orchestrator:
         if mode == "real":
             if not self.s.allow_paid_calls:
                 raise OrchestratorError("modo real exige STUDIO_ALLOW_PAID_CALLS=true")
-            if not self.s.gemini_api_key:
+            if engine == "fal":
+                if not self.s.fal_api_key:
+                    raise OrchestratorError("modo real exige FAL_KEY para o motor fal.ai")
+            elif not self.s.gemini_api_key:
                 raise OrchestratorError("modo real exige GEMINI_API_KEY")
             if budget_usd <= 0:
                 raise OrchestratorError("modo real exige orçamento > 0 definido pelo operador")
         profiles = snapshot(self.s.profiles_dir, {"presenter": presenter, "art_direction": art_direction,
                                                   "format": format_id})
-        estimate = None
-        if prebudget and mode == "real" and workspace_id:
-            estimate = budget_mod.estimate_production(self.s, len(profiles["format"]["data"].get("scenes") or []) or 3)
+        if not (prebudget and mode == "real" and workspace_id):
+            estimate = None   # DEMO e producoes sem estudio nao reservam saldo, mesmo que o chamador tenha calculado um
+        else:
+            if estimate is None:   # motor fal.ai passa o proprio (valor fixo do pacote); o Gemini calcula por cena
+                estimate = budget_mod.estimate_production(self.s, len(profiles["format"]["data"].get("scenes") or []) or 3)
             self.ledger().can_reserve(workspace_id, estimate["cc"])   # bloqueia ANTES de criar qualquer coisa
         pid = self.db.create_production(mode=mode, format_id=format_id, product=product.model_dump(mode="json"),
                                         profiles=profiles, budget_usd=budget_usd, go_ahead=go_ahead,
                                         autonomy=autonomy)
         if direction_required and product.creative is None:
             self.db.update_production(pid, direction_required=1)
+        fields: dict = {}
         if workspace_id:
-            self.db.update_production(pid, workspace_id=workspace_id)
+            fields["workspace_id"] = workspace_id
+        if engine == "fal":
+            fields.update(engine="fal", style=style, client_request_id=client_request_id, format_id=f"fal_{style}")
+        if fields:   # numa UNICA gravacao: o indice unico (workspace, client_request_id) barra o duplo clique atomicamente
+            try:
+                self.db.update_production(pid, **fields)
+            except sqlite3.IntegrityError:
+                self.db.set_production_status(pid, PS.CANCELLED, "pedido duplicado (mesmo client_request_id)")
+                row = self.db.conn.execute("SELECT id FROM productions WHERE workspace_id=? AND client_request_id=? AND id<>?",
+                                           (workspace_id, client_request_id, pid)).fetchone()
+                raise DuplicateRequest(row["id"] if row else pid) from None
+        if workspace_id:
             # A produção congela as versões de treinamento em vigor agora; versões novas valem só para as próximas.
             from .training import Training, default_edit_style
             snap = Training(self.db, self.s.data_dir).snapshot(workspace_id)
@@ -276,7 +304,11 @@ class Orchestrator:
         deadline = time.monotonic() + max_wait_s if max_wait_s else None
         self._format_repairs = 0
         try:
-            self._loop(pid, wait, deadline)
+            if self._engine(pid) == "fal":   # motor fal.ai: ramo proprio; com engine=gemini o caminho abaixo e o de sempre
+                from .fal_pipeline import FalRunner
+                FalRunner(self).loop(pid, wait, deadline)
+            else:
+                self._loop(pid, wait, deadline)
         except FFmpegError as exc:
             status = PS(self.db.production(pid)["status"])
             if status not in TERMINAL and status != PS.PAUSED:
@@ -287,6 +319,10 @@ class Orchestrator:
             self._settle(pid)
         write_reports(self.db, pid, self._storage(pid))
         return self.db.production(pid)["status"]
+
+    def _engine(self, pid: str) -> str:
+        row = self.db.production(pid)
+        return row["engine"] if "engine" in row.keys() else "gemini"
 
     def _loop(self, pid: str, wait: bool, deadline: float | None) -> None:
         while True:
@@ -1237,8 +1273,13 @@ class Orchestrator:
         self.db.set_production_status(pid, PS.CANCELLED, reason)
         dropped = 0
         for att in self.db.attempts(pid):
-            if att["kind"] in ("image", "video") and att["status"] in ("created", "submitted") and not att["superseded"]:
+            if att["kind"] in ("image", "video", "workflow") and att["status"] in ("created", "submitted") and not att["superseded"]:
                 sent = att["status"] == "submitted"
+                if sent and att["kind"] == "workflow" and self.fal_gen is not None:   # cancela la na fal.ai (melhor esforco)
+                    try:
+                        self.fal_gen.cancel(att["remote_op_id"], json.loads(att["remote_meta_json"] or "{}"))
+                    except Exception as exc:  # noqa: BLE001 — a execucao pode ja ter terminado; nada a fazer
+                        log.info("[%s] cancelamento remoto do workflow nao confirmado (%s)", pid, type(exc).__name__)
                 self.db.update_attempt(att["id"], status="failed", superseded=1, error_permanent=0, finished_at=now(),
                                        next_retry_at=None, estimated_cost_usd=att["estimated_cost_usd"] if sent else 0.0,
                                        error="cancelada pelo operador" + (": resultado do provedor descartado, sem "

@@ -197,6 +197,7 @@ def next_video_summary(db, settings, pid: str) -> dict:
     p = db.production(pid)
     profile = json.loads(p["profiles_json"])["format"]["data"]
     product = json.loads(p["product_json"])
+    fal = "engine" in p.keys() and p["engine"] == "fal"
     led = Ledger(db)
     wid = p["workspace_id"]
     total = p["prebudget_cc"] or 0
@@ -208,8 +209,9 @@ def next_video_summary(db, settings, pid: str) -> dict:
     brl = round(total / 100 * price, 2) if price else None
     return {
         "product": product.get("name") or "", "format": profile.get("aspect_ratio") or "9:16",
-        "scenes": len(profile.get("scenes") or []) or 3,
-        "included_adjustments_per_scene": included_adjustments_per_scene(),
+        "scenes": 0 if fal else (len(profile.get("scenes") or []) or 3),
+        "engine": "fal" if fal else "gemini", "style": p["style"] if fal else None,
+        "included_adjustments_per_scene": 0 if fal else included_adjustments_per_scene(),
         "total_cc": total, "total_credits": fmt(total),
         "total_brl": (f"{brl:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") if brl is not None else None),
         "balance_cc": balance, "balance": fmt(balance), "exempt": exempt,
