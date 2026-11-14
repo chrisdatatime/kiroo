@@ -854,7 +854,7 @@ class App:
             finally:
                 db.close()
             data["settings"]["video_engine"] = self._engine_for(ctx["ws"], s)   # a interface so mostra o fluxo fal.ai com "fal"
-            data["settings"]["fal_styles"] = [{"id": k, "label": v} for k, v in fal_contract.STYLE_LABELS.items()]
+            data["settings"]["fal_styles"] = [{"id": k, "label": fal_contract.STYLE_LABELS[k]} for k in fal_contract.enabled_styles(s)]
             return _json(200, data)
         if path.startswith("/media/"):
             return self._media(path, ctx, url.query)
@@ -1105,9 +1105,11 @@ class App:
     def _create_fal(self, payload: dict, ctx) -> Response:
         """Criacao do motor fal.ai: UMA foto, o estilo (Escuro/Claro) e um id do cliente (anti duplo clique)."""
         s = ctx["s"]
-        style = payload.get("style")
+        style = payload.get("style") or "light"          # sem seletor por enquanto: o cliente envia sempre o Claro
         if style not in fal_contract.STYLES:
             return _json(400, {"error": "Escolha o estilo: Escuro ou Claro."})
+        if style not in fal_contract.enabled_styles(s):
+            return _json(400, {"error": "Este estilo ainda nao esta disponivel. Use o estilo Claro."})
         crid = str(payload.get("client_request_id") or "")
         if not re.fullmatch(r"[A-Za-z0-9_-]{8,64}", crid):
             return _json(400, {"error": "pedido sem identificador (client_request_id)"})

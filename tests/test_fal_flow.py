@@ -652,3 +652,30 @@ def test_caption_txt_keeps_emoji_in_utf8_when_the_text_comes_in_a_markdown_fence
     assert cap.startswith("Copo térmico 🧊\n\nGelado o dia todo 💙 #copo")
     meta = json.loads((delivery(o, pid) / "delivery_meta.json").read_text(encoding="utf-8"))
     assert meta["title"] == "Copo térmico 🧊" and meta["text_status"] == "ok"
+
+
+def test_result_json_keeps_the_raw_envelope_for_the_first_real_round(settings, tmp_path, photo_product):
+    o = make(settings, tmp_path, fal_script=FalSimScript(output_text="```json\n{\"title\": \"T\", \"caption\": \"C\"}\n```"))
+    pid = new(o, photo_product)
+    assert o.run(pid) == PS.AWAITING_FINAL_REVIEW
+    f = o.s.data_dir / "productions" / pid / "workflow/attempt_01/result.json"
+    data = json.loads(f.read_text(encoding="utf-8"))
+    raw = data["raw"]
+    assert set(raw) == {"output", "nodes"} and set(raw["output"]) == {"video", "images", "output"}   # envelope bruto, 3 campos
+    assert raw["output"]["output"].startswith("```json") and raw["nodes"]["sim"]["request_id"] == data["request_id"]
+    assert data["package"]["title"] == "T"
+    # e a limpeza de intermediarios nunca apaga o result.json
+    assert fp._safe_intermediate(o.s.data_dir / "productions" / pid, f) is False
+
+
+def test_photo_recovery_refused_by_the_provider_ends_as_an_incomplete_delivery(settings, tmp_path, photo_product):
+    o = make(settings, tmp_path, fal_script=FalSimScript(missing={"image:hero"}, recoverable={"hero"}))
+    orig = o.fal_gen.recover_artifact
+
+    def refuse(art, style="light"):
+        raise __import__("studio.providers.base", fromlist=["x"]).PermanentError("recuperacao de foto pelo no ainda A CONFIRMAR")
+    o.fal_gen.recover_artifact = refuse
+    pid = new(o, photo_product)
+    assert o.run(pid) == PS.PAUSED and o.db.production(pid)["pause_code"] == fp.INCOMPLETE       # manual: nada reenviado
+    assert o.fal_gen.submit_count == 1 and any(e["type"] == "fal_recover" and "falhou" in e["message"] for e in o.db.events(pid))
+    o.fal_gen.recover_artifact = orig

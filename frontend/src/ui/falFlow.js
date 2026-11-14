@@ -5,6 +5,16 @@ export const STYLES = [
   { id: 'dark', label: 'Escuro', hint: 'Cinematográfico: iluminação dramática, cenário premium e apresentação de impacto.' },
   { id: 'light', label: 'Claro', hint: 'Lifestyle: ambientes residenciais claros, luz natural e fundo predominantemente branco.' },
 ];
+// Estilos que o servidor libera (settings.fal_styles). Hoje só o Claro: sem seletor, o envio é sempre o Claro.
+export const availableStyles = (S) => {
+  const ids = ((S && S.settings && S.settings.fal_styles) || []).map((x) => x.id);
+  const list = STYLES.filter((s) => ids.includes(s.id));
+  return list.length ? list : STYLES.filter((s) => s.id === 'light');
+};
+export const effectiveStyle = (S, chosen) => {
+  const av = availableStyles(S);
+  return av.some((s) => s.id === chosen) ? chosen : (av.length === 1 ? av[0].id : null);
+};
 export const FINAL_FINALIZING = 'Estamos finalizando o seu pacote. Avisaremos quando estiver pronto.';
 export const IMAGE_EXT = /\.(jpe?g|png|webp)$/i;
 

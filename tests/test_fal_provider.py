@@ -114,12 +114,47 @@ def test_kill_switch_blocks_before_any_network(gen, fake, photo, monkeypatch):
     assert fake.calls == []
 
 
-def test_real_contract_file_is_placeholder_so_real_submit_is_refused(fake, photo):
+CLARO = "workflows/acme/claro"
+
+
+def real_gen(fake, **kw):
     real = fc.load_contract(PROJECT_ROOT / "profiles")
-    g = FalWorkflowGenerator(FalClient(KEY, transport=httpx.MockTransport(fake)), real, {"dark": WF})
+    return FalWorkflowGenerator(FalClient(KEY, transport=httpx.MockTransport(fake)), real, {"light": CLARO}, **kw)
+
+
+def test_real_submit_is_allowed_while_recover_is_pending_and_always_sends_the_envelope_header(fake, photo):
+    g = real_gen(fake)
+    assert fc.recover_pending(g.contract, "light")                         # recover.hero e request_id por no seguem pendentes
+    info = g.submit_full(req(photo, "light"))
+    assert info.request_id == "req-1" and info.meta["workflow"] == CLARO
+    k = f"POST queue.fal.run/{CLARO}"
+    assert json.loads(fake.bodies[k]) == {"image_url": "https://v3.fal.media/files/up/foto.jpg"}      # so image_url
+    assert fake.headers[k]["x-fal-workflow-envelope"] == "true"
+    r = real_gen(fake)
+    r.poll("req-1", {"workflow": CLARO, "style": "light"}, "light")
+    get_result = [h for key, h in fake.headers.items() if key.startswith("GET queue.fal.run") and not key.endswith("/status")]
+    assert get_result and all(h["x-fal-workflow-envelope"] == "true" for h in get_result)          # tambem ao buscar o resultado
+
+
+def test_pending_in_the_send_path_still_refuses_the_real_submit(fake, photo):
+    g = real_gen(fake)
+    g.contract["styles"]["light"]["pending"] = ["output.video: A CONFIRMAR"]          # pendencia de ENVIO (nao de recuperacao)
     with pytest.raises(PermanentError, match="A CONFIRMAR"):
-        g.submit_full(req(photo))
+        g.submit_full(req(photo, "light"))
     assert fake.calls == []
+
+
+def test_photo_recovery_is_refused_while_recover_is_pending_and_makes_no_call(fake):
+    g = real_gen(fake)
+    art = fc.Artifact(kind="image", recover={"endpoint": "fal-ai/img/a", "request_id": "r-hero", "path": "images.0.url"})
+    with pytest.raises(PermanentError, match="recuperacao de foto"):
+        g.recover_artifact(art, "light")
+    assert fake.calls == []                                                           # nenhum GET no no
+
+
+def test_poll_returns_the_raw_envelope_for_result_json(gen, fake):
+    r = gen.poll("req-1", META)
+    assert r.raw == fake.result and "nodes" in r.raw and "output" in r.raw
 
 
 def test_missing_workflow_id_is_a_clear_error(fake, photo):

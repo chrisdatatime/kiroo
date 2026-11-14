@@ -82,6 +82,7 @@ class Settings:
     fal_timeout_s: float = 1800.0                                    # STUDIO_FAL_TIMEOUT_S (prazo total de uma execução)
     fal_max_inflight: int = 2                                        # STUDIO_FAL_MAX_INFLIGHT
     fal_retention_days: int = 7                                      # STUDIO_FAL_RETENTION_DAYS (só workflow/attempt_NN)
+    fal_dark_enabled: bool = False                                   # STUDIO_FAL_DARK_ENABLED: estilo Escuro (pronto, mas desligado)
 
     @property
     def reference_root(self) -> Path:
@@ -162,6 +163,7 @@ def load_settings(env_file: Path | None = None, **overrides) -> Settings:
         fal_timeout_s=float(env("STUDIO_FAL_TIMEOUT_S") or 1800),
         fal_max_inflight=int(env("STUDIO_FAL_MAX_INFLIGHT") or 2),
         fal_retention_days=int(env("STUDIO_FAL_RETENTION_DAYS") or 7),
+        fal_dark_enabled=_bool(env("STUDIO_FAL_DARK_ENABLED"), False),
     )
     # Ajustes feitos pela interface (data/agents.json): só campos não sensíveis e já validados.
     from .agent_config import load as load_agent_config, validate_settings

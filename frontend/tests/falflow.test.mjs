@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { STYLES, draftErrors, createPayload, falActive, falView, endedLabel, gallery, newRequestId, downloadUrl, falSummaryRows } from '../src/ui/falFlow.js';
+import { STYLES, availableStyles, effectiveStyle, draftErrors, createPayload, falActive, falView, endedLabel, gallery, newRequestId, downloadUrl, falSummaryRows } from '../src/ui/falFlow.js';
 import { deriveStage } from '../src/engine/adapter.js';
 import { summaryRows, credits } from '../src/ui/nextVideo.js';
 
@@ -12,6 +12,17 @@ assert.deepEqual(draftErrors({ style: 'light', file: { name: 'v.mp4' } }), ['uma
 const body = createPayload({ style: 'dark', file: { name: 'a.png', data: 'data:x' }, requestId: 'abc12345' });
 assert.deepEqual(body, { style: 'dark', client_request_id: 'abc12345', files: [{ name: 'a.png', data: 'data:x' }] });   // sem nome
 assert.equal(createPayload({ style: 'dark', file: { name: 'a.png', data: 'd' }, requestId: 'abc12345', name: ' Copo ' }).name, 'Copo');
+
+// só o Claro está liberado (settings.fal_styles): sem seletor, e o envio é sempre o Claro
+const only = { settings: { fal_styles: [{ id: 'light', label: 'Claro' }] } };
+assert.deepEqual(availableStyles(only).map((s) => s.id), ['light']);
+assert.deepEqual(availableStyles({}).map((s) => s.id), ['light']);                      // sem a lista do servidor: Claro
+assert.equal(effectiveStyle(only, null), 'light'); assert.equal(effectiveStyle(only, 'dark'), 'light');
+assert.deepEqual(draftErrors({ style: effectiveStyle(only, null), file: { name: 'a.png' } }), []);
+// com o Escuro ligado no servidor volta o seletor, e a escolha vale
+const both = { settings: { fal_styles: [{ id: 'dark', label: 'Escuro' }, { id: 'light', label: 'Claro' }] } };
+assert.deepEqual(availableStyles(both).map((s) => s.id), ['dark', 'light']);
+assert.equal(effectiveStyle(both, 'dark'), 'dark'); assert.equal(effectiveStyle(both, null), null);
 
 // id do cliente: UUID por envio; sem crypto, cai para um id aleatório de tamanho aceito pelo servidor (8 a 64)
 assert.equal(newRequestId(() => 'u-1'), 'u-1');

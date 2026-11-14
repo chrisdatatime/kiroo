@@ -131,7 +131,10 @@ class SimulatedFalWorkflow:
             pkg.hero = Artifact(kind="image", path=Path(f))
         elif "hero" in st["recoverable"]:
             pkg.hero = Artifact(kind="image", recover={"endpoint": "simulado/no", "request_id": op_id, "path": "hero"})
-        return OpResult(OpState.SUCCEEDED, package=pkg, confirmed_cost_usd=0.0,
+        raw = {"output": {"video": {"url": st["files"].get("video")}, "images": [{"url": f}] if f else [],
+                          "output": st["output_text"]},
+               "nodes": {"sim": {"endpoint": "simulado/no", "request_id": op_id}}}      # mesma forma do envelope real
+        return OpResult(OpState.SUCCEEDED, package=pkg, confirmed_cost_usd=0.0, raw=raw,
                         usage={"request_id": op_id, "nodes": pkg.nodes})
 
     def cancel(self, op_id: str, meta: dict | None = None) -> None:
@@ -144,7 +147,7 @@ class SimulatedFalWorkflow:
             return Path(artifact.path).read_bytes()
         raise PermanentError("artefato simulado sem origem")
 
-    def recover_artifact(self, artifact: Artifact) -> Artifact | None:
+    def recover_artifact(self, artifact: Artifact, style: str = "light") -> Artifact | None:
         """Recupera so este arquivo pelo no (simulado: so se o roteiro de falhas liberou)."""
         self.recover_calls += 1
         rec = artifact.recover or {}

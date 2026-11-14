@@ -99,8 +99,15 @@ def _is_placeholder(v) -> bool:
     return isinstance(v, str) and v.strip().upper().startswith(PLACEHOLDER)
 
 
-def placeholders(contract: dict, style: str) -> list[str]:
-    """Campos do estilo ainda marcados como A CONFIRMAR (a Fase 0 ainda nao os preencheu)."""
+def enabled_styles(settings) -> tuple[str, ...]:
+    """Estilos que o cliente pode escolher: so o Claro; o Escuro esta pronto no codigo, mas desligado por
+    STUDIO_FAL_DARK_ENABLED (padrao false)."""
+    return tuple(s for s in STYLES if s == "light" or (s == "dark" and getattr(settings, "fal_dark_enabled", False)))
+
+
+def placeholders(contract: dict, style: str, include_recover: bool = True) -> list[str]:
+    """Pendencias do estilo (A CONFIRMAR). Com `include_recover=False` so as que BLOQUEIAM O ENVIO (input, output e
+    `pending`); `recover` e `pending_recover` bloqueiam apenas a recuperacao de foto pelo no (ver `recover_pending`)."""
     cfg = (contract.get("styles") or {}).get(style)
     if cfg is None:
         return [f"estilo {style} ausente"]
@@ -112,10 +119,18 @@ def placeholders(contract: dict, style: str) -> list[str]:
                 walk(f"{prefix}.{k}" if prefix else k, x)
         elif _is_placeholder(v):
             out.append(prefix)
-    for key in ("input", "output", "recover"):
+    for key in ("input", "output") + (("recover",) if include_recover else ()):
         walk(key, cfg.get(key))
-    out.extend(f"pendente: {x}" for x in (cfg.get("pending") or []))
+    extra = ("pending", "pending_recover") if include_recover else ("pending",)
+    for key in extra:
+        out.extend(f"pendente: {x}" for x in (cfg.get(key) or []))
     return out
+
+
+def recover_pending(contract: dict, style: str) -> list[str]:
+    """Pendencias que bloqueiam SO a recuperacao de foto (recover.* e pending_recover). O envio nao depende delas."""
+    block = set(placeholders(contract, style, include_recover=False))
+    return [x for x in placeholders(contract, style) if x not in block]
 
 
 def style_config(contract: dict, style: str) -> dict:

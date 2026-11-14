@@ -44,6 +44,7 @@ class OpResult:
     confirmed_cost_usd: float | None = None
     usage: dict = field(default_factory=dict)
     package: object | None = None   # motor fal.ai: WorkflowPackage canonico (fal_contract); o Gemini nao usa
+    raw: dict | None = None         # motor fal.ai: resposta BRUTA do workflow (com o envelope), gravada em result.json
 
 
 @dataclass

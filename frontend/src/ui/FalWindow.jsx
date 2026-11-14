@@ -1,7 +1,7 @@
 import React from 'react';
 import { Spinner, CloseButton } from './bits.jsx';
 import { CONFIRM_LABEL, needsConfirmation, summaryRows } from './nextVideo.js';
-import { STYLES, FINAL_FINALIZING } from './falFlow.js';
+import { FINAL_FINALIZING } from './falFlow.js';
 
 // Janela da produção no fluxo "foto + estilo": Criar, Acompanhar e Entrega. Só aparece com o motor novo ligado
 // (v.fal vem de App.viewModel). Nenhuma tela cita fornecedor, modelo ou fila técnica.
@@ -46,16 +46,26 @@ function TabCriar({ f }) {
         <input id="fal-name" className="g-field" value={f.name} onChange={f.setName} placeholder="Se ficar vazio, o Kiroo descreve pela foto" />
       </div>
       <div style={{ flex: '1 1 300px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <span className="g-label" id="fal-style-l">2. Estilo do vídeo</span>
-        <div role="radiogroup" aria-labelledby="fal-style-l" style={{ display: 'grid', gap: 10 }}>
-          {STYLES.map((s) => (
-            <button key={s.id} type="button" role="radio" aria-checked={f.style === s.id} className="g-card" onClick={() => f.setStyle(s.id)}
-              style={{ ...card, textAlign: 'left', cursor: 'pointer', minHeight: 44, border: f.style === s.id ? '2px solid #0E0E10' : '1px solid #E7E7E4', background: s.id === 'dark' ? '#0E0E10' : '#FFFFFF', color: s.id === 'dark' ? '#FFFFFF' : '#0E0E10' }}>
-              <strong style={{ fontSize: 16 }}>{s.label}{f.style === s.id ? ' ✓' : ''}</strong>
-              <span style={{ fontSize: 13, lineHeight: 1.4, opacity: 0.85 }}>{s.hint}</span>
-            </button>
-          ))}
-        </div>
+        {f.styles.length > 1 ? (
+          <>
+            <span className="g-label" id="fal-style-l">2. Estilo do vídeo</span>
+            <div role="radiogroup" aria-labelledby="fal-style-l" style={{ display: 'grid', gap: 10 }}>
+              {f.styles.map((s) => (
+                <button key={s.id} type="button" role="radio" aria-checked={f.style === s.id} className="g-card" onClick={() => f.setStyle(s.id)}
+                  style={{ ...card, textAlign: 'left', cursor: 'pointer', minHeight: 44, border: f.style === s.id ? '2px solid #0E0E10' : '1px solid #E7E7E4', background: s.id === 'dark' ? '#0E0E10' : '#FFFFFF', color: s.id === 'dark' ? '#FFFFFF' : '#0E0E10' }}>
+                  <strong style={{ fontSize: 16 }}>{s.label}{f.style === s.id ? ' ✓' : ''}</strong>
+                  <span style={{ fontSize: 13, lineHeight: 1.4, opacity: 0.85 }}>{s.hint}</span>
+                </button>
+              ))}
+            </div>
+          </>
+        ) : (
+          <div className="g-card" style={card}>
+            <span className="g-label">Estilo do vídeo</span>
+            <strong style={{ fontSize: 16 }}>{f.styles[0].label}</strong>
+            <span style={{ fontSize: 13, lineHeight: 1.4, opacity: 0.85 }}>{f.styles[0].hint}</span>
+          </div>
+        )}
         <span className="g-muted" style={{ fontSize: 12.5 }}>Você recebe um vídeo de ~15 s com narração, uma foto publicitária (Hero Shot) e o título e a legenda para copiar.</span>
         {f.mode === 'simulated' && <span className="g-sim" style={{ alignSelf: 'flex-start' }}>modo DEMO: nada é cobrado</span>}
         <button className="g-btn g-lime" onClick={f.create} disabled={f.busy || f.errors.length > 0}>{f.busy ? 'Enviando…' : 'Criar meu vídeo'}</button>

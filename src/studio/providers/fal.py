@@ -220,7 +220,7 @@ class FalWorkflowGenerator:
     def _guard(self, style: str) -> str:
         paid_gate.check()            # kill switch / ambiente / teto: recusa antes de qualquer rede
         wid = self._workflow(style)
-        pend = fal_contract.placeholders(self.contract, style)
+        pend = fal_contract.placeholders(self.contract, style, include_recover=False)   # recover nao bloqueia o envio
         if pend:
             raise PermanentError("contrato do workflow ainda A CONFIRMAR (Fase 0): " + ", ".join(pend[:4]))
         return wid
@@ -265,7 +265,7 @@ class FalWorkflowGenerator:
         pkg = fal_contract.parse_result(result, style or meta.get("style") or "dark", self.contract)
         usage = {"request_id": op_id, "nodes": pkg.nodes,
                  "inference_time": (st.get("metrics") or {}).get("inference_time")}
-        return OpResult(OpState.SUCCEEDED, package=pkg, usage=usage)
+        return OpResult(OpState.SUCCEEDED, package=pkg, usage=usage, raw=result)
 
     def cancel(self, op_id: str, meta: dict | None = None) -> None:
         url = (meta or {}).get("cancel_url")
@@ -281,11 +281,14 @@ class FalWorkflowGenerator:
             return self.client.download(artifact.url)
         raise PermanentError("artefato sem origem")
 
-    def recover_artifact(self, artifact: fal_contract.Artifact) -> fal_contract.Artifact | None:
+    def recover_artifact(self, artifact: fal_contract.Artifact, style: str = "light") -> fal_contract.Artifact | None:
         """Busca DE NOVO so este arquivo pelo request_id do no (nunca reexecuta o workflow). None se nao der."""
         rec = artifact.recover
         if not rec:
             return None
+        pend = fal_contract.recover_pending(self.contract, style)
+        if pend:     # recuperacao so depois de confirmar recover.hero e o request_id por no (rodada real)
+            raise PermanentError("recuperacao de foto pelo no ainda A CONFIRMAR (manual): " + "; ".join(pend[:2]))
         res = self.client.node_result(rec["endpoint"], rec["request_id"])
         url = fal_contract._url_of(fal_contract.get_path(res, rec["path"]))
         if not url:

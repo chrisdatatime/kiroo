@@ -47,8 +47,9 @@ Só **nomes** aqui; os valores ficam no painel (variáveis seladas para as chave
 | `STUDIO_VIDEO_ENGINE` | não | não | execução | `gemini` | Motor das produções **novas** (`gemini` ou `fal`). Cada produção grava o seu; trocar a variável não muda as que já existem. Por conta há também `workspaces.video_engine`. |
 | `FAL_KEY` | só com `fal` | **sim** | execução | *(selada)* | Chave da fal.ai. Só no servidor; nunca vai ao navegador. |
 | `FAL_BILLING_KEY` | não | **sim** | execução | *(selada)* | Chave com escopo de billing, só para `studio fal-reconcile` (custo real). |
-| `WORKFLOW_ID_DARK` | só com `fal` | não | execução | `workflows/<usuario>/<nome>` | Workflow do estilo Escuro. |
-| `WORKFLOW_ID_LIGHT` | só com `fal` | não | execução | `workflows/<usuario>/<nome>` | Workflow do estilo Claro. |
+| `WORKFLOW_ID_DARK` | só com `STUDIO_FAL_DARK_ENABLED` | não | execução | `workflows/<usuario>/<nome>` | Workflow do estilo Escuro (desligado por padrão). |
+| `WORKFLOW_ID_LIGHT` | só com `fal` | não | execução | `workflows/<usuario>/<nome>` | Workflow do estilo Claro (o único oferecido hoje). |
+| `STUDIO_FAL_DARK_ENABLED` | não | não | execução | *(padrão `false`)* | Liga o estilo Escuro (e o seletor Escuro \| Claro na tela). Desligado: a interface mostra só o Claro e o servidor recusa `style=dark`. O código do Escuro já está pronto; precisa de `WORKFLOW_ID_DARK`. |
 | `STUDIO_FAL_POLL_S` | não | não | execução | *(padrão `10`)* | Intervalo da consulta de status (só polling, sem webhook). |
 | `STUDIO_FAL_TIMEOUT_S` | não | não | execução | *(padrão `1800`)* | Prazo total de uma execução; estourado, a produção pausa para o administrador (nunca reenvia sozinha). |
 | `STUDIO_FAL_MAX_INFLIGHT` | não | não | execução | *(padrão `2`)* | Execuções simultâneas do Kiroo (a conta nova da fal.ai permite 2). |

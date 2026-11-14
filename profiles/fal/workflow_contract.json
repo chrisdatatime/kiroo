@@ -1,11 +1,11 @@
 {
-  "_nota": "Contrato EXTERNO dos workflows da fal.ai: so o mapeamento de chaves. Resposta REAL confirmada no playground (wf01 Claro, produto nao-perfume): so 3 campos de topo. `video` ({url, content_type, file_name, file_size}), `images` (lista; images[0] e a foto hero; file_name e file_size vem null: nao depender deles, valem content_type e os bytes baixados) e `output` (TEXTO com o JSON {\"title\",\"caption\"}, geralmente dentro de cerca markdown ```json ... ``` apesar do prompt proibir: o parser remove cercas com ou sem o rotulo json). Nao ha audio/audio_2 na resposta; se vierem, sao ignorados (TTS intermediario). Nao ha musica. Input unico: image_url (descricao_produto existe no schema mas nao esta ligada a nenhum no: nao e enviada). A caption traz emoji (UTF-8). O que ainda depende de dado real fica A CONFIRMAR e listado em `pending` (o provider recusa chamada real enquanto houver item la). O resto do codigo so conhece o formato canonico (WorkflowPackage). Caminhos: pontos separam chaves; numeros indexam listas. Os caminhos valem sobre o `output` do envelope (X-Fal-Workflow-Envelope) quando ligado, senao sobre o resultado inteiro (com envelope o texto do workflow fica em output.output e o caminho do contrato continua sendo `output`).",
-  "version": 3,
-  "status": "CONFIRMADO (wf01 Claro, resposta real): entrada e saidas. A CONFIRMAR: recover.hero e request_id por no no envelope",
+  "_nota": "Contrato EXTERNO dos workflows da fal.ai: so o mapeamento de chaves. Resposta REAL confirmada no playground (wf01 Claro, produto nao-perfume): so 3 campos de topo. `video` ({url, content_type, file_name, file_size}), `images` (lista; images[0] e a foto hero; file_name e file_size vem null: nao depender deles, valem content_type e os bytes baixados) e `output` (TEXTO com o JSON {\"title\",\"caption\"}, geralmente dentro de cerca markdown ```json ... ``` apesar do prompt proibir: o parser remove cercas com ou sem o rotulo json). Nao ha audio/audio_2 na resposta; se vierem, sao ignorados (TTS intermediario). Nao ha musica. Input unico: image_url (descricao_produto existe no schema mas nao esta ligada a nenhum no: nao e enviada). A caption traz emoji (UTF-8). O que ainda depende de dado real fica A CONFIRMAR e listado em `pending` (o provider recusa chamada real enquanto houver item la). O resto do codigo so conhece o formato canonico (WorkflowPackage). Caminhos: pontos separam chaves; numeros indexam listas. Os caminhos valem sobre o `output` do envelope (X-Fal-Workflow-Envelope) quando ligado, senao sobre o resultado inteiro (com envelope o texto do workflow fica em output.output e o caminho do contrato continua sendo `output`). `pending` BLOQUEIA o envio real; `pending_recover` bloqueia SO a recuperacao da foto pelo no (manual ate confirmarem): o envio segue liberado, sempre com X-Fal-Workflow-Envelope: true, e o envelope bruto fica em workflow/attempt_NN/result.json (chave `raw`) para confirmar esses itens depois da primeira rodada real.",
+  "version": 4,
+  "status": "CONFIRMADO: entrada e saidas (envio liberado). A CONFIRMAR (so bloqueia a recuperacao de foto): recover.hero e request_id por no no envelope",
   "envelope": true,
   "styles": {
     "dark": {
-      "status": "CONFIRMADO: entrada e saidas (wf01 Claro; o wf02 Escuro tem a mesma estrutura, a confirmar na rodada dele). A CONFIRMAR: recover.hero e request_id por no",
+      "status": "CONFIRMADO: entrada e saidas (wf01 Claro; o wf02 Escuro tem a mesma estrutura, a confirmar na rodada dele). A CONFIRMAR (so recuperacao de foto): recover.hero e request_id por no",
       "workflow_env": "WORKFLOW_ID_DARK",
       "input": {
         "image_field": "image_url",
@@ -17,19 +17,20 @@
         "image": "images.0.url",
         "text": "output"
       },
-      "pending": [
-        "recover.hero: node_id node-oTeZSiC32m e path images.0.url sao PROPOSTA (no do hero); A CONFIRMAR com o envelope real",
-        "envelope: A CONFIRMAR se cada no traz request_id (X-Fal-Workflow-Envelope)"
-      ],
       "recover": {
         "hero": {
           "node_id": "node-oTeZSiC32m",
           "path": "images.0.url"
         }
-      }
+      },
+      "pending_recover": [
+        "recover.hero: node_id node-oTeZSiC32m e path images.0.url sao PROPOSTA (no do hero); A CONFIRMAR com o envelope real",
+        "envelope: A CONFIRMAR se cada no traz request_id (X-Fal-Workflow-Envelope)"
+      ],
+      "pending": []
     },
     "light": {
-      "status": "CONFIRMADO: entrada e saidas (wf01 Claro; o wf02 Escuro tem a mesma estrutura, a confirmar na rodada dele). A CONFIRMAR: recover.hero e request_id por no",
+      "status": "CONFIRMADO: entrada e saidas (wf01 Claro; o wf02 Escuro tem a mesma estrutura, a confirmar na rodada dele). A CONFIRMAR (so recuperacao de foto): recover.hero e request_id por no",
       "workflow_env": "WORKFLOW_ID_LIGHT",
       "input": {
         "image_field": "image_url",
@@ -41,16 +42,17 @@
         "image": "images.0.url",
         "text": "output"
       },
-      "pending": [
-        "recover.hero: node_id node-oTeZSiC32m e path images.0.url sao PROPOSTA (no do hero); A CONFIRMAR com o envelope real",
-        "envelope: A CONFIRMAR se cada no traz request_id (X-Fal-Workflow-Envelope)"
-      ],
       "recover": {
         "hero": {
           "node_id": "node-oTeZSiC32m",
           "path": "images.0.url"
         }
-      }
+      },
+      "pending_recover": [
+        "recover.hero: node_id node-oTeZSiC32m e path images.0.url sao PROPOSTA (no do hero); A CONFIRMAR com o envelope real",
+        "envelope: A CONFIRMAR se cada no traz request_id (X-Fal-Workflow-Envelope)"
+      ],
+      "pending": []
     }
   }
 }

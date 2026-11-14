@@ -3,7 +3,7 @@
 Estado: implementado atras de flag (`STUDIO_VIDEO_ENGINE=gemini` e o padrao), **sem nenhuma chamada paga feita**. O motor Gemini nao foi alterado.
 
 ## Como funciona
-O cliente envia **1 foto** e escolhe **Escuro** ou **Claro**. O Kiroo envia a foto ao workflow do estilo (`WORKFLOW_ID_DARK` / `WORKFLOW_ID_LIGHT`), acompanha por polling, baixa e valida os artefatos, confere o video com o FFmpeg do Kiroo e entrega:
+O cliente envia **1 foto**; por enquanto so o estilo **Claro** e oferecido (sem seletor) e o envio vai sempre ao workflow Claro. O **Escuro** esta pronto no codigo, mas desligado por `STUDIO_FAL_DARK_ENABLED=false` (padrao): a tela nao o mostra e o servidor recusa `style=dark`; ligar a variavel traz de volta o seletor Escuro | Claro. O Kiroo envia a foto ao workflow do estilo (`WORKFLOW_ID_DARK` / `WORKFLOW_ID_LIGHT`), acompanha por polling, baixa e valida os artefatos, confere o video com o FFmpeg do Kiroo e entrega:
 `final.mp4` (~15 s, 9:16, **ja com a narracao embutida, sem musica**), `product_image_01.jpg` (1 foto hero) e `caption.txt` (titulo + legenda + identificacao de publicidade). Auxiliares: `cover.jpg` (quadro do video) e `result.json` (historico).
 
 ### Escopo real do workflow (o `wf02` Escuro tem a mesma estrutura do `wf01`)
@@ -43,11 +43,11 @@ studio doctor                                # mostra so se as variaveis existem
 ## Fase 0 (voce): preencher o contrato
 1. No playground da fal.ai, rode **cada workflow uma vez** (Escuro e Claro) com uma foto de teste.
 2. Salve o JSON do resultado em `tests/fixtures/fal_real/dark/result.json` e `.../light/result.json` (pasta ignorada pelo Git, pode conter a foto; nao a confunda com `tests/fixtures/fal_shape/`, que e sintetica e versionada). Se possivel, rode com o header `X-Fal-Workflow-Envelope: true` para ter `nodes`.
-3. `profiles/fal/workflow_contract.json` ja esta **CONFIRMADO** com a resposta real do wf01 Claro: `input.image_field=image_url`, `output.video=video.url`, `output.image=images.0.url`, `output.text=output`. O `output` e **texto**, normalmente em cerca markdown (```json ... ```): o parser remove cerca com ou sem rotulo, BOM e espacos, e continua aceitando JSON puro. `file_name`/`file_size` da imagem vem `null`: nada depende deles. A caption tem emoji; `caption.txt` e gravado em UTF-8 (bytes, sem traducao de quebra de linha). A forma da resposta esta em `tests/fixtures/fal_shape/light_result.json` (**sintetica**, URLs falsas). Continua **A CONFIRMAR** (lista `pending`, que faz o provider recusar chamada real):
+3. `profiles/fal/workflow_contract.json` ja esta **CONFIRMADO** com a resposta real do wf01 Claro: `input.image_field=image_url`, `output.video=video.url`, `output.image=images.0.url`, `output.text=output`. O `output` e **texto**, normalmente em cerca markdown (```json ... ```): o parser remove cerca com ou sem rotulo, BOM e espacos, e continua aceitando JSON puro. `file_name`/`file_size` da imagem vem `null`: nada depende deles. A caption tem emoji; `caption.txt` e gravado em UTF-8 (bytes, sem traducao de quebra de linha). A forma da resposta esta em `tests/fixtures/fal_shape/light_result.json` (**sintetica**, URLs falsas). Continua **A CONFIRMAR**, mas **sem bloquear o envio** (lista `pending_recover`): o envio real do Claro esta liberado, sempre com `X-Fal-Workflow-Envelope: true`, e o envelope bruto fica em `workflow/attempt_NN/result.json` (chave `raw`) para confirmar os itens apos a primeira rodada real. Eles bloqueiam so a **recuperacao de foto pelo no** (recusada; fica manual: `delivery_incomplete` e decisao do admin). `pending` (lista vazia) continua bloqueando o envio se algo for colocado nela:
    * `recover.hero`: `node_id` `node-oTeZSiC32m` e `path` `images.0.url` sao so proposta (no do hero);
    * se cada no traz `request_id` no envelope (`X-Fal-Workflow-Envelope`);
    * a rodada real do wf02 Escuro (mesma estrutura esperada).
-   Ao confirmar, apague os itens de `pending`.
+   Ao confirmar, apague os itens de `pending_recover` e o provider passa a recuperar a foto pelo no.
 4. `python -m pytest tests/test_fal_real_fixtures.py` confere o contrato contra os resultados salvos.
 5. Anote a duracao do video (e se o audio vem mesmo embutido), tempo de execucao e o custo (dashboard) para ajustar `operation_costs.json` (`workflow_dark` / `workflow_light`, hoje PLACEHOLDER de US$ 2,00).
 

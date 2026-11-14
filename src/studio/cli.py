@@ -370,14 +370,16 @@ def main(argv: list[str] | None = None) -> int:
         from . import fal_contract
         try:
             contract = fal_contract.load_contract(settings.profiles_dir)
-            pend = {st: len(fal_contract.placeholders(contract, st)) for st in fal_contract.STYLES}
+            pend = {st: (len(fal_contract.placeholders(contract, st, include_recover=False)),
+                         len(fal_contract.recover_pending(contract, st))) for st in fal_contract.STYLES}
         except fal_contract.ContractError:
             pend = None
         print(f"motor fal.ai: padrão={settings.video_engine} | FAL_KEY: {'sim' if settings.fal_api_key else 'não'} | "
               f"FAL_BILLING_KEY: {'sim' if settings.fal_billing_key else 'não'} | WORKFLOW_ID_DARK: "
               f"{'definido' if settings.workflow_id_dark else 'não'} | WORKFLOW_ID_LIGHT: "
               f"{'definido' if settings.workflow_id_light else 'não'} | contrato A CONFIRMAR: "
-              f"{'ilegível' if pend is None else ', '.join(f'{k}={v} campos' for k, v in pend.items())}")
+              f"{'ilegível' if pend is None else ', '.join(f'{k}=envio {a} / recuperação {b}' for k, (a, b) in pend.items())}"
+              f" | Escuro: {'ligado' if settings.fal_dark_enabled else 'desligado'}")
         print(f"ffmpeg: {settings.ffmpeg_bin or 'NÃO ENCONTRADO'}")
         print(f"ffprobe: {settings.ffprobe_bin or 'NÃO ENCONTRADO'}")
         print(f"fonte: {settings.font_file or 'NÃO ENCONTRADA'}")

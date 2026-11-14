@@ -399,6 +399,7 @@ class FalRunner:
         adir = self._st(pid).dir(self._adir_rel(att))
         (adir / "result.json").write_text(json.dumps({
             "request_id": att["remote_op_id"], "style": meta.get("style"), "package": fc.package_to_dict(pkg),
+            "raw": res.raw,      # resposta BRUTA do workflow (com o envelope), para confirmar recover.hero e request_id por no
             "usage": res.usage, "completed_at": now()}, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
         self._set_dj(pid, title=pkg.title, caption=pkg.caption, warnings=list(pkg.warnings))
         self.db.update_attempt(att_id, usage_json=json.dumps(res.usage, default=str), transient_retries=0)
@@ -455,7 +456,7 @@ class FalRunner:
                     tries["hero"] = tries.get("hero", 0) + 1
                     self._set_dj(pid, recover_tries=tries)
                     try:
-                        again = self.gen.recover_artifact(art)
+                        again = self.gen.recover_artifact(art, style=self._style(pid))
                     except (TransientError, PermanentError) as exc:
                         self.db.add_event(pid, "fal_recover", f"foto hero: busca pelo no falhou ({type(exc).__name__})")
                 if again is not None and self._try_image(adir, again):

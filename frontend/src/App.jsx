@@ -34,7 +34,7 @@ class TourBoundary extends React.Component {
 import { deriveStage, sceneView, toCredits, creditsToUsd, endedOf, stoppedAt } from './engine/adapter.js';
 import { adjustmentGate, pauseKind } from './ui/pause.js';
 import { balanceLabel, needsConfirmation, usedLabel } from './ui/nextVideo.js';
-import { falActive, falView, endedLabel as falEndedLabel, gallery as falGallery, draftErrors as falDraftErrors, createPayload as falCreatePayload, newRequestId, IMAGE_EXT } from './ui/falFlow.js';
+import { falActive, falView, endedLabel as falEndedLabel, availableStyles as falStyles, effectiveStyle as falStyleOf, gallery as falGallery, draftErrors as falDraftErrors, createPayload as falCreatePayload, newRequestId, IMAGE_EXT } from './ui/falFlow.js';
 import { adjustFunds, noBalanceFromError, noBalanceNotice } from './ui/credits.js';
 import Shell, { VIEWS } from './shell/Shell.jsx';
 import Central from './shell/Central.jsx';
@@ -731,12 +731,13 @@ export default class App extends React.Component {
   async falCreate() {
     const f = this.state.fal;
     if (f.busy) return;
-    const errs = falDraftErrors(f);
+    const style = falStyleOf(this.state.S, f.style);          // só o Claro liberado: sempre ele, sem seletor
+    const errs = falDraftErrors({ ...f, style });
     if (errs.length) { this.toast('Falta ' + errs.join(', ') + '.'); return; }
     const reqId = f.reqId || newRequestId();
     this.setFal({ busy: true, reqId });
     try {
-      const r = await post('/api/productions', falCreatePayload({ style: f.style, file: f.file, requestId: reqId, name: f.name }));
+      const r = await post('/api/productions', falCreatePayload({ style, file: f.file, requestId: reqId, name: f.name }));
       this.setState({ pid: r.pid, draftMode: false, caption: null });
       this.setFal({ busy: false, reqId: null, file: null, name: '', style: null, tab: 'acompanhar' });
       await this.refresh();
@@ -756,8 +757,8 @@ export default class App extends React.Component {
     if (!falActive(s.S, P, s.draftMode)) return null;
     const f = s.fal;
     return { P: P && P.engine === 'fal' ? P : null, view: falView(P), gallery: falGallery(P), tab: f.tab, setTab: (tab) => this.setFal({ tab }),
-      style: f.style, setStyle: (style) => this.setFal({ style }), file: f.file, name: f.name, setName: (e) => this.setFal({ name: e.target.value }),
-      clearFile: () => this.setFal({ file: null, reqId: null }), pick: (e) => this.falPick(e), errors: falDraftErrors(f),
+      style: falStyleOf(s.S, f.style), styles: falStyles(s.S), setStyle: (style) => this.setFal({ style }), file: f.file, name: f.name, setName: (e) => this.setFal({ name: e.target.value }),
+      clearFile: () => this.setFal({ file: null, reqId: null }), pick: (e) => this.falPick(e), errors: falDraftErrors({ ...f, style: falStyleOf(s.S, f.style) }),
       busy: f.busy || !!s.busy, create: () => this.falCreate(), confirm: () => this.falConfirm(), goTrack: () => this.setFal({ tab: 'acompanhar' }),
       mode: s.S ? s.S.settings.mode : '', exportVideo: () => this.exportVideo(), cancel: () => this.cancelProd(),
       confirmCancel: !!s.ui.confirmCancel, canCancel: !!(P && !endedOf(P) && P.status !== 'completed') };

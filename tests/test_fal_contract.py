@@ -113,10 +113,12 @@ def test_real_contract_confirmed_fields_and_open_items():
         assert cfg["output"] == {"video": "video.url", "image": "images.0.url", "text": "output"}
         assert all(k not in cfg["output"] for k in ("narration", "music", "description", "narration_text"))
         assert cfg["recover"] == {"hero": {"node_id": "node-oTeZSiC32m", "path": "images.0.url"}}
-        pend = fc.placeholders(real, style)
-        # confirmados saem de placeholders(); so restam recover.hero e o request_id por no do envelope
+        # nada bloqueia o ENVIO; os 2 itens abertos bloqueiam SO a recuperacao de foto
+        assert fc.placeholders(real, style, include_recover=False) == [] and cfg["pending"] == []
+        pend = fc.recover_pending(real, style)
         assert len(pend) == 2 and all("A CONFIRMAR" in p for p in pend)
         assert "recover.hero" in pend[0] and "request_id" in pend[1]
+        assert fc.placeholders(real, style) == pend
         assert not any(k in p for p in pend for k in ("image_url", "video.url", "output.image", "indice"))
         assert fc.build_input(real, style, "https://x/y.jpg") == {"image_url": "https://x/y.jpg"}
 

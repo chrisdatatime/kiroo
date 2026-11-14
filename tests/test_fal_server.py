@@ -17,7 +17,7 @@ from .conftest import login_app, requires_ffmpeg
 
 HOST = {"Host": "127.0.0.1:8765"}
 PNG = "data:image/png;base64," + base64.b64encode(placeholder_png("x", 540, 960)).decode()
-BODY = {"style": "dark", "client_request_id": "cliente-0001", "files": [{"name": "foto.png", "data": PNG}]}
+BODY = {"style": "light", "client_request_id": "cliente-0001", "files": [{"name": "foto.png", "data": PNG}]}
 
 
 @pytest.fixture
@@ -60,7 +60,7 @@ def test_engine_comes_from_the_global_setting_and_the_workspace_overrides_it(app
     finally:
         db.close()
     d = state(app, "prod_0000000000")["settings"]
-    assert d["video_engine"] == "gemini" and [x["id"] for x in d["fal_styles"]] == ["dark", "light"]
+    assert d["video_engine"] == "gemini" and [x["id"] for x in d["fal_styles"]] == ["light"]
     with pytest.raises(Exception):
         s, db, acc = app._db()
         try:
@@ -76,7 +76,7 @@ def test_create_run_gallery_and_individual_downloads(app):
     pid = d["pid"]
     wait_idle(app, pid)
     P = state(app, pid)["production"]
-    assert P["engine"] == "fal" and P["style"] == "dark" and P["status"] == "awaiting_final_review"
+    assert P["engine"] == "fal" and P["style"] == "light" and P["status"] == "awaiting_final_review"
     assert P["delivery_status"] == "complete" and P["scenes"] == [] and P["fal"]["finalizing"] is False
     assert (P["fal"]["image"]["role"], P["fal"]["image"]["label"]) == ("hero", "Hero Shot") and P["fal"]["image"]["url"]
     assert set(P["delivery"]) == {"final.mp4", "product_image_01.jpg", "cover.jpg", "caption.txt"}
@@ -115,7 +115,7 @@ def test_double_click_is_one_production(app):
     wait_idle(app, r3["pid"])
 
 
-@pytest.mark.parametrize("patch,msg", [({"style": "neon"}, "Escuro ou Claro"), ({"style": None}, "Escuro ou Claro"),
+@pytest.mark.parametrize("patch,msg", [({"style": "neon"}, "Escuro ou Claro"), ({"style": "dark"}, "Use o estilo Claro"),
                                        ({"client_request_id": "curto"}, "identificador"),
                                        ({"client_request_id": "tem espaco e / barra"}, "identificador"),
                                        ({"files": []}, "exatamente uma foto"),
@@ -127,6 +127,25 @@ def test_invalid_creation_is_refused_before_anything_is_saved(app, patch, msg):
     assert code == 400 and msg in d["error"]
     assert not (app.settings().data_dir / "uploads").exists() or not list((app.settings().data_dir / "uploads").iterdir())
     assert state(app, "prod_0000000000")["productions"] == []
+
+
+def test_only_the_light_style_is_offered_and_it_is_the_default(app):
+    assert [x["id"] for x in state(app, "prod_0000000000")["settings"]["fal_styles"]] == ["light"]
+    code, d = post(app, "/api/productions", {k: v for k, v in BODY.items() if k != "style"})      # sem estilo: Claro
+    assert code == 200
+    wait_idle(app, d["pid"])
+    assert state(app, d["pid"])["production"]["style"] == "light"
+
+
+def test_dark_is_ready_but_off_until_the_flag_is_turned_on(app, monkeypatch):
+    code, d = post(app, "/api/productions", {**BODY, "style": "dark"})
+    assert code == 400 and "Claro" in d["error"]
+    monkeypatch.setenv("STUDIO_FAL_DARK_ENABLED", "true")
+    assert [x["id"] for x in state(app, "prod_0000000000")["settings"]["fal_styles"]] == ["dark", "light"]
+    code, d = post(app, "/api/productions", {**BODY, "style": "dark", "client_request_id": "cliente-dark1"})
+    assert code == 200
+    wait_idle(app, d["pid"])
+    assert state(app, d["pid"])["production"]["style"] == "dark"
 
 
 def test_a_wrong_extension_with_png_bytes_is_still_refused(app):
