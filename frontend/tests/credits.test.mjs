@@ -51,7 +51,8 @@ assert.deepEqual(usageRows({}), []);
 const read = (f) => readFileSync(new URL('../src/' + f, import.meta.url), 'utf8');
 const pw = read('ui/ProdWindow.jsx'), cr = read('ui/Credits.jsx'), tu = read('ui/TopUp.jsx'), app = read('App.jsx');
 assert.ok(/NoBalance/.test(pw) && /KEEP_LABEL/.test(pw) && /ADD_LABEL/.test(pw));
-assert.ok(/ADD_LABEL/.test(cr) && /usageRows/.test(cr) && /Reservado/.test(cr));
+// o cliente não vê o detalhe por chamada/etapa (só no admin): a tela não usa usageRows nem o consumo por produção
+assert.ok(/ADD_LABEL/.test(cr) && !/usageRows|\.usage/.test(cr) && /reservedText/.test(cr));
 assert.ok(/credits\/topup/.test(tu) && /Mercado Pago/.test(tu));
 assert.ok(/noBalanceFromError/.test(app) && /adjustFunds/.test(app));
 // sem saldo o ajuste não pede autorização: a checagem vem antes de abrir a confirmação

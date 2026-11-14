@@ -163,11 +163,21 @@ def negative_balance_block(db: Database, wid: str) -> str | None:
             "produziu continua disponível).")
 
 
-def account_state(db: Database, wid: str) -> dict:
-    """Para a tela: precisa de CPF/CNPJ? Quais limites de cartão valem agora?"""
+def saved_document(db: Database, user_id: str | None) -> str | None:
+    """CPF/CNPJ já informado em Minha conta (users.tax_doc): a compra reaproveita, sem pedir de novo."""
+    if not user_id:
+        return None
+    row = db.conn.execute("SELECT tax_doc FROM users WHERE id=?", (user_id,)).fetchone()
+    return (row["tax_doc"] if row else None) or None
+
+
+def account_state(db: Database, wid: str, user_id: str | None = None) -> dict:
+    """Para a tela: precisa de CPF/CNPJ? Quais limites de cartão valem agora? Não pede de novo quem já tem cliente no
+    Asaas ou já informou o documento em Minha conta."""
     ws = db.conn.execute("SELECT * FROM workspaces WHERE id=?", (wid,)).fetchone()
     lim = card_limits(db, wid)
-    return {"needs_document": not (ws and ws["asaas_customer_id"]), "card": lim,
+    has_doc = bool(ws and ws["asaas_customer_id"]) or bool(saved_document(db, user_id))
+    return {"needs_document": not has_doc, "card": lim,
             "negative_balance": negative_balance_block(db, wid)}
 
 
@@ -253,7 +263,7 @@ def checkout(db: Database, client, *, wid: str, user_id: str | None, user_name: 
         if reuse is not None:   # mesma compra no cartão ainda aberta: volta para a mesma fatura (não conta 2x no limite)
             return {"payment": view(reuse), "redirect_url": reuse["invoice_url"]}
         check_card(db, wid, q["amount_cents"])
-    cid = ensure_customer(db, client, wid, name=user_name, document=document)
+    cid = ensure_customer(db, client, wid, name=user_name, document=document or saved_document(db, user_id))
     pid = new_id("kpay")
     db.conn.execute("INSERT INTO payments(id, account_id, user_id, asaas_customer_id, method, package_code, credits, "
                     "amount_cents, status, created_at, ip, user_agent) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",

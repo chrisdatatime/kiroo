@@ -8,7 +8,7 @@ import { BuyCreditsContent } from './BuyCredits.jsx';
 import { AboutContent } from './About.jsx';
 import { SupportLinks } from './SupportLinks.jsx';
 import { adminTabVisible } from './admin.js';
-import { SCENERY_THEMES, THEME_LABELS } from '../game/scenery/scenery.js';
+import { SCENERY_CREDIT, SCENERY_THEMES, THEME_LABELS } from '../game/scenery/scenery.js';
 import { lazyChunk } from '../lib/lazyChunk.jsx';
 
 // Aba Administrador: carregada só quando aberta (e só existe no menu para administrador da plataforma).
@@ -29,14 +29,14 @@ const GROUPS = [
     { id: 'admin', label: 'Administrador', icon: Shield, admin: true },
   ] },
 ];
-const TITLES = { prefs: 'Geral', pilot: 'Piloto do estúdio', account: 'Minha conta', credits: 'Créditos do estúdio', buy: 'Comprar créditos', about: 'Sobre e créditos', admin: 'Administrador' };
+const TITLES = { prefs: 'Geral', pilot: 'Piloto do estúdio', account: 'Minha conta', credits: 'Créditos e extrato', buy: 'Comprar créditos', about: 'Sobre', admin: 'Administrador' };
 const DESCS = {
   prefs: 'Aparência e visual da sede.',
   pilot: 'Quanto os agentes decidem sozinhos.',
-  account: 'Quem está conectado e em qual estúdio.',
-  credits: 'Saldo, consumo por produção e extrato.',
+  account: 'Seu perfil, plano e dados para nota fiscal.',
+  credits: 'Saldo, extrato e créditos por vídeo.',
   buy: 'Pacotes e créditos avulsos, por Pix ou cartão.',
-  about: 'Kiroo e os créditos da arte.',
+  about: 'Versão, ajuda e documentos do Kiroo.',
   admin: 'Contas, créditos, convites, métricas e auditoria da plataforma.',
 };
 
@@ -65,6 +65,7 @@ function General({ v }) {
             ))}
           </div>
         </Row>
+        <p className="pref-row-desc" style={{ marginTop: 10 }}>Cenário: {SCENERY_CREDIT.text}{SCENERY_CREDIT.url && <>{', '}<a href={SCENERY_CREDIT.url} target="_blank" rel="noopener noreferrer">{SCENERY_CREDIT.url}</a></>}</p>
       </section>
       <section className="pref-sec">
         <h3 className="pref-sec-h">Ajuda</h3>
@@ -125,7 +126,7 @@ export default function Preferences({ v }) {
               <DialogTitle className="pref-title">{TITLES[tab]}</DialogTitle>
               <DialogDescription className="sr-only">{DESCS[tab]}</DialogDescription>
             </div>
-            <button type="button" className="pw-iconbtn" onClick={v.closeWin} aria-label="Fechar preferências"><X size={18} aria-hidden="true" /></button>
+            <button type="button" className="pw-iconbtn pf-close" onClick={v.closeWin} aria-label="Fechar preferências"><X size={18} aria-hidden="true" /></button>
           </header>
           <div className="pref-body">
             {tab === 'prefs' && <General v={v} />}

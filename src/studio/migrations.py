@@ -515,6 +515,12 @@ def _m011_welcome_bonus(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS ix_welcome_ip ON welcome_bonuses(ip_hash, created_at)")
 
 
+def _m012_tax_doc(conn: sqlite3.Connection) -> None:
+    """CPF/CNPJ para nota fiscal, guardado na conta (Minha conta). Só dígitos/letras do documento; a tela mostra mascarado."""
+    if "tax_doc" not in _columns(conn, "users"):
+        conn.execute("ALTER TABLE users ADD COLUMN tax_doc TEXT")
+
+
 MIGRATIONS: list[Migration] = [
     Migration(1, "schema completo", _m001_baseline),
     Migration(2, "convites de uso único e consentimento", _m002_invites_consent),
@@ -527,6 +533,7 @@ MIGRATIONS: list[Migration] = [
     Migration(9, "motor fal.ai: engine/style/entrega por produção, id do cliente único e metadados da tentativa", _m009_fal_engine),
     Migration(10, "compra de créditos pelo Asaas: payments, payment_events e payment_id no livro", _m010_payments),
     Migration(11, "bônus de boas-vindas: uma decisão por pessoa, únicos por e-mail e dispositivo", _m011_welcome_bonus),
+    Migration(12, "CPF/CNPJ para nota fiscal na conta", _m012_tax_doc),
 ]
 LATEST = MIGRATIONS[-1].version
 assert [m.version for m in MIGRATIONS] == list(range(1, LATEST + 1)), "migrações devem ser 1..N em ordem"

@@ -70,6 +70,17 @@ def validate_password(password: str) -> None:
         raise AuthError("senha longa demais")
 
 
+def mask_tax_doc(doc: str | None) -> str:
+    """CPF/CNPJ para a tela: só os 2 últimos caracteres aparecem ("•••.•••.•••-45"; CNPJ "••.•••.•••/••••-45").
+    Vazio → "" (a tela mostra "Não informado")."""
+    d = re.sub(r"[^0-9A-Za-z]", "", doc or "").upper()
+    if len(d) == 11:
+        return f"•••.•••.•••-{d[-2:]}"
+    if len(d) == 14:
+        return f"••.•••.•••/••••-{d[-2:]}"
+    return ""
+
+
 class Accounts:
     def __init__(self, db: Database):
         self.db = db
@@ -184,6 +195,45 @@ class Accounts:
         if not row or row["expires_at"] < now():
             return None
         return row
+
+    # ----------------------------------------------------------- Minha conta (nome, senha, CPF/CNPJ)
+    def set_name(self, uid: str, name: str) -> str:
+        name = " ".join((name or "").split())
+        if not 1 <= len(name) <= 80:
+            raise AuthError("o nome precisa ter de 1 a 80 caracteres")
+        self.db.conn.execute("UPDATE users SET name=? WHERE id=?", (name, uid))
+        return name
+
+    def change_password(self, uid: str, current: str, new: str, keep_token: str | None = None) -> None:
+        """Troca a senha pedindo a atual. Conta só do Google (sem senha) não troca por aqui. As OUTRAS sessões caem."""
+        u = self.user(uid)
+        if not u:
+            raise AuthError("conta não encontrada")
+        if u["pw_hash"] == "!":
+            raise AuthError("esta conta entra com o Google: não há senha para trocar")
+        key = f"pw:{uid}"
+        if self._throttled(key):
+            raise AuthError(f"muitas tentativas; espere {LOGIN_WINDOW_MIN} minutos")
+        if not verify_password(current or "", u["pw_hash"]):
+            self.record_fail(key)
+            raise AuthError("senha atual incorreta")
+        validate_password(new or "")
+        self.db.conn.execute("UPDATE users SET pw_hash=? WHERE id=?", (hash_password(new), uid))
+        self.db.conn.execute("DELETE FROM login_attempts WHERE key=?", (key,))
+        self.db.conn.execute("DELETE FROM sessions WHERE user_id=? AND token_hash<>?", (uid, _sha(keep_token or "")))
+
+    def set_tax_doc(self, uid: str, raw: str | None) -> str | None:
+        """CPF/CNPJ para nota fiscal (válido, pelos dígitos verificadores). Vazio apaga. Devolve o documento normalizado."""
+        if not (raw or "").strip():
+            self.db.conn.execute("UPDATE users SET tax_doc=NULL WHERE id=?", (uid,))
+            return None
+        from .payments import PaymentRefused, normalize_document
+        try:
+            doc = normalize_document(raw)
+        except PaymentRefused as exc:
+            raise AuthError(str(exc)) from None
+        self.db.conn.execute("UPDATE users SET tax_doc=? WHERE id=?", (doc, uid))
+        return doc
 
     def mark_reauth(self, token: str) -> None:
         """Reautenticação recente (senha confirmada de novo) nesta sessão: ações sensíveis do administrador."""

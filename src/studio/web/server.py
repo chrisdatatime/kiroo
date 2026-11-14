@@ -36,9 +36,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlencode, urlparse
 
-from .. import agent_config, asaas as asaas_mod, creative_options, fal_contract, mailer, paid_gate, payments, plans, welcome
+from .. import agent_config, asaas as asaas_mod, creative_options, fal_contract, mailer, paid_gate, payments, plans, site_info, welcome
 from ..agent_chat import AgentChat
-from ..accounts import (LOGIN_WINDOW_MIN, RESET_MINUTES, TERMS_VERSION, VERIFY_MINUTES, Accounts, AuthError, GoogleAuthError,
+from ..accounts import (LOGIN_WINDOW_MIN, RESET_MINUTES, TERMS_VERSION, VERIFY_MINUTES, Accounts, AuthError, GoogleAuthError, mask_tax_doc,
                         verify_password)
 from ..config import load_settings
 from ..credits import InsufficientCredits as InsufficientCreditsError, Ledger
@@ -816,6 +816,16 @@ class App:
                 return _json(403, {"error": "painel restrito ao administrador"})
             html = (STATIC / "index.html").read_text(encoding="utf-8").replace("__STUDIO_TOKEN__", ctx["sess"]["csrf"])
             return Response(200, "text/html; charset=utf-8", html.encode("utf-8"))
+        if path == "/api/credits/statement.csv":   # "Baixar extrato": o mesmo extrato do cliente, em crédito inteiro
+            from ..credits import statement_csv
+            db = Database(s.db_path)
+            try:
+                body = statement_csv(Ledger(db).statement(ctx["ws"]["id"], limit=5000))
+            finally:
+                db.close()
+            name = f"kiroo-extrato-{time.strftime('%Y%m%d')}.csv"
+            return Response(200, "text/csv; charset=utf-8", ("﻿" + body).encode("utf-8"),
+                            headers={"Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "no-store"})
         if path in ("/api/me", "/api/credits"):
             ws = ctx["ws"]
             db = Database(s.db_path)
@@ -824,14 +834,18 @@ class App:
                 credits = led.summary(ws["id"])
                 plan = plans.view(db, ws["id"])
                 bonus = welcome.state(db, ctx["sess"]["user_id"])
+                me = Accounts(db).user(ctx["sess"]["user_id"])
                 if path == "/api/credits":  # extrato e consumo por produção/cena/operação (Fase C)
-                    return _json(200, {**credits, "statement": led.statement(ws["id"]), "usage": led.usage(ws["id"]),
+                    # visão do cliente: extrato e "por vídeo". O detalhe por chamada/etapa (`led.usage`) é só do admin.
+                    return _json(200, {**credits, "statement": led.statement(ws["id"]), "videos": led.videos(ws["id"]),
                                        "topup": payments.topup_options()})
             finally:
                 db.close()
             return _json(200, {"csrf": ctx["sess"]["csrf"], "admin": ctx["admin"],
                                "user": {"email": ctx["sess"]["email"], "name": ctx["sess"]["name"],
                                         "email_verified": bool(ctx["sess"]["email_verified_at"]),
+                                        "has_password": bool(me and me["pw_hash"] != "!"),
+                                        "tax_doc": mask_tax_doc(me["tax_doc"] if me else None),
                                         "onboarding": {"done_at": ctx["sess"]["onboarding_done_at"],
                                                        "step": int(ctx["sess"]["onboarding_step"] or 0)}},
                                "workspace": {"id": ws["id"], "name": ws["name"], "mode": s.mode, "allow_real": bool(ws["allow_real"]),
@@ -839,7 +853,7 @@ class App:
                                "workspaces": [{"id": w["id"], "name": w["name"], "role": w["role"]} for w in ctx["workspaces"]],
                                "paid_calls": {k: v for k, v in paid_gate.status().items() if k in ("blocked", "message")},
                                "payments": {"online": payments.enabled() and not ws["credits_exempt"]},
-                               "plan": plan, "welcome": bonus})
+                               "plan": plan, "welcome": bonus, "site": site_info.view()})
         if path == "/api/payments/catalog" or re.fullmatch(r"/api/payments/kpay_[0-9a-f]{10}", path):
             return self._payments_get(path, ctx)
         if path == "/api/credits/topup":   # "Adicionar créditos": manual (desligado) ou compra pelo site (Asaas)
@@ -930,6 +944,8 @@ class App:
             return self._runtime(payload, ctx)
         if path == "/api/account/delete":
             return self._delete_account(payload, ctx)
+        if path in ("/api/account/name", "/api/account/password", "/api/account/tax-doc"):
+            return self._account_edit(path, payload, ctx, token)
         if path == "/api/onboarding":  # kit de onboarding: {step} salva onde parou; {done: true} conclui/pula
             done = payload.get("done")
             s0, db, acc = self._db()
@@ -1005,15 +1021,35 @@ class App:
             db.close()
         return _json(200, res)
 
+    def _account_edit(self, path: str, payload: dict, ctx, token) -> Response:
+        """Minha conta: "Alterar" nome, senha e CPF/CNPJ para nota fiscal. Cada um devolve só o que a tela precisa."""
+        uid = ctx["sess"]["user_id"]
+        s0, db, acc = self._db()
+        try:
+            try:
+                if path == "/api/account/name":
+                    return _json(200, {"ok": True, "name": acc.set_name(uid, str(payload.get("name") or ""))})
+                if path == "/api/account/password":
+                    acc.change_password(uid, str(payload.get("current") or ""), str(payload.get("new") or ""), token)
+                    return _json(200, {"ok": True})
+                doc = acc.set_tax_doc(uid, str(payload.get("document") or ""))
+                return _json(200, {"ok": True, "tax_doc": mask_tax_doc(doc)})
+            except AuthError as exc:
+                return _json(400, {"error": str(exc)})
+        finally:
+            db.close()
+
     def _delete_account(self, payload: dict, ctx) -> Response:
         """LGPD: apaga a própria conta. Exige a senha (ou, conta só do Google, o e-mail) e a palavra APAGAR."""
         from ..privacy import PrivacyError, delete_account
         sess = ctx["sess"]
-        if str(payload.get("confirm") or "").strip().upper() != "APAGAR":
-            return _json(400, {"error": "Para confirmar, digite APAGAR."})
         s0, db, acc = self._db()
         try:
             u = acc.user(sess["user_id"])
+            # confirmação: digitar o e-mail da conta (a tela nova) ou a palavra APAGAR (clientes antigos)
+            typed = str(payload.get("confirm") or "").strip()
+            if typed.lower() != u["email"].lower() and typed.upper() != "APAGAR":
+                return _json(400, {"error": "Para confirmar, digite o e-mail da conta."})
             if u["pw_hash"] != "!":
                 if not verify_password(str(payload.get("password") or ""), u["pw_hash"]):
                     return _json(403, {"error": "senha incorreta"})
@@ -1295,7 +1331,7 @@ class App:
         try:
             if path == "/api/payments/catalog":
                 from .. import catalog
-                return _json(200, {**catalog.public_view(), **payments.account_state(db, ctx["wid"]),
+                return _json(200, {**catalog.public_view(), **payments.account_state(db, ctx["wid"], ctx["sess"]["user_id"]),
                                    "plan": plans.view(db, ctx["wid"])})
             row = payments.get(db, path.rsplit("/", 1)[1])
             if row is None or row["account_id"] != ctx["wid"]:

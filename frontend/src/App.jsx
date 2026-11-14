@@ -1131,7 +1131,7 @@ export default class App extends React.Component {
       goCoffee: (e) => { e.stopPropagation(); this.goInteract({ type: 'coffee' }); },
       goMine: (e) => { e.stopPropagation(); this.goInteract({ type: 'mine' }); },
       goGames: (e) => { e.stopPropagation(); this.goInteract({ type: 'games' }); }, games, pilot,
-      account: s.account, logout: () => this.logout(), openAccount: () => { this.dismissTut(); this.setUI({ win: 'account' }); },
+      account: s.account, refreshAccount: async () => { const account = await me(); this.setState({ account }); }, logout: () => this.logout(), openAccount: () => { this.dismissTut(); this.setUI({ win: 'account' }); },
       welcomeEmpty: emptyMissionsCopy(s.account, productions), firstVideo: firstVideoCopy({ P, productions, wallet: s.S ? s.S.credits : null }),
       wallet: s.S ? s.S.credits : null, openCredits: () => { this.dismissTut(); this.setUI({ win: 'credits' }); },
       openBuy: () => { this.dismissTut(); this.setUI({ win: s.account && s.account.payments && s.account.payments.online ? 'buy' : 'credits' }); },

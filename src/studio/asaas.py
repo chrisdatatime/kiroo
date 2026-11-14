@@ -18,6 +18,13 @@ from dataclasses import dataclass
 
 from .logs import redact
 
+
+def _scrub_doc(text: str) -> str:
+    """CPF/CNPJ nunca vai para mensagem de erro nem log: qualquer sequência de 11 a 14 dígitos (com ou sem pontuação) vira ***."""
+    import re
+    return re.sub(r"\d[\d.\-/]{9,17}\d", "***", text)
+
+
 BASE_URLS = {"sandbox": "https://api-sandbox.asaas.com/v3", "production": "https://api.asaas.com/v3"}
 KEY_PREFIX = {"sandbox": "$aact_hmlg_", "production": "$aact_prod_"}
 USER_AGENT = "kiroo-studio"
@@ -122,6 +129,7 @@ class AsaasClient:
         if r.status_code >= 400:
             errs = data.get("errors") if isinstance(data, dict) else None
             desc = "; ".join(str(x.get("description") or x.get("code")) for x in errs or [] if isinstance(x, dict))
+            desc = _scrub_doc(desc)
             raise AsaasError(f"Asaas recusou ({r.status_code}): {desc or 'sem detalhe'}", r.status_code)
         return data if isinstance(data, dict) else {}
 

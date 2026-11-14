@@ -72,6 +72,74 @@ def fmt(cc: int) -> str:
     return ("−" if cc < 0 else "") + s
 
 
+# ------------------------------------------------------------------ extrato do cliente (texto, status, CSV)
+STATUS = {"paid": "Pago", "done": "Concluído", "not_charged": "Não cobrado", "gift": "Presente", "reversed": "Estornado"}
+CRLF = chr(13) + chr(10)
+
+
+def fmt_entry(cc: int) -> str:
+    """Valor de um lançamento em crédito INTEIRO para o extrato: entrada "+20", saída "−20", sem custo "0"."""
+    n = int(abs(cc)) // 100
+    if cc == 0 or n == 0:
+        return "0"
+    return ("+" if cc > 0 else "−") + f"{n:,}".replace(",", ".")
+
+
+def fmt_charge(cc: int) -> str:
+    """Quanto o vídeo custou, sem sinal: "20" ou "0"."""
+    return f"{max(int(cc), 0) // 100:,}".replace(",", ".")
+
+
+def entry_status(kind: str, amount_cc: int) -> tuple[str, str]:
+    """Selo do extrato: (código, rótulo). Compra → Pago; vídeo → Concluído; devolução sem débito → Não cobrado;
+    bônus/liberação → Presente; estorno de compra → Estornado; ajuste → Concluído."""
+    code = {"purchase": "paid", "reversal": "reversed", "welcome_bonus": "gift", "grant": "gift",
+            "refund": "not_charged", "release": "not_charged"}.get(kind, "done")
+    return code, STATUS[code]
+
+
+def style_label(style: str | None) -> str:
+    from .fal_contract import STYLE_LABELS
+    return f"Estilo {STYLE_LABELS[style]}" if style in STYLE_LABELS else ""
+
+
+def entry_texts(kind: str, *, product: str = "", style: str | None = None, note: str = "", package: str | None = None,
+                method: str | None = None) -> tuple[str, str]:
+    """(título, subtítulo) do lançamento: "Compra · Pro" / "Pix", "Vídeo · Tênis" / "Estilo Claro"."""
+    from .plans import LABELS as PLAN_LABELS
+    if kind in ("purchase", "reversal"):
+        plan = PLAN_LABELS.get(package or "", "Avulso" if package else "")
+        how = {"pix": "Pix", "card": "Cartão"}.get(method or "", "")
+        head = "Compra" if kind == "purchase" else "Estorno de compra"
+        return (f"{head} · {plan}" if plan else head), how
+    if kind == "welcome_bonus":
+        return "Bônus de boas-vindas", "Seu primeiro vídeo"
+    if kind == "grant":
+        return "Créditos liberados", note or "Presente da equipe"
+    if kind == "adjust":
+        return "Ajuste", note
+    video = f"Vídeo · {product}" if product else "Vídeo"
+    return video, style_label(style) or ("Falha técnica, sem custo" if kind == "refund" else "")
+
+
+def _csv_cell(v) -> str:
+    t = " ".join(str(v if v is not None else "").split())
+    if t[:1] in ("=", "+", "-", "@"):   # planilha não pode tratar texto do usuário como fórmula
+        t = "'" + t
+    return '"' + t.replace('"', '""') + '"'
+
+
+def statement_csv(rows: list[dict]) -> str:
+    """CSV do extrato (separador ";", como o Excel em pt-BR espera). Valores em crédito inteiro; o texto livre é
+    neutralizado contra injeção de fórmula. O valor ("+20", "−20", "0") é gerado por nós, não por texto do usuário."""
+    lines = [";".join(_csv_cell(h) for h in ("Data", "Descrição", "Detalhe", "Status", "Créditos"))]
+    for r in rows:
+        at = str(r.get("at") or "")[:19].replace("T", " ")
+        lines.append(";".join([_csv_cell(at), _csv_cell(r.get("title")), _csv_cell(r.get("subtitle")),
+                               _csv_cell(r.get("status_label")), '"' + str(r.get("credits") or "0") + '"']))
+    return CRLF.join(lines) + CRLF
+
+
 class Ledger:
     def __init__(self, db: Database):
         self.db = db
@@ -118,12 +186,15 @@ class Ledger:
     def summary(self, wid: str) -> dict:
         bal, held = self.balance(wid), self.held(wid)
         return {"balance_cc": bal, "held_cc": held, "available_cc": bal, "exempt": self.exempt(wid),
-                "balance": fmt_balance(bal), "balance_exact": fmt(bal), "held": fmt(held)}
+                "balance": fmt_balance(bal), "balance_exact": fmt(bal), "held": fmt_balance(held), "held_exact": fmt(held)}
 
     def statement(self, wid: str, limit: int = 60) -> list[dict]:
-        """Extrato: créditos que entraram e uso por tentativa (reserva+liberação+débito viram uma linha)."""
+        """Extrato do CLIENTE: o que entrou e o uso por vídeo (reserva+liberação+débito viram uma linha), com título,
+        subtítulo, status e valor em crédito inteiro. O detalhe por chamada fica só no admin (`usage`)."""
         rows = self.db.conn.execute(
-            "SELECT e.*, p.product_json FROM credit_entries e LEFT JOIN productions p ON p.id=e.production_id"
+            "SELECT e.*, p.product_json, p.style, pay.package_code pay_pkg, pay.method pay_method"
+            " FROM credit_entries e LEFT JOIN productions p ON p.id=e.production_id"
+            " LEFT JOIN payments pay ON pay.id=e.payment_id"
             " WHERE e.workspace_id=? AND e.kind IN ('grant','purchase','adjust','debit','release','reversal','welcome_bonus')"
             " ORDER BY e.created_at DESC, e.rowid DESC LIMIT ?", (wid, limit * 3)).fetchall()
         debited = {r["hold_id"] for r in rows if r["kind"] == "debit"}
@@ -133,12 +204,34 @@ class Ledger:
                 continue  # a liberação de uma reserva que virou débito não interessa no extrato
             kind = "refund" if r["kind"] == "release" else r["kind"]
             amount = 0 if kind == "refund" else r["amount_cc"]
+            title, sub = entry_texts(kind, product=_title(r["product_json"]), style=r["style"], note=r["note"] or "",
+                                     package=r["pay_pkg"], method=r["pay_method"])
+            status, status_label = entry_status(kind, amount)
             out.append({"id": r["id"], "kind": kind, "at": r["created_at"], "amount_cc": amount, "amount": fmt(amount),
+                        "credits": fmt_entry(amount), "title": title, "subtitle": sub,
+                        "status": status, "status_label": status_label,
                         "label": "Estorno (sem custo)" if kind == "refund" else LABELS.get(kind, kind),
                         "stage": STAGES.get(r["stage"] or "", r["stage"] or ""), "production_id": r["production_id"],
                         "product": _title(r["product_json"]), "note": r["note"] or ""})
             if len(out) >= limit:
                 break
+        return out
+
+    def videos(self, wid: str, limit: int = 100) -> list[dict]:
+        """"Por vídeo" do cliente: produto, estilo, data e créditos cobrados (0 = não cobrado, ex.: falha técnica).
+        Só vídeos encerrados: os que têm débito ou devolução da reserva."""
+        rows = self.db.conn.execute(
+            "SELECT p.id, p.product_json, p.style, MAX(e.created_at) at,"
+            " SUM(CASE WHEN e.kind='debit' THEN -e.amount_cc ELSE 0 END) cc"
+            " FROM credit_entries e JOIN productions p ON p.id=e.production_id"
+            " WHERE e.workspace_id=? AND e.kind IN ('debit','release') GROUP BY p.id ORDER BY at DESC LIMIT ?",
+            (wid, limit)).fetchall()
+        out = []
+        for r in rows:
+            status, status_label = entry_status("debit" if r["cc"] > 0 else "refund", -r["cc"])
+            out.append({"production_id": r["id"], "product": _title(r["product_json"]), "style": style_label(r["style"]),
+                        "at": r["at"], "credits_cc": r["cc"], "credits": fmt_charge(r["cc"]),
+                        "status": status, "status_label": status_label})
         return out
 
     def usage(self, wid: str) -> list[dict]:

@@ -225,6 +225,26 @@ def test_first_purchase_requires_valid_document_and_customer_is_reused(app, fake
     assert [c for c in fake.calls if c[0] == "create_customer"] == [("create_customer", "52998224725")]
 
 
+def test_document_saved_in_my_account_is_reused_and_never_asked_again(app, fake):
+    assert json.loads(get(app, "/api/payments/catalog").body)["needs_document"] is True
+    assert post(app, "/api/account/tax-doc", {"document": CPF}).status == 200      # Minha conta → CPF/CNPJ
+    assert json.loads(get(app, "/api/payments/catalog").body)["needs_document"] is False
+    r = post(app, "/api/payments/checkout", {"method": "pix", "package": "pro"})      # sem documento no pedido
+    assert r.status == 200
+    assert [c for c in fake.calls if c[0] == "create_customer"] == [("create_customer", "52998224725")]
+
+
+def test_document_never_reaches_logs_or_error_text(app, fake, caplog):
+    import logging
+    post(app, "/api/account/tax-doc", {"document": CPF})
+    with caplog.at_level(logging.DEBUG):
+        post(app, "/api/payments/checkout", {"method": "pix", "package": "pro"})
+        post(app, "/api/payments/checkout", {"method": "pix", "package": "pro", "document": "111.111.111-11"})
+    text = " ".join(r.getMessage() + " " + str(r.__dict__) for r in caplog.records)
+    assert "52998224725" not in text and CPF not in text
+    assert asaas._scrub_doc("CPF 529.982.247-25 e 11222333000181 inválidos") == "CPF *** e *** inválidos"
+
+
 @pytest.mark.parametrize("doc,ok", [("529.982.247-25", True), ("11.222.333/0001-81", True), ("12.ABC.345/01DE-35", True),
                                     ("123.456.789-00", False), ("00000000000", False), ("11.222.333/0001-80", False)])
 def test_document_validation(doc, ok):

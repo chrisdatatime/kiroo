@@ -56,10 +56,10 @@ def test_summary_shows_balance_and_reserved(settings, product, tmp_path):
     assert sm["held_cc"] == est - used and sm["balance_cc"] == GRANT - est
 
 
-def test_credits_endpoint_returns_balance_statement_usage_and_topup(app):
+def test_credits_endpoint_returns_balance_statement_videos_and_topup(app):
     r = get(app, "/api/credits")
     d = json.loads(r.body)
-    assert r.status == 200 and {"balance", "held", "statement", "usage", "topup", "exempt"} <= set(d)
+    assert r.status == 200 and {"balance", "held", "statement", "videos", "topup", "exempt"} <= set(d) and "usage" not in d
     assert d["topup"]["online"] is False and d["topup"]["provider"] == "manual"
 
 

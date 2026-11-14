@@ -21,7 +21,7 @@ from pathlib import Path
 from .db import Database
 
 USER_FIELDS = ("id", "email", "name", "created_at", "email_verified_at", "is_platform_admin", "onboarding_done_at",
-               "terms_accepted_at", "terms_version")
+               "terms_accepted_at", "terms_version", "tax_doc")
 
 
 class PrivacyError(ValueError):
