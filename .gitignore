@@ -38,3 +38,6 @@ tools/out/
 
 # Configuração local do editor/launcher (contém caminho absoluto da máquina)
 /.claude/launch.json
+
+# Fixtures reais do motor fal.ai (Fase 0): podem conter a foto do produto
+tests/fixtures/fal_real/
