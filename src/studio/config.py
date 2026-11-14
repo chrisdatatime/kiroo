@@ -72,6 +72,16 @@ class Settings:
     monthly_cap_usd: float = 0.0  # teto de gasto real no mês (0 = chamadas pagas bloqueadas)
     gemini_api_key: str | None = field(default=None, repr=False)
     reference_dir: Path | None = None  # STUDIO_REFERENCE_DIR: referências pessoais (foto da apresentadora), fora dos assets da imagem
+    # --- motor fal.ai (workflows). Tudo aditivo: com video_engine="gemini" nada disto é usado.
+    fal_api_key: str | None = field(default=None, repr=False)        # FAL_KEY (segredo)
+    fal_billing_key: str | None = field(default=None, repr=False)    # FAL_BILLING_KEY (segredo, opcional; escopo billing)
+    workflow_id_dark: str | None = None                              # WORKFLOW_ID_DARK ("workflows/<usuario>/<nome>")
+    workflow_id_light: str | None = None                             # WORKFLOW_ID_LIGHT
+    video_engine: str = "gemini"                                     # STUDIO_VIDEO_ENGINE: gemini | fal
+    fal_poll_s: float = 10.0                                         # STUDIO_FAL_POLL_S
+    fal_timeout_s: float = 1800.0                                    # STUDIO_FAL_TIMEOUT_S (prazo total de uma execução)
+    fal_max_inflight: int = 2                                        # STUDIO_FAL_MAX_INFLIGHT
+    fal_retention_days: int = 7                                      # STUDIO_FAL_RETENTION_DAYS (só workflow/attempt_NN)
 
     @property
     def reference_root(self) -> Path:
@@ -84,14 +94,14 @@ class Settings:
 
     def secret_values(self) -> list[str]:
         """Valores que nunca podem aparecer em logs, respostas ou artefatos."""
-        return secret_values(extra=[self.gemini_api_key])
+        return secret_values(extra=[self.gemini_api_key, self.fal_api_key, self.fal_billing_key])
 
 
 # Modelo de texto padrão do projeto (Direção/Conferência e conversa com os agentes).
 DEFAULT_TEXT_MODEL = "gemini-3.8-flash"
 
 # Variáveis cujo VALOR é segredo (o nome pode aparecer; o valor nunca). MP_* entra inteiro (Mercado Pago).
-SECRET_VARS = ("GEMINI_API_KEY", "GOOGLE_API_KEY", "ANTHROPIC_API_KEY", "STUDIO_GOOGLE_CLIENT_SECRET", "STUDIO_TURNSTILE_SECRET_KEY",
+SECRET_VARS = ("GEMINI_API_KEY", "GOOGLE_API_KEY", "FAL_KEY", "FAL_BILLING_KEY", "ANTHROPIC_API_KEY", "STUDIO_GOOGLE_CLIENT_SECRET", "STUDIO_TURNSTILE_SECRET_KEY",
                "STUDIO_SMTP_PASSWORD", "BACKUP_R2_ACCESS_KEY_ID", "BACKUP_R2_SECRET_ACCESS_KEY",
                "LITESTREAM_ACCESS_KEY_ID", "LITESTREAM_SECRET_ACCESS_KEY", "AWS_SECRET_ACCESS_KEY", "R2_SECRET_ACCESS_KEY")
 SECRET_PREFIXES = ("MP_",)
@@ -143,6 +153,15 @@ def load_settings(env_file: Path | None = None, **overrides) -> Settings:
         monthly_cap_usd=float(env("STUDIO_MONTHLY_CAP_USD") or 0),
         gemini_api_key=env("GEMINI_API_KEY") or None,
         reference_dir=_path(env("STUDIO_REFERENCE_DIR"), PROJECT_ROOT / "assets") if env("STUDIO_REFERENCE_DIR") else None,
+        fal_api_key=env("FAL_KEY") or None,
+        fal_billing_key=env("FAL_BILLING_KEY") or None,
+        workflow_id_dark=(env("WORKFLOW_ID_DARK") or "").strip() or None,
+        workflow_id_light=(env("WORKFLOW_ID_LIGHT") or "").strip() or None,
+        video_engine=(env("STUDIO_VIDEO_ENGINE") or "gemini").strip().lower(),
+        fal_poll_s=float(env("STUDIO_FAL_POLL_S") or 10),
+        fal_timeout_s=float(env("STUDIO_FAL_TIMEOUT_S") or 1800),
+        fal_max_inflight=int(env("STUDIO_FAL_MAX_INFLIGHT") or 2),
+        fal_retention_days=int(env("STUDIO_FAL_RETENTION_DAYS") or 7),
     )
     # Ajustes feitos pela interface (data/agents.json): só campos não sensíveis e já validados.
     from .agent_config import load as load_agent_config, validate_settings
@@ -164,4 +183,6 @@ def load_settings(env_file: Path | None = None, **overrides) -> Settings:
     values.update(overrides)
     if values["mode"] not in {"simulated", "real"}:
         raise ValueError("STUDIO_MODE deve ser 'simulated' ou 'real'")
+    if values["video_engine"] not in {"gemini", "fal"}:
+        raise ValueError("STUDIO_VIDEO_ENGINE deve ser 'gemini' ou 'fal'")
     return Settings(**values)

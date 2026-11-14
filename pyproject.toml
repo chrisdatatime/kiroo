@@ -13,7 +13,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-real = ["google-genai>=2.30"]
+real = ["google-genai>=2.30", "httpx>=0.27"]  # httpx: cliente do motor fal.ai (ja vem com o google-genai)
 chat = ["anthropic"]  # conversa com os agentes (Fase 6); sem ele a conversa fica no modo "sem IA"
 dev = ["pytest>=8"]
 

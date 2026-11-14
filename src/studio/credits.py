@@ -31,7 +31,8 @@ KINDS_IN = {"grant", "purchase", "adjust"}  # entradas manuais/compras
 LABELS = {"grant": "Créditos liberados", "purchase": "Compra", "adjust": "Ajuste", "reserve": "Reserva",
           "release": "Reserva devolvida", "debit": "Uso"}
 STAGES = {"image": "Imagens", "video": "Vídeos", "review_image": "Conferência das imagens",
-          "review_video": "Conferência dos takes", "plan": "Direção (roteiro)"}
+          "review_video": "Conferência dos takes", "plan": "Direção (roteiro)",
+          "workflow": "Pacote de vídeo e fotos"}
 
 
 class InsufficientCredits(Exception):

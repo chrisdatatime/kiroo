@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 from .db import Database
 
 KIND_LABELS = {"image": "Imagens", "video": "Vídeos", "review_image": "Revisão de imagem",
-               "review_video": "Revisão de vídeo", "plan": "Roteiro (IA)"}
+               "review_video": "Revisão de vídeo", "plan": "Roteiro (IA)", "workflow": "Pacote de vídeo e fotos"}
 
 
 def _local(ts: str) -> datetime:

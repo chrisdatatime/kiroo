@@ -22,6 +22,35 @@ def _rate_limit_off_by_default(monkeypatch):
     monkeypatch.setattr(ratelimit, "DEFAULT_ON", False)
 
 
+_FAL_BLOCKED = ("fal.run", "fal.ai", "fal.media")
+
+
+def fal_host_blocked(host) -> bool:
+    h = str(host or "").lower()
+    return any(h == b or h.endswith("." + b) for b in _FAL_BLOCKED)
+
+
+@pytest.fixture(autouse=True)
+def _block_fal_network(monkeypatch):
+    """Nenhum teste fala com a rede real da fal.ai (queue.fal.run, api.fal.ai, rest.alpha.fal.ai, v3.fal.media): a
+    resolucao de nome e a conexao para esses dominios falham na hora. Os testes do cliente usam httpx.MockTransport."""
+    import socket
+    real_gai, real_cc = socket.getaddrinfo, socket.create_connection
+
+    def gai(host, *a, **k):
+        if fal_host_blocked(host):
+            raise OSError(f"rede da fal.ai bloqueada nos testes: {host}")
+        return real_gai(host, *a, **k)
+
+    def cc(address, *a, **k):
+        if fal_host_blocked(address[0]):
+            raise OSError(f"rede da fal.ai bloqueada nos testes: {address[0]}")
+        return real_cc(address, *a, **k)
+
+    monkeypatch.setattr(socket, "getaddrinfo", gai)
+    monkeypatch.setattr(socket, "create_connection", cc)
+
+
 @pytest.fixture
 def settings(tmp_path, monkeypatch):
     for var in [v for v in os.environ if v.startswith("STUDIO_")]:

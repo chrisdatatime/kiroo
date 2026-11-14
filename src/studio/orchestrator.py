@@ -73,8 +73,10 @@ def _parse_ts(ts: str | None) -> datetime | None:
 
 class Orchestrator:
     def __init__(self, settings: Settings, db: Database, *, image_gen: ImageGenerator, video_gen: VideoGenerator,
-                 planner: Planner, reviewer: Reviewer, ffmpeg: FFmpeg, sleep=time.sleep, base_dir: Path | None = None):
+                 planner: Planner, reviewer: Reviewer, ffmpeg: FFmpeg, sleep=time.sleep, base_dir: Path | None = None,
+                 fal_gen=None):
         self.s = settings
+        self.fal_gen = fal_gen   # motor fal.ai (workflows); None = indisponivel. O Gemini nao o usa.
         self.db = db
         self.image_gen = image_gen
         self.video_gen = video_gen

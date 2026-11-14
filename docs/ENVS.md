@@ -38,6 +38,24 @@ Como ler as colunas:
 > Em staging nunca coloque `GEMINI_API_KEY` nem `ANTHROPIC_API_KEY`. Sem chave o modo simulado funciona
 > normalmente e o chat cai no modo "sem IA". Chave que não existe é chave que não vaza.
 
+### Motor fal.ai (workflows; desligado por padrão)
+
+Só **nomes** aqui; os valores ficam no painel (variáveis seladas para as chaves). Com `STUDIO_VIDEO_ENGINE=gemini` (padrão) nada disto é usado.
+
+| Variável | Obrig. | Segredo | Quando | Valor no staging | Para que serve |
+|---|---|---|---|---|---|
+| `STUDIO_VIDEO_ENGINE` | não | não | execução | `gemini` | Motor das produções **novas** (`gemini` ou `fal`). Cada produção grava o seu; trocar a variável não muda as que já existem. Por conta há também `workspaces.video_engine`. |
+| `FAL_KEY` | só com `fal` | **sim** | execução | *(selada)* | Chave da fal.ai. Só no servidor; nunca vai ao navegador. |
+| `FAL_BILLING_KEY` | não | **sim** | execução | *(selada)* | Chave com escopo de billing, só para `studio fal-reconcile` (custo real). |
+| `WORKFLOW_ID_DARK` | só com `fal` | não | execução | `workflows/<usuario>/<nome>` | Workflow do estilo Escuro. |
+| `WORKFLOW_ID_LIGHT` | só com `fal` | não | execução | `workflows/<usuario>/<nome>` | Workflow do estilo Claro. |
+| `STUDIO_FAL_POLL_S` | não | não | execução | *(padrão `10`)* | Intervalo da consulta de status (só polling, sem webhook). |
+| `STUDIO_FAL_TIMEOUT_S` | não | não | execução | *(padrão `1800`)* | Prazo total de uma execução; estourado, a produção pausa para o administrador (nunca reenvia sozinha). |
+| `STUDIO_FAL_MAX_INFLIGHT` | não | não | execução | *(padrão `2`)* | Execuções simultâneas do Kiroo (a conta nova da fal.ai permite 2). |
+| `STUDIO_FAL_RETENTION_DAYS` | não | não | execução | *(padrão `7`)* | Retenção dos artefatos intermediários em `workflow/attempt_NN/`. `delivery/` nunca é limpa. |
+| `STUDIO_FAL_TARGET_S` / `_MIN_S` / `_MAX_S` | não | não | execução | *(padrão `15` / `14` / `16`)* | Duração-alvo do vídeo final e janela aceitável. |
+| `STUDIO_FAL_ATEMPO_MAX` | não | não | execução | *(padrão `1.08`)* | Teto do ajuste de velocidade da narração (sem cortar palavras). Acima disso, revisão do administrador. |
+
 ### Chat com os agentes (Gemini por padrão)
 
 O chat usa a mesma `GEMINI_API_KEY` do restante e passa pelo mesmo portão (`STUDIO_ALLOW_PAID_CALLS`, kill switch,

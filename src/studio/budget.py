@@ -126,6 +126,31 @@ def review_cost(op: str = "review_image") -> float:
     return float(usd) if usd is not None else 0.0
 
 
+# ------------------------------------------------------------------ motor fal.ai (workflows)
+WORKFLOW_PLACEHOLDER_NOTE = "PLACEHOLDER até a medição real (Fase 5)"
+
+
+def workflow_cost(style: str) -> tuple[float, str]:
+    """Custo estimado (US$) de UMA execução do workflow do estilo: o pacote completo (vídeo + 3 imagens + áudios).
+    Vem da tabela de custos por operação (workflow_dark / workflow_light), nunca de número solto."""
+    if style not in ("dark", "light"):
+        raise ValueError(f"estilo inválido: {style!r}")
+    row = (cost_table()["operations"] or {}).get(f"workflow_{style}")
+    if not row or row.get("usd") is None:
+        raise ValueError(f"tabela de custos sem workflow_{style}")
+    note = WORKFLOW_PLACEHOLDER_NOTE if row.get("placeholder") else "tabela de custos por operação"
+    return float(row["usd"]), f"workflow_{style}: {note}"
+
+
+def estimate_workflow(settings, style: str) -> dict:
+    """Pré-orçamento do pacote completo do motor fal.ai (mesma forma de `estimate_production`). Um valor fixo por estilo:
+    cobre vídeo + 3 imagens. Refazer é execução nova e cobra de novo."""
+    from .credits import to_cc
+    usd = round(workflow_cost(style)[0], 4)
+    return {"usd": usd, "cc": to_cc(usd), "parts_usd": {"workflow": usd}, "scenes": 0, "style": style,
+            "image_tries_per_scene": 0, "video_tries_per_scene": 0, "included_adjustments_per_scene": 0}
+
+
 # ------------------------------------------------------------------ estimativas
 def adjustment_cost_usd(settings, stage: str) -> float:
     """Um ajuste refaz a etapa e tudo que depende dela: imagem → imagem, conferência, take e conferência."""

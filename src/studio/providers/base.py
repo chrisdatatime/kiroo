@@ -43,6 +43,7 @@ class OpResult:
     permanent: bool = False
     confirmed_cost_usd: float | None = None
     usage: dict = field(default_factory=dict)
+    package: object | None = None   # motor fal.ai: WorkflowPackage canonico (fal_contract); o Gemini nao usa
 
 
 @dataclass
@@ -62,6 +63,14 @@ class VideoRequest:
     target_duration_s: float
 
 
+@dataclass
+class WorkflowRequest:
+    """Um pedido ao workflow da fal.ai: a foto do produto e o estilo (dark | light). O workflow e escolhido pelo estilo."""
+
+    style: str
+    image_path: Path
+
+
 class Generator(Protocol):
     provider: str
     model: str
@@ -74,6 +83,12 @@ class Generator(Protocol):
 class ImageGenerator(Generator, Protocol):
     def estimate_cost(self, request: ImageRequest) -> tuple[float, str]: ...
     def params(self, request: ImageRequest) -> dict: ...
+
+
+class WorkflowGenerator(Generator, Protocol):
+    def estimate_cost(self, request: WorkflowRequest) -> tuple[float, str]: ...
+    def params(self, request: WorkflowRequest) -> dict: ...
+    def cancel(self, op_id: str) -> None: ...
 
 
 class VideoGenerator(Generator, Protocol):

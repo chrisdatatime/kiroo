@@ -21,7 +21,8 @@ from .providers.base import PermanentError
 
 PROTECTED_ENVS = ("staging", "production")
 # etapa do orquestrador -> agente que faz a chamada (mesmos ids da conversa com os agentes)
-KIND_AGENT = {"image": "iris", "video": "lia", "review_image": "rui", "review_video": "rui", "plan": "theo", "facts": "theo"}
+KIND_AGENT = {"image": "iris", "video": "lia", "review_image": "rui", "review_video": "rui", "plan": "theo", "facts": "theo",
+              "workflow": "lia"}
 
 MESSAGES = {
     "kill_switch": "A geração com IA está pausada pela equipe do Kiroo neste momento. Nada foi cobrado: o que você "

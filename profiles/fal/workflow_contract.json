@@ -1,0 +1,54 @@
+{
+  "_nota": "Contrato EXTERNO dos workflows da fal.ai: so o mapeamento de chaves. Tudo aqui e PLACEHOLDER marcado A CONFIRMAR (Fase 0) ate voce rodar cada workflow no playground e preencher com o resultado real (ver relatorio de entrega). O resto do codigo so conhece o formato canonico (WorkflowPackage). Caminhos: pontos separam chaves; numeros indexam listas (ex.: images.0.url). Os caminhos valem sobre output quando o envelope (X-Fal-Workflow-Envelope) esta ligado, senao sobre o resultado inteiro.",
+  "version": 1,
+  "status": "A CONFIRMAR (Fase 0)",
+  "envelope": true,
+  "styles": {
+    "dark": {
+      "status": "A CONFIRMAR (Fase 0)",
+      "workflow_env": "WORKFLOW_ID_DARK",
+      "input": {"image_field": "A CONFIRMAR (Fase 0)", "extra": {}},
+      "expected_duration_s": 15,
+      "output": {
+        "video": "A CONFIRMAR (Fase 0)",
+        "narration": "A CONFIRMAR (Fase 0)",
+        "music": "A CONFIRMAR (Fase 0)",
+        "description": "A CONFIRMAR (Fase 0)",
+        "narration_text": "A CONFIRMAR (Fase 0)",
+        "images": {
+          "hero": "A CONFIRMAR (Fase 0)",
+          "lifestyle": "A CONFIRMAR (Fase 0)",
+          "details": "A CONFIRMAR (Fase 0)"
+        }
+      },
+      "recover": {
+        "hero": {"node_id": "A CONFIRMAR (Fase 0)", "path": "A CONFIRMAR (Fase 0)"},
+        "lifestyle": {"node_id": "A CONFIRMAR (Fase 0)", "path": "A CONFIRMAR (Fase 0)"},
+        "details": {"node_id": "A CONFIRMAR (Fase 0)", "path": "A CONFIRMAR (Fase 0)"}
+      }
+    },
+    "light": {
+      "status": "A CONFIRMAR (Fase 0)",
+      "workflow_env": "WORKFLOW_ID_LIGHT",
+      "input": {"image_field": "A CONFIRMAR (Fase 0)", "extra": {}},
+      "expected_duration_s": 15,
+      "output": {
+        "video": "A CONFIRMAR (Fase 0)",
+        "narration": "A CONFIRMAR (Fase 0)",
+        "music": "A CONFIRMAR (Fase 0)",
+        "description": "A CONFIRMAR (Fase 0)",
+        "narration_text": "A CONFIRMAR (Fase 0)",
+        "images": {
+          "hero": "A CONFIRMAR (Fase 0)",
+          "lifestyle": "A CONFIRMAR (Fase 0)",
+          "details": "A CONFIRMAR (Fase 0)"
+        }
+      },
+      "recover": {
+        "hero": {"node_id": "A CONFIRMAR (Fase 0)", "path": "A CONFIRMAR (Fase 0)"},
+        "lifestyle": {"node_id": "A CONFIRMAR (Fase 0)", "path": "A CONFIRMAR (Fase 0)"},
+        "details": {"node_id": "A CONFIRMAR (Fase 0)", "path": "A CONFIRMAR (Fase 0)"}
+      }
+    }
+  }
+}
