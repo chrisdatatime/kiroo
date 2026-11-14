@@ -40,7 +40,7 @@ class Artifact:
     """Um arquivo do pacote. `url` (a baixar), `data` (ja em memoria) ou `path` (ja em disco). `recover` guarda de onde
     buscar de novo SO este arquivo (endpoint e request_id do no), sem reexecutar o workflow."""
 
-    kind: str                       # video | image
+    kind: str                       # video | image | audio
     url: str | None = None
     data: bytes | None = None
     path: Path | None = None
@@ -58,6 +58,10 @@ class WorkflowPackage:
     hero: Artifact | None = None
     title: str = ""
     caption: str = ""
+    # OPCIONAIS (so quando o display do workflow expoe): audio do ElevenLabs e texto falado, para medir a narracao.
+    # Nao fazem parte da entrega nem do que o front ve.
+    narration_audio: Artifact | None = None
+    narration_text: str = ""
     nodes: dict = field(default_factory=dict)          # envelope: {node_id: {"endpoint", "request_id"}}
     warnings: list[str] = field(default_factory=list)
 
@@ -186,8 +190,8 @@ _FENCE = re.compile(r"^```[a-zA-Z]*\s*|\s*```$")        # cerca markdown, com ou
 
 
 def parse_text_output(raw) -> tuple[str, str, list[str]]:
-    """Saida `output` do workflow -> (titulo, legenda, avisos). O texto traz JSON `{"narration","title","caption"}`; a
-    narracao e ignorada aqui (o audio ja vem no video). Aceita cerca
+    """Saida `output` do workflow -> (titulo, legenda, avisos). O texto traz JSON `{"title","caption"}` (campos a
+    mais, como uma `narration` antiga, sao ignorados: o audio ja vem no video). Aceita cerca
     ```json, cerca sem rotulo, espacos ao redor e dict ja decodificado). JSON invalido, vazio ou com campos vazios (o prompt manda nunca devolver vazio, mas o parser segue defensivo
     quando nao identifica o produto): devolve o que houver, com aviso. NUNCA inventa texto."""
     data = raw
@@ -241,6 +245,12 @@ def parse_result(result: dict, contract: dict) -> WorkflowPackage:
         pkg.hero = Artifact(kind="image", url=url, recover=recover)
     pkg.title, pkg.caption, warns = parse_text_output(get_path(output, out_map.get("text", "")))
     pkg.warnings.extend(warns)
+    if out_map.get("narration_audio"):
+        url = _url_of(get_path(output, out_map["narration_audio"]))
+        if url:
+            pkg.narration_audio = Artifact(kind="audio", url=url)
+    if out_map.get("narration_text"):
+        pkg.narration_text = _text_of(get_path(output, out_map["narration_text"]))
     return pkg
 
 
@@ -261,10 +271,13 @@ def _artifact_from_dict(d: dict | None) -> Artifact | None:
 def package_to_dict(pkg: WorkflowPackage) -> dict:
     """Pacote canonico -> JSON (so enderecos e metadados; os bytes ficam em arquivos). Guardado em result.json."""
     return {"video": _artifact_to_dict(pkg.video), "hero": _artifact_to_dict(pkg.hero), "title": pkg.title,
-            "caption": pkg.caption, "nodes": pkg.nodes, "warnings": list(pkg.warnings)}
+            "caption": pkg.caption, "narration_audio": _artifact_to_dict(pkg.narration_audio),
+            "narration_text": pkg.narration_text, "nodes": pkg.nodes, "warnings": list(pkg.warnings)}
 
 
 def package_from_dict(d: dict) -> WorkflowPackage:
     return WorkflowPackage(video=_artifact_from_dict(d.get("video")), hero=_artifact_from_dict(d.get("hero")),
-                           title=d.get("title") or "", caption=d.get("caption") or "", nodes=d.get("nodes") or {},
+                           title=d.get("title") or "", caption=d.get("caption") or "",
+                           narration_audio=_artifact_from_dict(d.get("narration_audio")),
+                           narration_text=d.get("narration_text") or "", nodes=d.get("nodes") or {},
                            warnings=list(d.get("warnings") or []))

@@ -126,8 +126,9 @@ def test_real_contract_confirmed_fields_and_open_items():
     assert cfg["workflow_env"] == "WORKFLOW_ID"
     assert cfg["input"] == {"fields": ["image_url", "scene_prompt", "platform_strategy", "product_context", "video_prompt",
                                        "copywriting_prompt"]}
-    assert cfg["output"] == {"video": "video.url", "image": "images.0.url", "text": "output"}
-    assert all(k not in cfg["output"] for k in ("narration", "music", "description", "narration_text"))
+    assert cfg["output"] == {"video": "video.url", "image": "images.0.url", "text": "output",
+                             "narration_audio": "narration_audio", "narration_text": "narration_text"}
+    assert all(k not in cfg["output"] for k in ("narration", "music", "description"))
     assert cfg["recover"] == {"hero": {"node_id": "node-oTeZSiC32m", "path": "images.0.url"}}
     # nada bloqueia o ENVIO; os 2 itens abertos bloqueiam SO a recuperacao de foto
     assert fc.placeholders(real, include_recover=False) == [] and cfg["pending"] == []
@@ -137,6 +138,22 @@ def test_real_contract_confirmed_fields_and_open_items():
     assert fc.placeholders(real) == pend
     assert not any(k in p for p in pend for k in ("image_url", "video.url", "output.image", "indice"))
     assert fc.check_input(real, _args())
+
+
+def test_optional_narration_audio_and_text_are_read_when_the_workflow_exposes_them():
+    base = {"video": {"url": "https://x.fal.media/v.mp4"}, "images": [{"url": "https://x.fal.media/h.jpg"}],
+            "output": '{"title": "T", "caption": "C"}'}
+    plain = fc.parse_result(base, REAL)
+    assert plain.narration_audio is None and plain.narration_text == ""          # sem os campos: igual ao de antes
+    full = fc.parse_result({**base, "narration_audio": {"url": "https://x.fal.media/n.mp3", "content_type": "audio/mpeg"},
+                            "narration_text": "  Gancho, beneficio e chamada.  "}, REAL)
+    assert full.narration_audio.kind == "audio" and full.narration_audio.url == "https://x.fal.media/n.mp3"
+    assert full.narration_text == "Gancho, beneficio e chamada."
+    assert (full.title, full.caption, full.missing()) == ("T", "C", [])          # entrega e front: nada muda
+    back = fc.package_from_dict(fc.package_to_dict(full))
+    assert back.narration_audio.url == full.narration_audio.url and back.narration_text == full.narration_text
+    env = fc.parse_result({"output": {**base, "narration_audio": "https://x.fal.media/n2.mp3"}, "nodes": {}}, REAL)
+    assert env.narration_audio.url == "https://x.fal.media/n2.mp3"               # com envelope e URL direta
 
 
 def test_narration_in_the_text_output_is_ignored_by_the_parser():

@@ -99,6 +99,62 @@ def test_demo_flow_delivers_video_photo_caption_and_cover(settings, tmp_path, ph
     assert status(o, pid) == PS.COMPLETED
 
 
+def _usage(o, pid):
+    return json.loads(o.db.attempts(pid)[0]["usage_json"] or "{}")
+
+
+def test_usage_records_the_prompt_version_and_the_measured_narration(settings, tmp_path, photo_product):
+    from studio.prompts import production as pp
+    o = make(settings, tmp_path)
+    pid = new(o, photo_product)
+    assert o.run(pid) == PS.AWAITING_FINAL_REVIEW
+    u = _usage(o, pid)
+    assert u["prompt_version"] == pp.PROMPT_VERSION
+    assert 12.0 <= u["narration_seconds"] <= 13.0 and u["narration"]["reaches_end"] is False      # fala termina em 12,5 s
+    assert u["narration"]["source"] == "video_audio_track" and "narration_warning" not in u
+    assert not [e for e in o.db.events(pid) if e["type"] == "narration_too_long"]
+
+
+def test_narration_too_long_is_a_structured_warning_that_never_blocks_or_recharges(settings, tmp_path, photo_product):
+    o, wid = funded(settings, tmp_path, fal_script=FalSimScript(speech_seconds=15.0))
+    pid = new(o, photo_product, wid=wid)
+    assert o.run(pid) == PS.AWAITING_FINAL_REVIEW                  # a entrega segue
+    u = _usage(o, pid)
+    assert u["narration_seconds"] > 14.5 and u["narration"]["reaches_end"] is True
+    assert u["narration_warning"] == "narration_too_long"
+    ev = [e for e in o.db.events(pid) if e["type"] == "narration_too_long"]
+    assert len(ev) == 1 and json.loads(ev[0]["data_json"])["code"] == "narration_too_long"
+    assert o.fal_gen.submit_count == 1                               # nada reprocessado
+    o.final_decision(pid, True)
+    assert status(o, pid) == PS.COMPLETED
+
+
+def test_narration_is_measured_on_the_real_audio_when_the_workflow_exposes_it(settings, tmp_path, photo_product):
+    text = "Olha esse achadinho: perfume em frasco preto com detalhes dourados, lindo pra presentear. Clica no carrinho."
+    o = make(settings, tmp_path, fal_script=FalSimScript(narration_audio_seconds=15.8, narration_text=text))
+    pid = new(o, photo_product)
+    assert o.run(pid) == PS.AWAITING_FINAL_REVIEW                  # entrega segue, mesmo acima do limite
+    u = _usage(o, pid)
+    assert u["narration"]["source"] == "workflow_audio" and 15.6 <= u["narration_seconds"] <= 16.0
+    assert u["narration_text"] == text and u["narration_words"] == 16
+    assert u["narration_warning"] == "narration_too_long"
+    ev = [json.loads(e["data_json"]) for e in o.db.events(pid) if e["type"] == "narration_too_long"]
+    assert len(ev) == 1 and ev[0]["source"] == "workflow_audio" and ev[0]["words"] == 16
+    meta = json.loads((delivery(o, pid) / "delivery_meta.json").read_text(encoding="utf-8"))
+    assert set(meta["files"]) == {"final.mp4", "product_image_01.jpg", "cover.jpg"}   # o audio nunca vai para a entrega
+
+
+def test_unreadable_narration_audio_falls_back_to_the_video_track(settings, tmp_path, photo_product, monkeypatch):
+    o = make(settings, tmp_path, fal_script=FalSimScript(narration_audio_seconds=12.0))
+    real_fetch = o.fal_gen.fetch
+    monkeypatch.setattr(o.fal_gen, "fetch", lambda a: b"nao e audio" if a.kind == "audio" else real_fetch(a))
+    pid = new(o, photo_product)
+    assert o.run(pid) == PS.AWAITING_FINAL_REVIEW
+    u = _usage(o, pid)
+    assert u["narration"]["source"] == "video_audio_track" and "audio_error" in u["narration"]
+    assert 12.0 <= u["narration_seconds"] <= 13.0 and "narration_text" not in u
+
+
 def test_final_video_is_the_workflow_video_copied_without_reencode(settings, tmp_path, photo_product):
     o = make(settings, tmp_path)
     pid = new(o, photo_product)

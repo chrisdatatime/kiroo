@@ -28,7 +28,7 @@ def sample_contract():
     return copy.deepcopy(SAMPLE_CONTRACT)
 
 
-TEXT = '{"narration": "Fala de 15 s.", "title": "Copo azul de aco inox", "caption": "Mantem a bebida gelada por horas."}'
+TEXT = '{"title": "Copo azul de aco inox", "caption": "Mantem a bebida gelada por horas."}'
 
 
 def sample_result(*, drop=(), envelope=True, text=TEXT):

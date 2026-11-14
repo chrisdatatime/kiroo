@@ -16,6 +16,7 @@ Regras (decididas com o dono do produto):
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -78,6 +79,37 @@ class ComposeReport:
     duration_s: float
     checks: dict
     warnings: list[str] = field(default_factory=list)
+
+
+# --------------------------------------------------------------------- duracao da narracao
+SPEECH_NOISE_DB = -35.0           # abaixo disso e silencio (o video do workflow nao tem musica)
+SPEECH_MIN_SILENCE_S = 0.25
+_SIL_START = re.compile(r"silence_start:\s*(-?[\d.]+)")
+_SIL_END = re.compile(r"silence_end:\s*(-?[\d.]+)")
+
+
+def speech_end_from_silencedetect(stderr: str, total_s: float) -> float:
+    """Fim da ultima fala = inicio do silencio final (se o arquivo termina em silencio) ou o fim do arquivo (a fala vai
+    ate o ultimo quadro: provavel corte). Funcao pura sobre a saida do filtro `silencedetect`."""
+    starts = [float(x) for x in _SIL_START.findall(stderr)]
+    ends = [float(x) for x in _SIL_END.findall(stderr)]
+    if starts and len(starts) > len(ends):            # silencio aberto ate o fim do arquivo
+        return round(max(0.0, min(starts[-1], total_s)), 3)
+    if starts and ends and ends[-1] >= total_s - 0.05:  # o ultimo silencio fecha exatamente no fim
+        return round(max(0.0, starts[-1]), 3)
+    return round(total_s, 3)
+
+
+def measure_narration(ff: FFmpeg, path: Path) -> dict:
+    """Duracao da fala na trilha de audio de `path` (ffprobe + silencedetect). A trilha final do H3 tem ~15 s fixos,
+    entao a duracao do arquivo nao prova a da narracao: medimos ate onde ha fala. `reaches_end` = a fala chega ao
+    ultimo quadro (a narracao provavelmente era mais longa e foi cortada)."""
+    total = float(ff.probe(path)["duration_s"])
+    proc = ff.run(["-i", str(path), "-vn", "-af", f"silencedetect=noise={SPEECH_NOISE_DB:g}dB:d={SPEECH_MIN_SILENCE_S:g}",
+                   "-f", "null", "-"], loglevel="info")
+    end = speech_end_from_silencedetect(proc.stderr, total)
+    return {"narration_seconds": end, "track_seconds": round(total, 3), "reaches_end": end >= total - 0.05,
+            "source": "video_audio_track"}
 
 
 # --------------------------------------------------------------------- validacao da origem

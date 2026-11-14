@@ -38,6 +38,9 @@ class FalSimScript:
     error_on_complete: str | None = None                            # texto: o workflow termina com erro
     video_has_audio: bool = True                                    # False: o mp4 sai SEM stream de audio
     video_seconds: float = 15.0
+    speech_seconds: float | None = None                             # fim da "fala"; None = 2,5 s antes do fim do video
+    narration_audio_seconds: float | None = None                    # != None: o display expoe o audio do ElevenLabs
+    narration_text: str | None = None                               # != None: o display expoe o texto falado
     video_size: tuple[int, int] = (540, 960)
     title: str = "Copo azul de aco inox"
     caption: str = "Mantem a bebida gelada por horas. Ideal para o dia a dia."
@@ -107,7 +110,7 @@ class SimulatedFalWorkflow:
         files = self._render(op_id)
         self.ops.save(op_id, {"polls_left": self.script.polls_before_done, "scene": request.scene, "platform": request.platform, "files": files,
                               "error": self.script.error_on_complete, "recoverable": sorted(self.script.recoverable),
-                              "output_text": self._output_text()})
+                              "output_text": self._output_text(), "narration_text": self.script.narration_text})
         return SubmitInfo(op_id, {"workflow": "simulado/wf01white", "scene": request.scene, "platform": request.platform})
 
     def submit(self, request: WorkflowRequest) -> str:
@@ -131,6 +134,9 @@ class SimulatedFalWorkflow:
             pkg.hero = Artifact(kind="image", path=Path(f))
         elif "hero" in st["recoverable"]:
             pkg.hero = Artifact(kind="image", recover={"endpoint": "simulado/no", "request_id": op_id, "path": "hero"})
+        if st["files"].get("narration_audio"):
+            pkg.narration_audio = Artifact(kind="audio", path=Path(st["files"]["narration_audio"]))
+        pkg.narration_text = st.get("narration_text") or ""
         raw = {"output": {"video": {"url": st["files"].get("video")}, "images": [{"url": f}] if f else [],
                           "output": st["output_text"]},
                "nodes": {"sim": {"endpoint": "simulado/no", "request_id": op_id}}}      # mesma forma do envelope real
@@ -170,13 +176,19 @@ class SimulatedFalWorkflow:
         if "video" not in miss:
             p = d / "video.mp4"
             args = ["-f", "lavfi", "-i", f"testsrc2=size={w}x{h}:rate=30:duration={s.video_seconds}"]
-            if s.video_has_audio:     # "narracao" embutida: tom modulado como fala (sem musica)
-                expr = "0.45*sin(2*PI*190*t)*(0.55+0.45*sin(2*PI*3.3*t))"
+            if s.video_has_audio:     # "narracao" embutida: tom modulado como fala (sem musica), silencio depois da fala
+                end = s.speech_seconds if s.speech_seconds is not None else max(0.5, s.video_seconds - 2.5)
+                expr = f"0.45*sin(2*PI*190*t)*(0.55+0.45*sin(2*PI*3.3*t))*lt(t,{end:g})"
                 args += ["-f", "lavfi", "-i", f"aevalsrc='{expr}':s=48000:d={s.video_seconds}", "-c:a", "aac", "-b:a", "128k"]
             else:
                 args += ["-an"]
             self.ffmpeg.run([*args, "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", str(p)])
             out["video"] = str(p)
+        if s.narration_audio_seconds is not None:
+            p = d / "narration.m4a"
+            self.ffmpeg.run(["-f", "lavfi", "-i", f"sine=frequency=190:sample_rate=48000:duration={s.narration_audio_seconds}",
+                             "-c:a", "aac", "-b:a", "96k", str(p)])
+            out["narration_audio"] = str(p)
         key = "image:hero"
         p = d / "hero.jpg"
         self.ffmpeg.run(["-f", "lavfi", "-i", f"color=c={HERO_COLOR}:s=720x1280", "-frames:v", "1",

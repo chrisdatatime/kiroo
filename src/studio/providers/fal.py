@@ -270,7 +270,7 @@ class FalWorkflowGenerator:
         result = self.client.result(response_url)
         pkg = fal_contract.parse_result(result, self.contract)
         raw_text = self._raw_text(result)
-        # O formato do texto do no (JSON narration/title/caption) ainda e validado na rodada real: o bruto fica no log
+        # O formato do texto do no (JSON title/caption) ainda e validado na rodada real: o bruto fica no log
         # e no usage (texto gerado a partir da foto; sem dado pessoal), limitado em tamanho.
         log.info("[fal %s] output bruto do no de texto: %r", op_id, raw_text[:TEXT_LOG_MAX])
         usage = {"request_id": op_id, "nodes": pkg.nodes, "text_output": raw_text[:TEXT_LOG_MAX],

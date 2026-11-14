@@ -1,0 +1,67 @@
+{
+  "_nota": "Prompts ORIGINAIS do wf01white antes das 6 entradas (export do fal de 2026-11-14T05:39Z, schema so com image_url). Referencia fixa para os templates de prompts/production.py e para o diff original x novo. Nao editar.",
+  "workflow": "wf01white",
+  "updated_at": "2026-11-14T05:39:26.269596Z",
+  "nodes": {
+    "lifestyle_image": {
+      "node_id": "node-YHV4nNB10r",
+      "app": "fal-ai/flux-pro/kontext",
+      "field": "prompt",
+      "text": "Edit the uploaded product photograph into a premium lifestyle advertising scene inside a bright, elegant modern home.\n\nCRITICAL OBJECT PRESERVATION:\nThe original physical product must remain visually unchanged.\n\nTreat the product as a locked photographic object, not as an object to redesign or regenerate.\n\nPreserve the exact bottle silhouette, cap shape, dimensions, black and gold color distribution, decorative bands, medallion position, lettering, logos and packaging details.\n\nDo not replace the bottle cap, create a new neck, change the gold decorations, alter the brand lettering or reinterpret any physical component.\n\nENVIRONMENT:\nReplace only the surrounding environment with a beautiful bright residential interior featuring warm white walls, natural daylight, soft beige furnishings and realistic shadows.\n\nPlace the original product naturally on an elegant marble or stone surface.\n\nMaintain believable contact shadows and realistic lighting.\n\nCOMPOSITION:\nPremium lifestyle product photography.\nVertical 9:16 framing.\nNatural perspective and realistic scale.\n\nABSOLUTE RESTRICTIONS:\nNo product redesign.\nNo new packaging.\nNo modified bottle structure.\nNo altered logos or lettering.\nNo added accessories.\nNo watermarks or promotional text.\n\nThe finished image must depict exactly the same physical product as the uploaded reference, only in a different environment.",
+      "other_inputs": {
+        "aspect_ratio": "9:16"
+      }
+    },
+    "hero_image": {
+      "node_id": "node-oTeZSiC32m",
+      "app": "fal-ai/flux-pro/kontext",
+      "field": "prompt",
+      "text": "Transform the uploaded product photo into a premium bright minimalist product advertising hero shot.\n\nPRESERVE THE PRODUCT:\nMaintain the exact visible product identity, shape, proportions, colors, materials, textures, labels, logos, and branding from the original reference image.\n\nSCENE:\nCreate a beautiful high-end white studio environment with warm off-white surfaces, subtle beige accents, diffused natural daylight, realistic soft shadows, and clean contemporary styling.\n\nPlace the product naturally on a simple elegant surface appropriate for its category.\n\nCOMPOSITION:\nProduct clearly visible and prominent, clean balanced framing, generous negative space, soft realistic contact shadows, refined commercial photography.\n\nBright white and warm neutral atmosphere without overexposure.\n\nVertical 9:16 composition.\n\nSTRICT RULES:\nNever modify, deform, recolor, duplicate, or redesign the product.\nDo not invent accessories, branding, specifications, or packaging details.\nAvoid dark environments, dramatic neon effects, unrealistic reflections, and excessive decorations.\nNo additional text or watermarks.\n\nPhotorealistic premium e-commerce product photography.",
+      "other_inputs": {
+        "aspect_ratio": "9:16"
+      }
+    },
+    "vision": {
+      "node_id": "node-gqS3nF5SZG",
+      "app": "openrouter/router/vision",
+      "field": "prompt",
+      "text": "You are a product identification specialist for a Brazilian e-commerce platform.\n\nAnalyze the ACTUAL UPLOADED IMAGE carefully before answering.\n\nYour primary responsibility is to identify the correct product. Accuracy is more important than creativity.\n\nSTEP 1 — IDENTIFICATION\nIdentify the main product or product set visible in the image.\n\nPay special attention to:\n- Overall object shape and physical structure\n- Individual components and accessories\n- Product category\n- Visible colors and finishes\n- Packaging and identifying elements\n\nSTEP 2 — VERIFICATION\nBefore writing the description, verify that the product category is consistent with the objects actually visible in the image.\n\nDo not confuse kitchen utensils, knife sets, cookware, dish racks, sink accessories, or other kitchen products.\n\nDo not use information from previous images, previous requests, or unrelated products.\n\nSTEP 3 — DESCRIPTION\nWrite a factual description in Brazilian Portuguese.\n\nDescribe:\n- The correct generic product name\n- Main visible components\n- Colors and design\n- Visually recognizable characteristics\n\nSTRICT RULES:\nNever invent another product.\nNever invent specifications, materials, quantities, dimensions, certifications, functions, or technical capabilities that cannot be verified visually.\nDo not infer specifications from product appearance.\nDo not create advertising copy.\nDo not mention benefits that cannot be supported by visible evidence.\nDo not include background descriptions.\n\nIf uncertain, describe the visible objects without guessing their commercial name.\n\nReturn only the factual product description in Brazilian Portuguese.",
+      "other_inputs": {
+        "model": "google/gemini-2.5-flash"
+      }
+    },
+    "narration": {
+      "node_id": "node-kBVy7SS8xC",
+      "app": "openrouter/router",
+      "field": "system_prompt",
+      "text": "You are a senior Brazilian e-commerce advertising copywriter.\n\nYour goal is to SELL THE ACTUAL PRODUCT, not merely describe its physical appearance.\n\nYou will receive product identification information and, when available, verified product specifications from reliable sources.\n\nFIRST, UNDERSTAND THE PRODUCT:\nIdentify the product category, brand, model and actual commercial purpose.\n\nDISTINGUISH:\n1. Visual attributes: color, packaging, shape and appearance.\n2. Functional attributes: what the product does, contains or provides.\n3. Commercial value: why a customer might want the product.\n\nPRIORITY:\nFocus on verified functional attributes and relevant customer value.\n\nFor perfumes:\nPrioritize verified fragrance notes, olfactory family and scent character. Do not focus primarily on bottle colors or packaging.\n\nFor electronics:\nPrioritize verified functions, connectivity, performance and practical applications.\n\nFor kitchen products:\nPrioritize verified components, intended use and practicality.\n\nFor beauty products:\nPrioritize verified formulation, purpose and supported benefits.\n\nFor other categories:\nAdapt to the product's actual purpose and verified characteristics.\n\nACCURACY RULES:\nNever invent product features, fragrance notes, battery life, performance, materials, specifications or benefits.\n\nUse product-specific factual information only when supplied or verified.\n\nIf only visual information is available, avoid unsupported claims. Do not pretend to know invisible product characteristics.\n\nNever replace the identified product with another product.\n\nOUTPUT:\nWrite a compelling 25-32 word Brazilian Portuguese voiceover for a 15-second commercial.\n\nStart with an engaging hook, communicate the product's main verified value, and finish naturally.\n\nReturn only the spoken narration text.",
+      "other_inputs": {
+        "model": "google/gemini-2.5-flash",
+        "reasoning": false,
+        "prompt": "$node-gqS3nF5SZG.output"
+      }
+    },
+    "title_caption": {
+      "node_id": "node-AazMWXMLEf",
+      "app": "openrouter/router",
+      "field": "system_prompt",
+      "text": "You are an expert Brazilian e-commerce copywriter specializing in Shopee, TikTok Shop, Instagram Reels, and Mercado Livre.\n\nYour task is to create a compelling product title and a ready-to-publish social commerce caption based strictly on the factual product description provided.\n\nLANGUAGE:\nAlways write in natural Brazilian Portuguese (pt-BR).\n\nPRODUCT ACCURACY:\nThe input contains a factual description extracted from a product photograph.\n\nIdentify the exact product category and preserve its identity.\n\nNever replace the product with another product.\n\nOnly mention product attributes, materials, colors, components, and features explicitly supported by the input.\n\nNever invent specifications, quantities, dimensions, prices, discounts, brands, certifications, warranties, or performance claims.\n\nTITLE:\n- Create one attractive, descriptive product title.\n- Maximum 80 characters.\n- Include the correct product category.\n- Highlight a distinctive verified characteristic when available.\n- Optimize for readability and relevant e-commerce search terms.\n- Avoid clickbait, exaggerated promises, and excessive capitalization.\n- Do not include emojis or hashtags.\n\nCAPTION:\n- Write an engaging commercial caption between 40 and 65 words.\n- Start with an attention-grabbing but truthful opening.\n- Explain the product's main visible characteristics and practical context.\n- Use short, natural sentences.\n- Maintain a friendly, persuasive Brazilian tone.\n- Include a short call to action.\n- Add 3 to 5 relevant hashtags at the end.\n- Use at most 2 emojis.\n- Avoid unverified claims such as \"best\", \"guaranteed\", \"100% original\" or unsupported technical benefits.\n\nOUTPUT FORMAT:\nReturn ONLY valid JSON using exactly these keys:\n\n{\n  \"title\": \"\",\n  \"caption\": \"\"\n}\n\nDo not return Markdown, code fences, explanations, or additional fields.\n\nIf the product cannot be reliably identified, return empty strings for both fields rather than inventing a product.",
+      "other_inputs": {
+        "model": "google/gemini-2.5-flash",
+        "reasoning": false,
+        "prompt": "$node-gqS3nF5SZG.output"
+      }
+    },
+    "video": {
+      "node_id": "node-6kOk0Qjjc5",
+      "app": "minimax/h3-max-turbo/image-to-video",
+      "field": "prompt",
+      "text": "Create a beautiful, photorealistic 15-second lifestyle product advertisement based on the provided reference image.\n\nThe product is naturally placed inside a bright, elegant modern home with white walls, soft neutral interiors and abundant natural daylight.\n\nPreserve the exact product appearance, proportions, colors, materials, logos, branding and visible physical details.\n\nCreate three distinct visual moments within one cohesive commercial:\n\nSHOT 1 — 0-5 SECONDS:\nBegin with a welcoming, natural wide shot showing the product beautifully integrated into the home environment. Perform a slow, smooth camera push-in. Soft daylight enters through a nearby window, creating gentle realistic shadows.\n\nSHOT 2 — 5-10 SECONDS:\nTransition to a closer view highlighting the product's authentic details, materials and design. Use a subtle lateral camera movement with natural depth and elegant lifestyle photography.\n\nSHOT 3 — 10-15 SECONDS:\nFinish with a clean, beautifully framed product hero shot in the same bright residential environment. Slowly approach the product and settle into a stable final composition.\n\nVISUAL DIRECTION:\nBright natural daylight, white and warm neutral color palette, clean Scandinavian-inspired interiors, realistic product photography, authentic home atmosphere, understated premium lifestyle advertising.\n\nKeep camera movements natural, smooth and elegant. Maintain realistic lighting and environmental consistency.\n\nAUDIO DIRECTION:\nGenerate an original instrumental background soundtrack for the entire 15-second commercial.\n\nMusic style: modern lifestyle advertising, elegant upbeat electronic pop, soft percussion, warm synthesizers, gentle melodic elements, and a fresh, positive atmosphere.\n\n0-5 seconds: Begin with an engaging, light musical hook that complements the product reveal.\n\n5-10 seconds: Introduce subtle rhythmic development and uplifting musical energy during the detail shot.\n\n10-15 seconds: Build toward a polished, satisfying musical ending synchronized with the final hero shot.\n\nThe soundtrack should feel professionally produced, modern, memorable, and appropriate for a premium e-commerce advertisement.\n\nUse controlled dynamics and leave sufficient sonic space for a Brazilian Portuguese voiceover to be added during post-production.\n\nNo vocals, no lyrics, no speech, no spoken dialogue, and no generated narration.\n\nSTRICT REQUIREMENTS:\nDo not alter, deform, rotate unnaturally, duplicate or redesign the product.\nDo not invent unseen product features.\nAvoid dark cinematic studios, dramatic neon lighting, futuristic backgrounds, excessive particles or artificial visual effects.\nNo text, subtitles or watermarks.\n\nVertical 9:16. One cohesive 15-second commercial with original instrumental background music.",
+      "other_inputs": {
+        "prompt_expansion_mode": "balanced",
+        "duration": 15,
+        "target_audio_url": "$node-DTAPZaYmdb.audio.url"
+      }
+    }
+  }
+}

@@ -357,7 +357,7 @@ class FalRunner:
                                         estimated_cost_usd=estimate, pricing_source=source)
         if hold:
             o.ledger().attach(hold, att_id)
-        self._set_meta(att_id, scene=req.scene, platform=req.platform, stage="created")
+        self._set_meta(att_id, scene=req.scene, platform=req.platform, stage="created", prompt_version=prompts.PROMPT_VERSION)
         if dj.get("resubmit_authorized"):
             self._set_dj(pid, resubmit_authorized=False)      # a autorizacao vale para UMA execucao
         return self._submit(pid, self.db.attempt(att_id))
@@ -450,13 +450,14 @@ class FalRunner:
             return self._fail_production(pid, "o workflow terminou com erro", res.error or "")
         # sucesso: grava o resultado (historico) e passa a baixar
         pkg = res.package
+        usage = {**(res.usage or {}), "prompt_version": meta.get("prompt_version") or prompts.PROMPT_VERSION}
         adir = self._st(pid).dir(self._adir_rel(att))
         (adir / "result.json").write_text(json.dumps({
             "request_id": att["remote_op_id"], "scene": meta.get("scene"), "platform": meta.get("platform"), "package": fc.package_to_dict(pkg),
             "raw": res.raw,      # resposta BRUTA do workflow (com o envelope), para confirmar recover.hero e request_id por no
-            "usage": res.usage, "completed_at": now()}, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+            "usage": usage, "completed_at": now()}, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
         self._set_dj(pid, title=pkg.title, caption=pkg.caption, warnings=list(pkg.warnings))
-        self.db.update_attempt(att_id, usage_json=json.dumps(res.usage, default=str), transient_retries=0)
+        self.db.update_attempt(att_id, usage_json=json.dumps(usage, default=str), transient_retries=0)
         self._set_meta(att_id, stage="ingesting", nodes=pkg.nodes)
         return self._ingest(pid, self.db.attempt(att_id))
 
@@ -501,6 +502,7 @@ class FalRunner:
                     f.unlink(missing_ok=True)
                 self.db.update_attempt(att_id, status="failed", error=f"video invalido: {exc}", error_permanent=1, finished_at=now())
                 return self._fail_production(pid, "video invalido", str(exc))
+            self._record_narration(pid, att, vpath, pkg, adir)
             # 2) a foto hero; se faltar, tenta a recuperacao controlada pelo no (nunca reexecuta o workflow)
             missing: list[str] = []
             if not (self._have_image(adir) or self._try_image(adir, pkg.hero)):
@@ -542,6 +544,55 @@ class FalRunner:
         self.db.update_production(pid, delivery_status="pending")
         self.db.set_production_status(pid, PS.EDITING, "pacote recebido: compondo o video")
         return "progress"
+
+    def _measure_narration(self, pid: str, vpath: Path, pkg: fc.WorkflowPackage, adir: Path) -> dict:
+        """1) audio REAL do ElevenLabs (`narration_audio`, quando o workflow expoe): ffprobe da duracao do arquivo;
+        2) fallback: fim da fala na trilha do video (silencedetect), que nao prova a duracao da narracao (o H3 corta)."""
+        audio_error = None
+        art = pkg.narration_audio
+        if art is not None and art.available:
+            try:
+                apath = adir / "narration_audio.bin"
+                if not apath.is_file():
+                    apath.write_bytes(self.gen.fetch(art))
+                info = self.o.ffmpeg.probe(apath)
+                if not info["has_audio"] or info["duration_s"] <= 0:
+                    raise ValueError("arquivo sem audio")
+                return {"narration_seconds": round(info["duration_s"], 3), "source": "workflow_audio"}
+            except Exception as exc:  # noqa: BLE001 — audio ilegivel ou download falhou: cai no fallback
+                audio_error = f"{type(exc).__name__}: {exc}"[:300]
+                log.info("[%s] audio da narracao indisponivel (%s): fallback pela trilha do video", pid, audio_error)
+        m = composer.measure_narration(self.o.ffmpeg, vpath)
+        if audio_error:
+            m["audio_error"] = audio_error
+        return m
+
+    def _record_narration(self, pid: str, att, vpath: Path, pkg: fc.WorkflowPackage, adir: Path) -> None:
+        """Grava em usage_json `narration_seconds` (+ `narration_text`, se o workflow expoe). Acima de NARRATION_MAX_S:
+        aviso estruturado `narration_too_long` (evento + usage). Nunca quebra a entrega, nunca cobra nem reprocessa."""
+        try:
+            usage = json.loads(att["usage_json"] or "{}")
+        except ValueError:
+            usage = {}
+        if "narration_seconds" in usage:          # retomada: ja medido
+            return
+        if pkg.narration_text:
+            usage.update(narration_text=pkg.narration_text[:2000], narration_words=prompts.word_count(pkg.narration_text))
+        try:
+            m = self._measure_narration(pid, vpath, pkg, adir)
+        except Exception as exc:  # noqa: BLE001 — medicao e informativa
+            log.info("[%s] medicao da narracao falhou (%s)", pid, type(exc).__name__)
+            self.db.update_attempt(att["id"], usage_json=json.dumps(usage, default=str))
+            return
+        usage.update(narration_seconds=m["narration_seconds"], narration={k: v for k, v in m.items() if k != "narration_seconds"})
+        if m["narration_seconds"] > prompts.NARRATION_MAX_S:
+            usage["narration_warning"] = "narration_too_long"
+            self.db.add_event(pid, "narration_too_long",
+                              f"narracao de {m['narration_seconds']:.1f}s (limite {prompts.NARRATION_MAX_S:g}s)"
+                              + ("; a fala chega ao ultimo quadro (provavel corte)" if m.get("reaches_end") else ""),
+                              data={"code": "narration_too_long", "limit_s": prompts.NARRATION_MAX_S, **m,
+                                    "words": usage.get("narration_words"), "prompt_version": usage.get("prompt_version")})
+        self.db.update_attempt(att["id"], usage_json=json.dumps(usage, default=str))
 
     @staticmethod
     def _have_image(adir: Path) -> bool:
