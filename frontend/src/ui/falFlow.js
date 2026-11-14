@@ -121,6 +121,11 @@ export function falProgress(P, now = Date.now()) {
   return Math.round(8 + Math.min(frac, 1) * 82);                // até 90%: o resto é a entrega validada
 }
 
+// Faixa do progresso geral (falProgress) em que cada etapa fica: a mesma conta, usada pela esteira vertical do celular
+// para encher a barra da etapa atual (fila 0–8, depois os cortes de EST_CUTS até 90, EDIÇÃO 90–100).
+const pctAt = (frac) => Math.round((8 + frac * 82) * 10) / 10;
+export const FAL_STEP_BOUNDS = [[0, 8], [8, pctAt(EST_CUTS[0])], [pctAt(EST_CUTS[0]), pctAt(EST_CUTS[1])], [pctAt(EST_CUTS[1]), pctAt(EST_CUTS[2])], [pctAt(EST_CUTS[2]), 90], [90, 100]];
+
 // Estado mostrado ao cliente, SEMPRE derivado do servidor. Nada de "Preparando"/"Criando" antes do /run aceito.
 // kind: waiting | running | limit | finalizing | paused | failed | cancelled | partial | done
 export function falStatus(P, now = Date.now()) {

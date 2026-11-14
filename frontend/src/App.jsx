@@ -40,6 +40,8 @@ import Shell, { VIEWS } from './shell/Shell.jsx';
 import Central from './shell/Central.jsx';
 import MissionView from './shell/MissionView.jsx';
 import TeamView from './shell/TeamView.jsx';
+import { OfficeSwitch } from './shell/Phone.jsx';
+import { normalizeImageName } from './ui/mobile.js';
 import { buildPipeline, attention } from './shell/pipeline.js';
 import { splitRequests, joinRequests, summaryRows } from './ui/direcao.js';
 import { sideBySide, anchorInfo, reviewCheck, formatAdvice } from './ui/fidelity.js';
@@ -729,8 +731,9 @@ export default class App extends React.Component {
     if (f) await this.falPickFile(f);
   }
   async falPickFile(f) {
-    if (!IMAGE_EXT.test(f.name)) { this.setFal({ error: 'Use uma foto JPG, PNG ou WEBP.' }); return; }
-    try { this.setFal({ file: { name: f.name, size: f.size, data: await readFile(f) }, reqId: null, error: null }); } catch (er) { this.setFal({ error: er.message }); }
+    const name = normalizeImageName(f.name, f.type);   // câmera do celular às vezes manda o arquivo sem extensão
+    if (!IMAGE_EXT.test(name)) { this.setFal({ error: 'Use uma foto JPG, PNG ou WEBP.' }); return; }
+    try { this.setFal({ file: { name, size: f.size, data: await readFile(f) }, reqId: null, error: null }); } catch (er) { this.setFal({ error: er.message }); }
   }
   // "Criar vídeo · N créditos": clicar = consentimento. create → confirm → run em sequência; qualquer falha deixa o modal
   // aberto com a mensagem do servidor. O MESMO client_request_id é reaproveitado num reenvio (o servidor devolve a produção
@@ -1194,11 +1197,11 @@ export default class App extends React.Component {
         {v.view === 'central' && <Central v={v} />}
         {v.view === 'missao' && <MissionView v={v} />}
         {v.view === 'equipe' && <TeamView v={v} />}
-        {v.view === 'escritorio' && (<>
+        {v.view === 'escritorio' && (<OfficeSwitch v={v}>
           <React.Suspense fallback={null}><WorldPhaser v={v} /></React.Suspense>
           <Hud v={v} />
           {v.showTut && !v.tourOpen && <Tutorial v={v} />}
-        </>)}
+        </OfficeSwitch>)}
         {v.win === 'dialog' && v.dlg && <DialogWindow v={v} />}
         {v.win === 'chat' && v.chat && <React.Suspense fallback={null}><AgentChat {...v.chat} /></React.Suspense>}
         {v.win === 'board' && <BoardWindow v={v} />}

@@ -78,6 +78,11 @@ export default function Preferences({ v }) {
   const onOpenChange = (open) => { if (!open) v.closeWin(); };
   // teclas digitadas no modal não chegam aos atalhos do jogo (só Esc, que o Radix usa para fechar)
   const stopKeys = (e) => { if (e.key !== 'Escape') e.stopPropagation(); };
+  // no celular a navegação vira uma fileira rolável: a aba aberta (ex.: Créditos pela barra inferior) fica à vista
+  React.useEffect(() => {
+    const t = setTimeout(() => { const el = document.querySelector('.pref-item[aria-current="page"]'); if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest', inline: 'center' }); }, 60);
+    return () => clearTimeout(t);
+  }, [tab]);
   return (
     <Dialog open onOpenChange={onOpenChange}>
       <DialogContent showCloseButton={false} className="pref pw-theme duration-200" onKeyDown={stopKeys}>

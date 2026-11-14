@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  Bell, Bot, Building2, CheckCheck, ChevronDown, CircleDollarSign, GraduationCap, Home, Info, LogOut, PanelLeft, Pause,
+  ArrowLeft, Bell, Bot, Building2, CheckCheck, ChevronDown, CircleDollarSign, GraduationCap, Home, Info, LogOut, PanelLeft, Pause,
   Plus, Search, Settings, Shield, Sparkles, UserRound, UsersRound, Workflow,
 } from 'lucide-react';
 import {
@@ -12,9 +12,11 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import Icon from './icons.jsx';
 import { Avatar, AGENT_STATE } from './Central.jsx';
 import { AgentHead } from './AgentHead.jsx';
+import { usePhone } from '../hooks/use-phone.js';
 import compactLogo from '../assets/brand/icone-app-preto.svg';
 import wordmark from '../assets/brand/wordmark-preto-laranja.svg';
 import './shell.css';
+import './phone.css';
 
 // Layout (padrão de escritório virtual): trilho de ícones à esquerda, painel colapsável com o contexto do estúdio
 // (próxima ação, equipe, missões) e a área de trabalho num cartão arredondado à direita.
@@ -214,7 +216,31 @@ function Panel({ v, onCollapse, newMission }) {
   );
 }
 
+// Celular: barra inferior com 4 destinos no lugar do trilho e do painel (Missões, Escritório, Créditos, Conta).
+const ACCOUNT_WINS = ['account', 'prefs', 'pilot', 'about', 'admin'];
+function TabBar({ v }) {
+  const items = [
+    { id: 'missoes', label: 'Missões', icon: Workflow, on: !v.win && (v.view === 'central' || v.view === 'missao' || v.view === 'equipe'), go: () => { if (v.win) v.closeWin(); v.setView('central'); } },
+    { id: 'escritorio', label: 'Escritório', icon: Building2, on: !v.win && v.view === 'escritorio', go: () => { if (v.win) v.closeWin(); v.setView('escritorio'); } },
+    { id: 'creditos', label: 'Créditos', icon: CircleDollarSign, on: v.win === 'credits', go: () => v.openPrefs('credits') },
+    { id: 'conta', label: 'Conta', icon: UserRound, on: ACCOUNT_WINS.includes(v.win), go: () => v.openPrefs('account') },
+  ];
+  return (
+    <nav className="pv-tabbar" aria-label="Navegação principal">
+      {items.map((x) => (
+        <button key={x.id} type="button" className="pv-tab" data-active={x.on || undefined} aria-current={x.on ? 'page' : undefined} onClick={x.go}>
+          <x.icon size={22} strokeWidth={x.on ? 2.2 : 1.8} aria-hidden="true" /><span>{x.label}</span>
+          {x.id === 'missoes' && v.attn.length > 0 && <i className="pv-tab-dot" aria-label={`${v.attn.length} pendências`} />}
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+const PHONE_TITLE = { central: 'Missões', equipe: 'Equipe', escritorio: 'Escritório' };
+
 export default function Shell({ v, rootRef, stageRef, onKeyDown, onKeyUp, onBlur, children }) {
+  const phone = usePhone();
   const [pal, setPal] = React.useState(false);
   const [panel, setPanelRaw] = React.useState(() => LS.get('bc.panel', typeof window === 'undefined' || window.innerWidth >= 900));
   const setPanel = (x) => { setPanelRaw(x); LS.set('bc.panel', x); };
@@ -229,12 +255,22 @@ export default function Shell({ v, rootRef, stageRef, onKeyDown, onKeyUp, onBlur
   const newMission = () => { v.setView('missao'); v.newProd(); };
 
   return (
-    <div ref={rootRef} tabIndex={-1} onKeyDown={onKeyDown} onKeyUp={onKeyUp} onBlur={onBlur} className="pv" data-panel={panel ? 'open' : 'closed'}
-      aria-label="Kiroo. Trilho de navegação, painel do estúdio e área de trabalho. Ctrl K abre a busca de comandos.">
+    <div ref={rootRef} tabIndex={-1} onKeyDown={onKeyDown} onKeyUp={onKeyUp} onBlur={onBlur} className="pv" data-panel={panel ? 'open' : 'closed'} data-phone={phone || undefined}
+      aria-label={phone ? 'Kiroo' : 'Kiroo. Trilho de navegação, painel do estúdio e área de trabalho. Ctrl K abre a busca de comandos.'}>
       <TooltipProvider delayDuration={250}>
-        <Rail v={v} onSearch={() => setPal(true)} newMission={newMission} />
-        {panel && <Panel v={v} onCollapse={() => setPanel(false)} newMission={newMission} />}
+        {!phone && <Rail v={v} onSearch={() => setPal(true)} newMission={newMission} />}
+        {!phone && panel && <Panel v={v} onCollapse={() => setPanel(false)} newMission={newMission} />}
         <main className="pv-stage">
+          {phone ? (
+            <header className="pv-top pv-top-phone">
+              {v.view === 'missao' && <button type="button" className="pv-back" onClick={() => v.setView('central')} aria-label="Voltar para as missões"><ArrowLeft size={22} aria-hidden="true" /></button>}
+              <h1>{v.view === 'missao' ? (v.hasProd && v.prodName ? v.prodName : 'Missão') : (PHONE_TITLE[v.view] || cur.title)}</h1>
+              {v.conn === 'erro' && <span role="alert" className="pv-status pv-status-error">Sem conexão</span>}
+              {v.mode === 'simulated' && <span className="pv-status pv-status-demo">DEMO</span>}
+              <span className="pv-rail-fill" />
+              {bal && <button type="button" className="pv-top-credits" onClick={() => v.openPrefs('credits')} aria-label={`Saldo: ${bal}. Abrir créditos`}><CircleDollarSign size={17} aria-hidden="true" />{v.wallet.exempt ? 'Isento' : v.wallet.balance}</button>}
+            </header>
+          ) : (
           <header className="pv-top">
             {!panel && <RailTip label="Abrir painel"><button type="button" className="pv-icon-btn" onClick={() => setPanel(true)} aria-label="Abrir painel"><PanelLeft size={18} aria-hidden="true" /></button></RailTip>}
             <h1>{cur.title}{v.view !== 'central' && v.prodName ? <span> · {v.prodName}</span> : null}</h1>
@@ -254,8 +290,10 @@ export default function Shell({ v, rootRef, stageRef, onKeyDown, onKeyUp, onBlur
             </span>
             <button type="button" className="pv-cta pv-cta-sm" data-tour="new-mission" onClick={newMission}><Plus size={16} aria-hidden="true" /><span className="pv-hide-sm">Nova missão</span></button>
           </header>
+          )}
           <div className="pv-body" ref={stageRef} data-tour={v.view === 'escritorio' ? 'office' : undefined}>{children}</div>
         </main>
+        {phone && <TabBar v={v} />}
         {pal && <Palette v={v} onClose={() => setPal(false)} />}
       </TooltipProvider>
     </div>

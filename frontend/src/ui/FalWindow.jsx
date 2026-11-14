@@ -1,6 +1,8 @@
 import React from 'react';
 import { CloseButton } from './bits.jsx';
+import { AlertCircle, Camera, RefreshCw, X } from 'lucide-react';
 import { RECEIVE_LINE } from './falFlow.js';
+import { usePhone } from '../hooks/use-phone.js';
 
 // "Nova produção" no fluxo foto + estilo: SÓ o envio. Foto (solte ou escolha), nome opcional, estilo (só aparece com
 // mais de um liberado) e UM botão "Criar vídeo · N créditos". Clicar = consentimento: o App faz create → confirm → run;
@@ -22,7 +24,55 @@ function DropZone({ f }) {
   );
 }
 
+// Celular: tela cheia (sobe de baixo), foto grande, "Criar vídeo" fixo no rodapé e o erro logo acima dele.
+// accept="image/*" sem `capture`: o celular oferece a câmera OU as fotos salvas.
+function PhoneSheet({ f }) {
+  const pickRef = React.useRef(null);
+  return (
+    <section role="dialog" aria-modal="true" aria-labelledby="fal-h" className="pv-sheet">
+      <header className="pv-sheet-head">
+        <h2 id="fal-h">Nova produção</h2>
+        {f.demo && <span className="pv-status pv-status-demo">DEMO</span>}
+        <button type="button" className="pv-sheet-x" onClick={f.close} aria-label="Fechar" disabled={f.busy}><X size={22} aria-hidden="true" /></button>
+      </header>
+      <div className="pv-sheet-body">
+        <input ref={pickRef} id="fal-photo" type="file" accept="image/*" onChange={f.pick} className="pv-file" aria-label="Foto do produto" disabled={f.busy} />
+        {f.file ? (
+          <figure className="pv-photo">
+            <img src={f.file.data} alt={'Sua foto: ' + f.file.name} />
+            <label htmlFor="fal-photo" className="pv-photo-swap" aria-disabled={f.busy || undefined}><RefreshCw size={18} aria-hidden="true" />Trocar foto</label>
+          </figure>
+        ) : (
+          <label htmlFor="fal-photo" className="pv-photo-empty">
+            <span className="pv-photo-ic" aria-hidden="true"><Camera size={30} /></span>
+            <strong>Adicionar foto do produto</strong>
+            <span>Use a câmera ou escolha uma foto salva</span>
+          </label>
+        )}
+        <label className="pv-sheet-label" htmlFor="fal-name">Nome do produto <span>(opcional)</span></label>
+        <input id="fal-name" className="pv-sheet-field" value={f.name} onChange={f.setName} disabled={f.busy} placeholder="Se ficar vazio, o Kiroo descreve pela foto" autoComplete="off" enterKeyHint="done" />
+        {f.styles.length > 1 ? (
+          <div role="radiogroup" aria-label="Estilo do vídeo" className="pv-sheet-styles">
+            {f.styles.map((s) => (
+              <button key={s.id} type="button" role="radio" aria-checked={f.style === s.id} onClick={() => f.setStyle(s.id)} disabled={f.busy}>{s.label}</button>
+            ))}
+          </div>
+        ) : <div className="pv-sheet-static">Estilo <strong>{f.styles[0].label}</strong></div>}
+        <p className="pv-sheet-note">{RECEIVE_LINE}</p>
+      </div>
+      <footer className="pv-sheet-foot">
+        {f.error && <div role="alert" className="pv-dock-err"><AlertCircle size={18} aria-hidden="true" />{f.error}</div>}
+        <button type="button" className="pv-dock-btn" onClick={f.file ? f.create : () => pickRef.current && pickRef.current.click()} disabled={f.busy || (!!f.file && f.errors.length > 0)}>
+          {f.busy ? 'Começando…' : f.file ? f.label : 'Escolher foto'}
+        </button>
+      </footer>
+    </section>
+  );
+}
+
 export default function FalWindow({ v }) {
+  const phone = usePhone();
+  if (phone) return <PhoneSheet f={v.fal} />;
   const f = v.fal;
   return (
     <section role="dialog" aria-modal="true" aria-labelledby="fal-h" className="g-panel pop" style={{ position: 'fixed', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', zIndex: 60, width: 'min(520px,calc(100vw - 24px))', maxHeight: 'calc(100vh - 24px)', display: 'flex', flexDirection: 'column', overflow: 'auto' }}>

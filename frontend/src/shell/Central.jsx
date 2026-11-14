@@ -11,6 +11,8 @@ import Boneco from '../Boneco.jsx';
 import { AgentStatus } from './AgentHead.jsx';
 import CancelMission from './CancelMission.jsx';
 import { MISSION_FILTERS, filterMissions } from './pipeline.js';
+import { usePhone } from '../hooks/use-phone.js';
+import { PhoneMissions } from './Phone.jsx';
 
 export const PROD_LABEL = { received: 'Preparando o produto', awaiting_references: 'Faltam fotos', validated: 'Direção', scripted: 'Direção', producing: 'Em produção',
   editing: 'Montando', awaiting_final_review: 'Pronto para revisar', completed: 'Exportada', paused: 'Pausada', failed: 'Falhou', cancelled: 'Cancelada' };
@@ -48,7 +50,13 @@ function SectionHeading({ eyebrow, title, description, action }) {
   );
 }
 
+// No celular, a Central vira a lista de missões (cards em coluna) com "Nova produção" fixa no rodapé.
 export default function Central({ v }) {
+  const phone = usePhone();
+  return phone ? <PhoneMissions v={v} /> : <CentralDesktop v={v} />;
+}
+
+function CentralDesktop({ v }) {
   const [filter, setFilter] = React.useState('todas');
   const missions = filterMissions(v.productions, filter);
   const name = v.account ? v.account.user.name.split(' ')[0] : '';

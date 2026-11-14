@@ -6,6 +6,8 @@ import Conveyor from './Conveyor.jsx';
 import { creditsByStation, taskThumb } from './conveyor.js';
 import { getJSON } from '../engine/api.js';
 import { FalStatusCard, FalDelivery } from '../ui/FalMission.jsx';
+import { usePhone } from '../hooks/use-phone.js';
+import { PhoneFalMission } from './Phone.jsx';
 
 const ICON = { objetivo: 'chat', orquestrador: 'brain', roteiro: 'edit', criativo: 'image', video: 'video', revisao: 'shield', entrega: 'box' };
 const SUB = { objetivo: 'Defina o produto', orquestrador: 'Interpreta, planeja, delega e acompanha', revisao: 'Valida qualidade e solicita decisões necessárias', entrega: 'Arquivos, histórico, custos e resultado' };
@@ -90,6 +92,7 @@ function FalMissionView({ v, m }) {
 // Missão: a esteira de agentes (visão principal) com o estado REAL de cada estação; abaixo, próxima ação, custo e o
 // fluxo detalhado. O mapa do escritório segue como visão secundária (view `escritorio`).
 export default function MissionView({ v }) {
+  const phone = usePhone();
   const p = v.pipeline;
   const credits = useStationCredits(v.prodId, p.stations ? p.stations.filter((s) => s.state === 'done').length : 0);
   if (!v.hasProd) {
@@ -103,7 +106,7 @@ export default function MissionView({ v }) {
       </div></div>
     );
   }
-  if (v.falMission) return <FalMissionView v={v} m={v.falMission} />;
+  if (v.falMission) return phone ? <PhoneFalMission v={v} m={v.falMission} /> : <FalMissionView v={v} m={v.falMission} />;
   const thumbs = { imagens: taskThumb('imagens', v), videos: taskThumb('videos', v) };
   return (
     <div className="pv-scroll"><div className="pv-wrap">
