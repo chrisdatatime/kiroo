@@ -7,7 +7,7 @@ aparece e o app funciona como antes.
 ## 1. Criar o widget (staging/produção)
 
 1. Painel da Cloudflare → **Turnstile** → **Add widget** (Adicionar widget).
-2. Nome: `Kiroo staging`. **Hostname**: `staging.kiroo.app` (em produção, o domínio de produção; um widget por ambiente).
+2. Nome: `Kiroo staging`. **Hostname**: `app.kiroo.io` (em produção, o domínio de produção; um widget por ambiente).
 3. Modo: **Managed**. Salve.
 4. Copie a **Site Key** (pública) e a **Secret Key** (segredo; não cole em chat, e-mail, print nem commit).
 
@@ -26,7 +26,7 @@ senha e reenvio (`503`), com aviso crítico no log de subida (`Turnstile mal con
 
 ## 3. Conferir
 
-- `https://staging.kiroo.app/api/config` deve trazer `"turnstile": "<site key>"` (e nunca o segredo).
+- `https://app.kiroo.io/api/config` deve trazer `"turnstile": "<site key>"` (e nunca o segredo).
 - Abra a tela de entrar: o widget aparece abaixo dos campos e o botão fica travado até ele concluir.
 - No log de subida **não** deve haver aviso de Turnstile. Se houver, leia o texto: ele diz qual variável falta.
 - Errou o segredo? A Cloudflare responde `invalid-input-secret` e o app mostra "A verificação de segurança está

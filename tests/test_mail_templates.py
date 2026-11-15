@@ -47,7 +47,7 @@ def test_reset_has_link_in_text_and_html_button():
 def test_html_rules(name):
     _, text, html = all_parts()[name]
     assert '<html lang="pt-BR">' in html
-    assert "kiroo" in html and "69.035.469/0001-62" in html and "contato@kiroo.app" in html
+    assert "kiroo" in html and "69.035.469/0001-62" in html and "suporte@kiroo.io" in html
     assert "Christian Alves de Souza Junior LTDA" in html
     for color in ("#FAFAF8", "#E7E7E4", "#F2F2EF" if name == "verificacao" else "#0E0E10"):
         assert color in html

@@ -109,7 +109,7 @@ export default class App extends React.Component {
       S: null, pid, draftMode: false, conn: 'carregando', busy: null, err: null, authState: 'checking', account: null, signup: 'closed',
       resetToken: new URLSearchParams(window.location.search).get('reset'),
       // sem sessão: home pública (null) ou tela de acesso ('login' | 'signup'); ?entrar abre direto o login
-      entry: new URLSearchParams(window.location.search).has('entrar') ? 'login' : null,
+      entry: window.location.pathname === '/login' || new URLSearchParams(window.location.search).has('entrar') ? 'login' : null,
       draft: Object.assign({}, EMPTY_DRAFT, LS.get('bc.draft', {})), files: [],
       fal: { scene: null, platform: null, file: null, name: '', reqId: null, busy: false, error: null, reuse: null },   // fluxo foto + cenário + plataforma (só com o motor novo)
       opts: null, creative: null, preview: null, reqText: '', caption: null, pilot: LS.get('bc.autonomy', 'assistido'),

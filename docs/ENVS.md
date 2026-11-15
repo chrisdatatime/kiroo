@@ -110,8 +110,8 @@ em erro. Cada chamada fica em `chat_log` (provedor, tokens, custo) e entra no ga
 |---|---|---|---|---|---|
 | `STUDIO_HOST` | não | não | execução | `0.0.0.0` | A imagem já define isto. Em contêiner precisa escutar em todas as interfaces, senão o roteador do Railway não alcança. |
 | `PORT` | não | não | execução | *(a plataforma injeta)* | O Railway injeta `PORT`; o código a lê. **Não defina `STUDIO_PORT`**, que venceria a da plataforma. |
-| `STUDIO_PUBLIC_HOST` | **sim** | não | execução | `staging.kiroo.app` | Host público canônico: usado em links absolutos (e-mail) e no reconhecimento de que o site está na internet. |
-| `STUDIO_ALLOWED_HOSTS` | **sim** | não | execução | `staging.kiroo.app` | Lista separada por vírgula dos `Host:` aceitos. Barra acesso pelo domínio cru da plataforma e por host forjado. Se mantiver o domínio `*.up.railway.app`, inclua-o aqui também. |
+| `STUDIO_PUBLIC_HOST` | **sim** | não | execução | `app.kiroo.io` | Host público canônico: usado em links absolutos (e-mail) e no reconhecimento de que o site está na internet. |
+| `STUDIO_ALLOWED_HOSTS` | **sim** | não | execução | `app.kiroo.io` | Lista separada por vírgula dos `Host:` aceitos. Barra acesso pelo domínio cru da plataforma e por host forjado. Se mantiver o domínio `*.up.railway.app`, inclua-o aqui também. Durante a troca de domínio, inclua também `staging.kiroo.app` enquanto o webhook do Asaas apontar para ele (docs/RAILWAY.md, passo 8). |
 | `STUDIO_SECURE_COOKIE` | **sim** | não | execução | `1` | Cookie de sessão com `Secure` e resposta com HSTS. Só ligue com HTTPS de verdade na frente (é o caso: Cloudflare + Railway). |
 | `STUDIO_TRUST_PROXY` | **sim** | não | execução | `cloudflare` | De quem aceitar o IP real do visitante: lê `CF-Connecting-IP`. Sem isto todo mundo viraria o mesmo IP e o limite por IP puniria todos juntos. |
 
@@ -175,7 +175,7 @@ desligamento: grace 25s + settle 3s; a plataforma precisa dar pelo menos 35s (ST
 
 | Variável | Obrig. | Segredo | Quando | Valor no staging | Para que serve |
 |---|---|---|---|---|---|
-| `STUDIO_MAIL_FROM` | **sim** | não | execução | `Kiroo <nao-responda@kiroo.app>` | Remetente. O domínio precisa estar verificado no Resend (SPF e DKIM), senão a mensagem não sai ou cai em spam. |
+| `STUDIO_MAIL_FROM` | **sim** | não | execução | `Kiroo <nao-responda@kiroo.io>` | Remetente. O domínio precisa estar verificado no Resend (SPF e DKIM), senão a mensagem não sai ou cai em spam. |
 | `STUDIO_MAIL_TRANSPORT` | não | não | execução | `resend_api` | `smtp` (padrão) ou `resend_api`. **No Railway use `resend_api`**: a plataforma bloqueia a saída SMTP (465/587 dão `TimeoutError`). `resend_api` envia por HTTPS (`POST https://api.resend.com/emails`, `Authorization: Bearer <chave>`, timeout de 10 s) e **não usa** `STUDIO_SMTP_HOST`, `_PORT`, `_USER` nem `_SECURITY`. Valor desconhecido = envio desligado (falha fechada). |
 | `STUDIO_SMTP_HOST` | **sim** (só `smtp`) | não | execução | `smtp.resend.com` | Servidor de envio. Ignorado com `resend_api`. |
 | `STUDIO_SMTP_PORT` | **sim** | não | execução | `465` | `465` usa TLS direto. `587` existe, mas exige `STUDIO_SMTP_SECURITY=starttls`. |
@@ -251,14 +251,14 @@ Pontos de atenção:
 ## Conferência rápida antes de abrir para alguém
 
 ```bash
-curl -fsS https://staging.kiroo.app/healthz
-curl -fsS https://staging.kiroo.app/readyz          # "warnings" vazio = backup configurado
+curl -fsS https://app.kiroo.io/healthz
+curl -fsS https://app.kiroo.io/readyz          # "warnings" vazio = backup configurado
 ```
 
 E depois, o roteiro completo:
 
 ```bash
-python scripts/smoke.py https://staging.kiroo.app
+python scripts/smoke.py https://app.kiroo.io
 ```
 
 Sinais de configuração errada que aparecem logo:

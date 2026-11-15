@@ -98,7 +98,7 @@ Só agregados: nada de e-mail, nome, produto, prompt ou id. Produções entram p
 
 | O que | Comando |
 |---|---|
-| Criar o administrador (pede a senha no terminal) | `studio admin create-user --email voce@kiroo.app --name "Seu Nome" --admin` |
+| Criar o administrador (pede a senha no terminal) | `studio admin create-user --email voce@kiroo.io --name "Seu Nome" --admin` |
 | Alternativa sem senha no terminal | defina `STUDIO_BOOTSTRAP_ADMIN_EMAIL` e suba; o link de definir senha vai por e-mail (com SMTP) ou gere com `reset-link` |
 | Listar contas, modo e teto de cada estúdio | `studio admin list` |
 
@@ -163,9 +163,9 @@ Para a pessoa escolher a própria senha, crie a conta e mande um link: `studio a
 Roteiro para ligar o real na conta de teste do staging (plataforma com `STUDIO_MONTHLY_CAP_USD=5`):
 
 ```bash
-studio admin allow-real --email voce@kiroo.app
-studio admin set-cap    --email voce@kiroo.app --usd 5
-studio admin set-mode   --email voce@kiroo.app --mode real
+studio admin allow-real --email voce@kiroo.io
+studio admin set-cap    --email voce@kiroo.io --usd 5
+studio admin set-mode   --email voce@kiroo.io --mode real
 studio admin list
 ```
 

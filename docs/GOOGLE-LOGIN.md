@@ -1,6 +1,6 @@
 # Entrar com Google no staging (passo a passo)
 
-Este guia liga o botão **"Continuar com Google"** em `https://staging.kiroo.app/`. Você só precisa de três coisas:
+Este guia liga o botão **"Continuar com Google"** em `https://app.kiroo.io/`. Você só precisa de três coisas:
 uma tela de consentimento no Google Cloud, uma credencial OAuth e duas variáveis no Railway. Leva uns 15 minutos.
 
 **O que não muda:** o cadastro continua por convite (`STUDIO_SIGNUP=invite`). Com Google:
@@ -14,13 +14,13 @@ uma tela de consentimento no Google Cloud, uma credencial OAuth e duas variávei
 ## 1. A URI de redirecionamento (copie exatamente)
 
 ```
-https://staging.kiroo.app/api/auth/google/callback
+https://app.kiroo.io/api/auth/google/callback
 ```
 
 - É `https`, sem barra no fim, tudo em minúsculas.
-- O servidor monta essa URI a partir de `STUDIO_PUBLIC_HOST` (que no staging já é `staging.kiroo.app`), **nunca** a
+- O servidor monta essa URI a partir de `STUDIO_PUBLIC_HOST` (que agora é `app.kiroo.io`), **nunca** a
   partir do endereço que o navegador digitou. Se você abrir o site pelo domínio do Railway (`*.up.railway.app`), o
-  botão leva você primeiro para `staging.kiroo.app` e o login segue de lá.
+  botão leva você primeiro para `app.kiroo.io` e o login segue de lá.
 - Se um dia o endereço público mudar, a URI muda junto: cadastre a nova no Google antes de trocar `STUDIO_PUBLIC_HOST`.
 
 ---
@@ -42,9 +42,9 @@ https://staging.kiroo.app/api/auth/google/callback
 4. **Público-alvo / Tipo de usuário**: **Externo** (qualquer conta Google pode tentar; quem decide quem entra é o
    convite do Kiroo).
 5. **Dados de contato**: o seu e-mail → **Concluir** / **Criar**.
-6. **Branding** (opcional agora, recomendado antes de abrir ao público): página inicial `https://staging.kiroo.app/`,
-   política de privacidade `https://staging.kiroo.app/privacidade`, termos `https://staging.kiroo.app/termos`,
-   domínio autorizado `kiroo.app`.
+6. **Branding** (opcional agora, recomendado antes de abrir ao público): página inicial `https://app.kiroo.io/`,
+   política de privacidade `https://app.kiroo.io/privacidade`, termos `https://app.kiroo.io/termos`,
+   domínio autorizado `kiroo.io`.
 7. **Escopos / Acesso a dados**: não precisa adicionar nada. O Kiroo só pede `openid`, `email` e `profile`, que são
    escopos básicos e não exigem verificação do Google.
 8. **Status de publicação**: em **Teste**, só entram as contas que você listar em **Usuários de teste**
@@ -58,9 +58,9 @@ https://staging.kiroo.app/api/auth/google/callback
 3. **Tipo de aplicativo**: **Aplicativo da Web**. (Não use "Computador" nem "Android/iOS".)
 4. **Nome**: `Kiroo staging`.
 5. **Origens JavaScript autorizadas**: pode deixar vazio (o login acontece no servidor). Se quiser preencher:
-   `https://staging.kiroo.app`.
+   `https://app.kiroo.io`.
 6. **URIs de redirecionamento autorizados** → **+ Adicionar URI** → cole:
-   `https://staging.kiroo.app/api/auth/google/callback`
+   `https://app.kiroo.io/api/auth/google/callback`
 7. **Criar**. Aparece uma janela com **ID do cliente** (termina em `.apps.googleusercontent.com`) e
    **Chave secreta do cliente** (começa com `GOCSPX-`).
    - Copie os dois direto para o Railway (passo 5). Não cole a chave secreta em chat, e-mail, print ou arquivo do
@@ -77,15 +77,15 @@ https://staging.kiroo.app/api/auth/google/callback
    | `STUDIO_GOOGLE_CLIENT_ID` | o **ID do cliente** do passo 4 |
    | `STUDIO_GOOGLE_CLIENT_SECRET` | a **chave secreta do cliente** do passo 4 |
 
-3. Confira que continuam lá, sem mudar: `STUDIO_PUBLIC_HOST=staging.kiroo.app` e `STUDIO_SIGNUP=invite`.
+3. Confira que continuam lá, sem mudar: `STUDIO_PUBLIC_HOST=app.kiroo.io` e `STUDIO_SIGNUP=invite`.
 4. Clique em **Deploy** (ou **Apply changes**) para o serviço reiniciar com as variáveis novas.
 
 O servidor só liga o Google com **as duas** variáveis preenchidas. Com uma faltando, o botão simplesmente não aparece.
 
 ## 6. Conferir
 
-1. Abra `https://staging.kiroo.app/api/config`. Deve aparecer `"google": true` (o segredo nunca aparece aí).
-2. Abra `https://staging.kiroo.app/?entrar`. O botão **Continuar com Google** aparece acima do e-mail.
+1. Abra `https://app.kiroo.io/api/config`. Deve aparecer `"google": true` (o segredo nunca aparece aí).
+2. Abra `https://app.kiroo.io/login`. O botão **Continuar com Google** aparece acima do e-mail.
 3. **Conta existente:** clique em **Continuar com Google**, escolha a conta com o mesmo e-mail do seu usuário. Você deve
    entrar no seu estúdio de sempre.
 4. **Conta nova com convite:** gere um convite (`python -m studio admin create-invite --days 7`, veja `docs/RAILWAY.md`,
@@ -97,7 +97,7 @@ O servidor só liga o Google com **as duas** variáveis preenchidas. Com uma fal
 
 | O que aparece | O que fazer |
 |---|---|
-| Página do Google: **Erro 400: redirect_uri_mismatch** | A URI do passo 4 está diferente. Cole de novo exatamente `https://staging.kiroo.app/api/auth/google/callback` e espere ~5 min. |
+| Página do Google: **Erro 400: redirect_uri_mismatch** | A URI do passo 4 está diferente. Cole de novo exatamente `https://app.kiroo.io/api/auth/google/callback` e espere ~5 min. |
 | Página do Google: **Acesso bloqueado / app em teste** | O app está em **Teste** e sua conta não está em **Usuários de teste**. Adicione a conta ou publique o app (passo 3.8). |
 | Kiroo: "O login com Google não está ativo" | Falta uma das duas variáveis no Railway, ou o deploy não reiniciou. |
 | Kiroo: "expirou antes de terminar" | O login demorou mais de 10 min, o servidor reiniciou no meio, ou o link foi aberto em outro navegador. Tente de novo. |

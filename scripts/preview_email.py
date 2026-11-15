@@ -14,7 +14,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from studio import mail_templates as mt  # noqa: E402
 
-HOST = "app.kiroo.app"
+HOST = "app.kiroo.io"
 
 
 def main() -> None:

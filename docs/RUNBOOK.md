@@ -18,8 +18,8 @@ Padrões seguros: escuta só em `127.0.0.1`, cadastro **fechado**, nenhum cabeç
 |---|---|---|
 | `STUDIO_HOST` | `127.0.0.1` | Endereço de escuta. Em contêiner use `0.0.0.0`. |
 | `STUDIO_PORT` | `PORT`, senão `8765` | Porta. `PORT` (Heroku/Railway/Fly) só vale sem `STUDIO_PORT`. `--port`/`--host` na CLI vencem. |
-| `STUDIO_PUBLIC_HOST` | — | Host público (ex.: `app.kiroo.app`). Entra na lista de hosts, o cookie dele é `Secure` e os links de e-mail usam `https`. |
-| `STUDIO_ALLOWED_HOSTS` | — | Lista (vírgula) de hosts aceitos no cabeçalho `Host` (anti DNS rebinding). Ex.: `app.kiroo.app,staging.kiroo.app`. Sem porta atrás de proxy. |
+| `STUDIO_PUBLIC_HOST` | — | Host público (ex.: `app.kiroo.io`). Entra na lista de hosts, o cookie dele é `Secure` e os links de e-mail usam `https`. |
+| `STUDIO_ALLOWED_HOSTS` | — | Lista (vírgula) de hosts aceitos no cabeçalho `Host` (anti DNS rebinding). Ex.: `app.kiroo.io,staging.kiroo.app` (o antigo só durante a troca de domínio). Sem porta atrás de proxy. |
 | `STUDIO_SECURE_COOKIE` | `0` | `1` = cookie `Secure` em todo host, **HSTS** (`max-age=31536000`) e links `https`. Use `1` em produção/staging. O cookie é sempre *host-only* (sem `Domain`). |
 | `STUDIO_TRUST_PROXY` | `none` | `none`: usa o IP do socket. `cloudflare`: IP de `CF-Connecting-IP`. `forwarded`: primeiro item de `X-Forwarded-For`. Só o modo escolhido é lido; valor inválido cai no IP do socket. |
 
@@ -30,13 +30,13 @@ Exemplo — produção e staging atrás da Cloudflare/Caddy:
 ```bash
 STUDIO_HOST=0.0.0.0
 STUDIO_PORT=8765
-STUDIO_PUBLIC_HOST=app.kiroo.app
-STUDIO_ALLOWED_HOSTS=app.kiroo.app,staging.kiroo.app
+STUDIO_PUBLIC_HOST=app.kiroo.io
+STUDIO_ALLOWED_HOSTS=app.kiroo.io,staging.kiroo.app
 STUDIO_SECURE_COOKIE=1
 STUDIO_TRUST_PROXY=cloudflare
 ```
 
-Staging é outra instância com **outra** `STUDIO_DATA_DIR` e `STUDIO_PUBLIC_HOST=staging.kiroo.app`. Os cookies não vazam entre os dois (host-only).
+Um staging separado é outra instância com **outra** `STUDIO_DATA_DIR` e o próprio `STUDIO_PUBLIC_HOST`. Os cookies não vazam entre os dois (host-only).
 
 ### Cadastro e administrador
 
@@ -49,9 +49,9 @@ Staging é outra instância com **outra** `STUDIO_DATA_DIR` e `STUDIO_PUBLIC_HOS
 **Nenhuma conta vira administradora sozinha.** O primeiro admin nasce de uma destas formas:
 
 ```bash
-studio admin create-user --email voce@kiroo.app --name "Seu Nome" --admin   # pede a senha no terminal
-# ou: STUDIO_BOOTSTRAP_ADMIN_EMAIL=voce@kiroo.app no primeiro boot, depois:
-studio admin reset-link --email voce@kiroo.app                              # se o link expirou / sem SMTP
+studio admin create-user --email voce@kiroo.io --name "Seu Nome" --admin   # pede a senha no terminal
+# ou: STUDIO_BOOTSTRAP_ADMIN_EMAIL=voce@kiroo.io no primeiro boot, depois:
+studio admin reset-link --email voce@kiroo.io                              # se o link expirou / sem SMTP
 ```
 
 `reset-link` usa `STUDIO_PUBLIC_HOST` (https) quando definido, senão `http://127.0.0.1:<porta>`. Outras contas: `studio admin create-user --email ... --name ...`, depois `allow-real` / `grant-credits` quando for o caso.

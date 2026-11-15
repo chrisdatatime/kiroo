@@ -4,8 +4,8 @@ Para você fazer sozinho, na ordem. Cada passo diz **o que clicar** e **como sab
 Os valores das variáveis estão em [docs/ENVS.md](ENVS.md); aqui é só a sequência.
 
 O que vamos montar: **um** serviço, construído pelo Railway a partir do nosso `Dockerfile`, com **um**
-volume de 5 GB em `/data`, instância única, healthcheck em `/healthz`, domínio `staging.kiroo.app` atrás
-da Cloudflare e **sem** o domínio `*.up.railway.app`.
+volume de 5 GB em `/data`, instância única, healthcheck em `/healthz`, domínio `app.kiroo.io` atrás
+da Cloudflare (o antigo `staging.kiroo.app` fica como secundário, com 301; ver o passo 8) e **sem** o domínio `*.up.railway.app`.
 
 Três decisões já tomadas, para não precisar pensar nelas no meio:
 
@@ -87,11 +87,11 @@ STUDIO_MONTHLY_CAP_USD=0
 STUDIO_SIGNUP=open
 STUDIO_FAL_DAILY_BUDGET_USD=30
 STUDIO_FAL_MONTHLY_BUDGET_USD=300
-STUDIO_PUBLIC_HOST=staging.kiroo.app
-STUDIO_ALLOWED_HOSTS=staging.kiroo.app
+STUDIO_PUBLIC_HOST=app.kiroo.io
+STUDIO_ALLOWED_HOSTS=app.kiroo.io,staging.kiroo.app
 STUDIO_SECURE_COOKIE=1
 STUDIO_TRUST_PROXY=cloudflare
-STUDIO_MAIL_FROM=Kiroo <nao-responda@kiroo.app>
+STUDIO_MAIL_FROM=Kiroo <nao-responda@kiroo.io>
 STUDIO_MAIL_TRANSPORT=resend_api
 BACKUP_BUCKET=kiroo-backups
 BACKUP_R2_ENDPOINT=https://SUA_CONTA.r2.cloudflarestorage.com
@@ -100,6 +100,9 @@ STUDIO_STOP_GRACE_S=40
 RAILWAY_DEPLOYMENT_DRAINING_SECONDS=40
 RAILWAY_RUN_UID=0
 ```
+
+`staging.kiroo.app` continua em `STUDIO_ALLOWED_HOSTS` só enquanto o webhook do Asaas apontar para ele (passo 8);
+o remetente `@kiroo.io` exige o domínio `kiroo.io` verificado no Resend (SPF, DKIM e DMARC no DNS do `kiroo.io`).
 
 Três avisos que valem o tempo de ler:
 
@@ -179,31 +182,56 @@ Kiroo em http://0.0.0.0:8080/ (escutando em 0.0.0.0:8080)
 E então, pelo domínio temporário do próprio Railway ou já pelo definitivo:
 
 ```bash
-curl -fsS https://staging.kiroo.app/healthz
-curl -fsS https://staging.kiroo.app/readyz
+curl -fsS https://app.kiroo.io/healthz
+curl -fsS https://app.kiroo.io/readyz
 ```
 
 `/readyz` com `"warnings": []` quer dizer que o backup está configurado. Se vier
 `backup_not_configured`, falta alguma `BACKUP_R2_*`.
 
-## 8. Domínio `staging.kiroo.app` atrás da Cloudflare
+## 8. Domínio `app.kiroo.io` atrás da Cloudflare
+
+Arquitetura: `kiroo.io` = landing e páginas legais (depois, fora deste serviço); `app.kiroo.io` = este app
+(login em `https://app.kiroo.io/login`). O `kiroo.app` vira domínio **secundário**: tudo nele responde 301 para
+`app.kiroo.io`, **exceto** o caminho do webhook do Asaas, até o webhook ser trocado no painel do Asaas e confirmado.
 
 **No Railway:**
 
 1. **Settings** → **Networking** / **Public Networking** → **+ Custom Domain**.
-2. Digite `staging.kiroo.app`.
+2. Digite `app.kiroo.io`.
 3. O Railway mostra **dois** registros: um `CNAME` (algo como `abc123.up.railway.app`) e um `TXT` de
    verificação. **Anote os dois exatamente como aparecem.**
+4. **Não remova** o domínio `staging.kiroo.app` do serviço por enquanto: é por ele que o webhook do Asaas ainda chega.
 
-**Na Cloudflare** (DNS do `kiroo.app`):
+**Na Cloudflare** (zona do `kiroo.io`):
 
-4. **DNS** → **Add record** → `CNAME`, nome `staging`, destino = o valor que o Railway deu.
+5. **DNS** → **Add record** → `CNAME`, nome `app`, destino = o valor que o Railway deu.
    **Proxy status: Proxied** (nuvem laranja).
-5. **Add record** → `TXT`, com nome e valor exatamente como o Railway mostrou.
-6. **SSL/TLS** → **Overview** → modo **Full**.
+6. **Add record** → `TXT`, com nome e valor exatamente como o Railway mostrou.
+7. **SSL/TLS** → **Overview** → modo **Full**.
 
 **Deu certo quando:** o Railway mostra o domínio como verificado e com certificado emitido, e
-`curl -I https://staging.kiroo.app/healthz` responde `200`.
+`curl -I https://app.kiroo.io/healthz` responde `200`.
+
+**`kiroo.app` como secundário (301)**, na zona do `kiroo.app`:
+
+8. Deixe o `CNAME` `staging` como está (proxied, apontando para o Railway): o webhook do Asaas precisa continuar
+   chegando ao serviço por ele, e o host segue em `STUDIO_ALLOWED_HOSTS`.
+9. **Rules** → **Redirect Rules** → **Create rule**:
+   - Nome: `kiroo-app-para-io`.
+   - Condição (expressão): `not (http.request.uri.path eq "/api/payments/asaas/webhook")`.
+   - Ação: **Dynamic**, expressão `concat("https://app.kiroo.io", http.request.uri.path)`, código **301**,
+     **Preserve query string** ligado (links de `?reset=` e `?compra=` já enviados continuam valendo).
+   - **Deploy**.
+   - Se o `kiroo.app` sem subdomínio também deve redirecionar, ele precisa de um registro **proxied** na zona
+     (a regra só vale para tráfego que passa pela Cloudflare).
+
+**Deu certo quando:** `curl -sI https://staging.kiroo.app/login` responde `301` com
+`location: https://app.kiroo.io/login`, e um `POST` no caminho do webhook **não** é redirecionado.
+
+**Depois que o webhook do Asaas apontar para `https://app.kiroo.io/api/payments/asaas/webhook` e você
+confirmar** (um evento real ou de teste chegando pelo `.io`): tire a exceção da regra (o 301 passa a valer para
+todos os caminhos), tire `staging.kiroo.app` de `STUDIO_ALLOWED_HOSTS` e só então remova o domínio antigo do Railway.
 
 Pontos em que isso costuma dar errado:
 
@@ -212,15 +240,15 @@ Pontos em que isso costuma dar errado:
 - **O modo SSL tem de ser `Full`, não `Full (Strict)`.** Com proxy ligado, a documentação do Railway diz
   que `Full (Strict)` não funciona como se espera. `Flexible` então nem pensar: deixaria o trecho
   Cloudflare→Railway sem criptografia.
-- `staging.kiroo.app` é subdomínio de primeiro nível, então pode ficar **proxied** sem problema. A
-  restrição de desligar o proxy vale para nomes mais profundos, tipo `a.b.kiroo.app`.
+- `app.kiroo.io` é subdomínio de primeiro nível, então pode ficar **proxied** sem problema. A
+  restrição de desligar o proxy vale para nomes mais profundos, tipo `a.b.kiroo.io`.
 - DNS pode levar horas para propagar. O Railway tenta emitir o certificado por até 72 h.
-- O Hobby permite **2 domínios por serviço**, o que sobra para nós.
+- O Hobby permite **2 domínios por serviço**: durante a transição são exatamente `app.kiroo.io` e `staging.kiroo.app`.
 
 **Regras de cache na Cloudflare.** Por padrão a Cloudflare não guarda HTML, mas é melhor ser explícito
 para que nenhuma resposta de API ou de mídia privada fique em cache compartilhado:
 
-7. **Rules** → **Cache Rules** → **Create rule**:
+10. **Rules** → **Cache Rules** → **Create rule**:
    - Nome: `kiroo-staging-sem-cache`.
    - Condição: **URI Path** `starts with` `/api/` — clique em **Or** e acrescente **URI Path**
      `starts with` `/media/`.
@@ -234,7 +262,7 @@ para que nenhuma resposta de API ou de mídia privada fique em cache compartilha
 **Deu certo quando:** uma resposta de `/api/` vier com `cf-cache-status: BYPASS` (ou `DYNAMIC`).
 
 ```bash
-curl -sSI https://staging.kiroo.app/api/config | grep -i cf-cache-status
+curl -sSI https://app.kiroo.io/api/config | grep -i cf-cache-status
 ```
 
 > O servidor já manda `Cache-Control: private, no-store` na mídia; a regra é cinto e suspensório. Mídia é
@@ -254,7 +282,7 @@ descreve removê-lo ou desativá-lo. A remoção pelo painel é o caminho espera
 documentada, então confirme no painel antes de contar com ela.
 
 Um cuidado real nessa ordem: o tráfego Cloudflare→Railway é cifrado com o certificado
-`*.up.railway.app` do Railway. Por isso **primeiro** confirme `staging.kiroo.app` respondendo `200`,
+`*.up.railway.app` do Railway. Por isso **primeiro** confirme `app.kiroo.io` respondendo `200`,
 **depois** remova o domínio gerado. E, enquanto ele existir, mantenha-o em `STUDIO_ALLOWED_HOSTS` —
 senão o acesso por ele responde `400`.
 
@@ -287,7 +315,7 @@ python -m studio admin create-invite --days 7
 
 O código do convite aparece **só nesse momento** (no banco fica apenas o hash). Anote na hora.
 
-**Deu certo quando:** você entra em `https://staging.kiroo.app/` com seu e-mail e senha.
+**Deu certo quando:** você entra em `https://app.kiroo.io/login` com seu e-mail e senha.
 
 ## 11. Ver logs
 

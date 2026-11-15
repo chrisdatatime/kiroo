@@ -1,6 +1,6 @@
 """Roteiro de fumaça contra um Kiroo já no ar (staging). Só HTTP, nada de banco nem de arquivo local.
 
-    python scripts/smoke.py https://staging.kiroo.app
+    python scripts/smoke.py https://app.kiroo.io
 
 Faz, nesta ordem: /healthz e /readyz, página inicial, cadastro SEM convite (tem de dar 403), cria dois
 usuários de teste, entra, abre o mundo, cria uma produção simulada e espera terminar, baixa o MP4 por
@@ -11,14 +11,14 @@ Os usuários de teste vêm de um convite de uso único. Como criar o convite exi
 contêiner, informe COMO rodar comando lá com --exec:
 
     # Railway (CLI do Railway instalado e projeto ligado)
-    python scripts/smoke.py https://staging.kiroo.app --exec "railway run --"
+    python scripts/smoke.py https://app.kiroo.io --exec "railway run --"
     # Docker local
     python scripts/smoke.py http://127.0.0.1:8765 --exec "docker exec -i kiroo-kiroo-1"
 
 Sem --exec, os passos que dependem de conta ficam NAO_VERIFICADO, a menos que você passe contas que já
 existam:
 
-    python scripts/smoke.py https://staging.kiroo.app --email a@x --password ... --email2 b@x --password2 ...
+    python scripts/smoke.py https://app.kiroo.io --email a@x --password ... --email2 b@x --password2 ...
 
 Nada é impresso que possa virar credencial: senhas geradas aqui não vão para a saída, e o código do
 convite aparece no máximo como "convite obtido". As contas criadas ficam no banco (são de teste, em DEMO
@@ -420,7 +420,7 @@ def checar_cache_api(cli: Cliente) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("url", help="base do serviço, ex.: https://staging.kiroo.app")
+    ap.add_argument("url", help="base do serviço, ex.: https://app.kiroo.io")
     ap.add_argument("--exec", dest="exec_prefix", default="",
                     help='como rodar comando no contêiner, ex.: "railway run --" ou "docker exec -i kiroo-kiroo-1"')
     ap.add_argument("--python", default="python", help="interpretador dentro do contêiner (padrão: python)")

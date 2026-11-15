@@ -262,9 +262,40 @@ def test_csp_allows_what_phaser_needs_and_nothing_inline():
         assert need in csp
 
 
+@pytest.fixture
+def dist(tmp_path, monkeypatch):
+    d = tmp_path / "dist-login"
+    d.mkdir()
+    (d / "index.html").write_text("<!doctype html><div id=root></div>")
+    monkeypatch.setattr(srv, "GAME_DIST", d)
+    return d
+
+
+def test_login_route_opens_app_and_root_without_session_redirects_keeping_query(app, dist):
+    r = app.handle("GET", "/login", HOST, b"")
+    assert r.status == 200 and b"id=root" in r.body
+    assert app.handle("GET", "/", HOST, b"").headers["Location"] == "/login"
+    assert app.handle("GET", "/index.html", HOST, b"").headers["Location"] == "/login"
+    r = app.handle("GET", "/?reset=tok123&entrar&erro=google_state", HOST, b"")   # links já enviados continuam valendo
+    assert r.status == 302 and r.headers["Location"] == "/login?reset=tok123&entrar&erro=google_state"
+    expired = {**HOST, "Cookie": "studio_session=nao-existe"}
+    assert app.handle("GET", "/", expired, b"").headers["Location"] == "/login"
+
+
+def test_login_route_with_session_goes_home(app, dist):
+    from .conftest import login_app
+    hd = dict(HOST)
+    login_app(app, hd)
+    r = app.handle("GET", "/login", hd, b"")
+    assert r.status == 302 and r.headers["Location"] == "/"
+    assert app.handle("GET", "/login?compra=kpay_0123456789", hd, b"").headers["Location"] == "/?compra=kpay_0123456789"
+    r = app.handle("GET", "/", hd, b"")
+    assert r.status == 200 and b"id=root" in r.body
+
+
 def test_game_index_and_hashed_assets_load_with_cache_policy_and_gzip(live):
     a, port = live
-    st, h, body = _get(port, "/", {"Host": f"127.0.0.1:{port}", "Accept-Encoding": "gzip"})
+    st, h, body = _get(port, "/login", {"Host": f"127.0.0.1:{port}", "Accept-Encoding": "gzip"})   # "/" sem sessão = 302
     assert st == 200 and h["content-encoding"] == "gzip" and h["cache-control"] == "no-cache"
     assert b'<div id=root>' in gzip.decompress(body)
     st, h, body = _get(port, "/assets/index-BO_rcp--.js", {"Accept-Encoding": "gzip"})

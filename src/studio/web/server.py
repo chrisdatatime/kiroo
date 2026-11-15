@@ -282,6 +282,17 @@ class App:
         db = Database(s.db_path)
         return s, db, Accounts(db)
 
+    def _has_session(self, headers: dict) -> bool:
+        """Só leitura: o cookie de sessão é válido agora? (decide entre /login e "/", sem tocar no fluxo de auth)."""
+        token = _cookie(headers)
+        if not token:
+            return False
+        _, db, acc = self._db()
+        try:
+            return acc.session(token) is not None
+        finally:
+            db.close()
+
     def ws_settings(self, s, ws):
         """Configuração efetiva do workspace: modo, teto do mês e pasta de referências próprias."""
         if ws is None:
@@ -628,7 +639,14 @@ class App:
                 return limited
         try:
             # --- públicas: o jogo (que mostra a tela de entrar) e seus arquivos
-            if method == "GET" and path in ("/", "/index.html") and (GAME_DIST / "index.html").is_file():
+            # "/" sem sessão vai para /login; /login com sessão volta para "/". A query string vai junto (reset, compra,
+            # entrar/erro do Google), então os links já enviados continuam valendo.
+            if method == "GET" and path in ("/", "/index.html", "/login") and (GAME_DIST / "index.html").is_file():
+                logged = self._has_session(headers)
+                if path == "/login" and logged:
+                    return Response(302, "text/plain", b"", headers={"Location": "/" + (f"?{url.query}" if url.query else "")})
+                if path != "/login" and not logged:
+                    return Response(302, "text/plain", b"", headers={"Location": "/login" + (f"?{url.query}" if url.query else "")})
                 return Response(200, "text/html; charset=utf-8", (GAME_DIST / "index.html").read_bytes(),
                                 headers={"Cache-Control": "no-cache"}, compress=True)
             if method == "GET" and path.startswith("/assets/"):
