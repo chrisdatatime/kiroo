@@ -22,6 +22,7 @@ paths = [
   '''^scripts/csp-check\.mjs$''',
   '''^tests/test_mail\.py$''',
   '''^tests/test_signup_privacy\.py$''',
+  '''^tests/test_open_signup\.py$''',   # cadastro aberto: mesma senha fictícia (TEST_PASSWORD)
 ]
 regexTarget = "secret"
 regexes = [

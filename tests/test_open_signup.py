@@ -23,6 +23,7 @@ from studio.web.server import App
 
 from .conftest import requires_ffmpeg
 
+TEST_PASSWORD = "senha-forte-123"   # fictícia, só para contas descartáveis dos testes (allowlist estreita em .gitleaks.toml)
 BASE = {"Host": "127.0.0.1:8765"}
 CLIENT = {**BASE, "X-Studio-Client": "game"}
 PNG = "data:image/png;base64," + base64.b64encode(placeholder_png("x", 540, 960)).decode()
@@ -41,7 +42,7 @@ def make_app(settings, tmp_path, signup="open", rate_limits=None):
 
 
 def signup(app, email, invite=None, headers=None):
-    body = {"email": email, "password": "senha-forte-123", "consent": True}
+    body = {"email": email, "password": TEST_PASSWORD, "consent": True}
     if invite is not None:
         body["invite"] = invite
     r = app.handle("POST", "/api/auth/signup", {**CLIENT, **(headers or {})}, json.dumps(body).encode())
@@ -102,7 +103,7 @@ def test_open_signup_is_limited_per_ip(settings, tmp_path):
 def test_admin_created_by_cli_is_not_switched_to_real_by_default(settings):
     db = Database(settings.db_path)
     try:
-        _, wid = Accounts(db).create_user("adm@exemplo.com", "senha-forte-123", admin=True)
+        _, wid = Accounts(db).create_user("adm@exemplo.com", TEST_PASSWORD, admin=True)
         ws = Accounts(db).workspace(wid)
         assert (ws["mode"], ws["no_individual_cap"]) == ("simulated", 0)
     finally:
@@ -291,7 +292,7 @@ def test_admin_set_cap_and_clear_cap_toggle_the_individual_cap(settings, monkeyp
     monkeypatch.setenv("STUDIO_MONTHLY_CAP_USD", "300")
     monkeypatch.setenv("STUDIO_DATA_DIR", str(settings.data_dir))
     db = Database(settings.db_path)
-    Accounts(db).create_user("ana@exemplo.com", "senha-forte-123")
+    Accounts(db).create_user("ana@exemplo.com", TEST_PASSWORD)
     db.close()
     assert cli.main(["admin", "set-cap", "--email", "ana@exemplo.com", "--usd", "5"]) == 0
     assert ws_of(settings, "ana@exemplo.com")[1]["no_individual_cap"] == 0
