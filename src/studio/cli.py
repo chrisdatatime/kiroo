@@ -96,7 +96,8 @@ def _admin(settings, args) -> int:
         if args.acao == "list":
             for a in ops.accounts():
                 print(f"{a['email']:32} {'ADMIN ' if a['admin'] else '      '} {a['workspace']['name']:28} modo={a['mode']:9} "
-                      f"real={'sim' if a['allow_real'] else 'não'} teto=US${a['monthly_cap_usd']:.2f} "
+                      f"real={'sim' if a['allow_real'] else 'não'} "
+                      f"teto={'sem teto individual' if a['no_individual_cap'] else 'US$%.2f' % a['monthly_cap_usd']} "
                       f"efetivo=US${a['effective_cap_usd']:.2f} saldo={'isento' if a['exempt'] else a['balance']} "
                       f"reservado={a['held']} e-mail={'ok' if a['email_verified'] else 'pendente'}")
             print(f"teto da plataforma: US${paid_gate.platform_cap():.2f}/mês (STUDIO_MONTHLY_CAP_USD); "
@@ -128,6 +129,15 @@ def _admin(settings, args) -> int:
             else:
                 print("ajuste com `studio budget <pid> --set <US$>` e retome com `studio resume <pid>`")
             return 0
+        if args.acao == "revert-backfill-14":   # devolve ao DEMO os estúdios que a migração 14 passou para REAL
+            from .migrations import revert_backfill_14
+            if not args.yes:
+                print("isto devolve ao DEMO (teto 0) os estúdios do backfill da migração 14; repita com --yes", file=sys.stderr)
+                return 2
+            n = revert_backfill_14(db.conn)
+            ops.record("revert-backfill-14", after={"workspaces": n})
+            print(f"{n} estúdio(s) devolvido(s) ao DEMO")
+            return 0
         if args.acao == "create-invite":   # código de uso único: aparece só agora; no banco fica só o hash
             inv = ops.create_invite(days=7 if days is None else days, email=args.email, note=args.note)
             print(f"convite: {inv['code']}")
@@ -158,7 +168,7 @@ def _admin(settings, args) -> int:
                 acc.set_workspace(wid, allow_real=1, credits_exempt=1)
                 print(f"administrador criado; {moved} produção(ões) antigas atribuídas a ele")
             else:
-                print("usuário criado (em DEMO até liberar o modo real)")
+                print("usuário criado (modo real, sem teto individual; saldo 0 até comprar ou ganhar créditos)")
             ops.record("create-user", target_email=args.email, after={"admin": bool(args.admin)})
             return 0
         uid = ops.uid_by_email(args.email)
@@ -177,6 +187,9 @@ def _admin(settings, args) -> int:
             r = ops.set_cap(uid, args.usd, reason=args.note)
             print(f"teto mensal do estúdio: US${r['previous_cap_usd']:.2f} -> US${r['monthly_cap_usd']:.2f} "
                   f"(efetivo US${r['effective_cap_usd']:.2f}; plataforma US${r['platform_cap_usd']:.2f})")
+        elif args.acao == "clear-cap":
+            r = ops.clear_cap(uid, reason=args.note)
+            print(f"estúdio sem teto individual (efetivo = plataforma US${r['platform_cap_usd']:.2f})")
         elif args.acao == "delete-user":   # LGPD pelo operador; pelo site NÃO existe
             if not args.yes:
                 print("erro: apagar é definitivo; repita com --yes", file=sys.stderr)
@@ -345,8 +358,8 @@ def main(argv: list[str] | None = None) -> int:
                                           "métricas internas e auditoria")
     p.add_argument("acao", choices=["create-user", "allow-real", "deny-real", "reset-link", "verify-email", "list",
                                     "grant-credits", "adjust-credits", "credits", "create-invite", "list-invites",
-                                    "revoke-invite", "export-user", "delete-user", "set-mode", "set-cap", "ops-alerts",
-                                    "metrics", "audit"])
+                                    "revoke-invite", "export-user", "delete-user", "set-mode", "set-cap", "clear-cap", "ops-alerts",
+                                    "metrics", "audit", "revert-backfill-14"])
     p.add_argument("--email")
     p.add_argument("--name", default="")
     p.add_argument("--admin", action="store_true", help="administrador da plataforma (só com create-user)")
@@ -401,7 +414,8 @@ def main(argv: list[str] | None = None) -> int:
         g = paid_gate.status()
         print(f"modo: {settings.mode} | chamadas pagas permitidas: {settings.allow_paid_calls}")
         print(f"portão de chamadas pagas ({g['environment']}): {'BLOQUEADO (' + g['reason'] + ')' if g['blocked'] else 'aberto'}"
-              f" | teto da plataforma US${g['platform_cap_usd']:.2f}/mês | teto por agente US${g['agent_daily_cap_usd']:.2f}/dia")
+              f" | teto da plataforma US${g['platform_cap_usd']:.2f}/mês | teto por agente US${g['agent_daily_cap_usd']:.2f}/dia"
+              f" | teto global fal.ai US${g['fal_daily_budget_usd']:.2f}/dia e US${g['fal_monthly_budget_usd']:.2f}/mês")
         print(f"GEMINI_API_KEY definida: {'sim' if settings.gemini_api_key else 'não'}")
         from . import fal_contract
         try:

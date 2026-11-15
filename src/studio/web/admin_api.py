@@ -30,7 +30,7 @@ from ..logs import redact
 NO_STORE = {"Cache-Control": "no-store, private, max-age=0", "Pragma": "no-cache", "Expires": "0",
             "X-Robots-Tag": "noindex, nofollow"}
 DEFAULT_REAUTH_MIN = 10
-ACCOUNT_ACTIONS = {"allow-real", "deny-real", "set-mode", "set-cap", "grant", "adjust", "verify-email", "reset-link", "export"}
+ACCOUNT_ACTIONS = {"allow-real", "deny-real", "set-mode", "set-cap", "clear-cap", "grant", "adjust", "verify-email", "reset-link", "export"}
 ACCOUNT_RE = re.compile(r"/api/admin/accounts/(usr_[0-9a-f]{10})/([a-z-]+)")
 INVITE_RE = re.compile(r"/api/admin/invites/(inv_[0-9a-f]{10})/revoke")
 
@@ -191,6 +191,8 @@ def _post(app, path: str, headers: dict, p: dict, ops: AdminOps):
         out = ops.set_mode(uid, str(p.get("mode") or ""), reason)
     elif action == "set-cap":
         out = ops.set_cap(uid, p.get("usd"), reason)
+    elif action == "clear-cap":
+        out = ops.clear_cap(uid, reason)
     elif action in ("grant", "adjust"):
         kw = {"idempotency_key": p.get("idempotency_key")}
         if action == "adjust":

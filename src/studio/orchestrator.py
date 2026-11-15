@@ -668,6 +668,14 @@ class Orchestrator:
                 total += a["confirmed_cost_usd"]
         return round(total, 4)
 
+    def cancel_high_demand(self, pid: str) -> None:
+        """Teto global da fal.ai estourado com a produção já criada (créditos reservados): cancela de vez e devolve a
+        reserva inteira ao saldo. Nada foi enviado à fal.ai nem cobrado. Idempotente se já estiver encerrada."""
+        from . import paid_gate
+        if PS(self.db.production(pid)["status"]) in TERMINAL:
+            return
+        self.cancel(pid, paid_gate.MESSAGES["fal_budget"])
+
     def _pause(self, pid: str, reason: str, code: str) -> None:
         """Pausa com motivo legível e código estável (a interface e o administrador decidem pelo código)."""
         self.db.set_production_status(pid, PS.PAUSED, reason)
@@ -682,14 +690,15 @@ class Orchestrator:
         from . import paid_gate
         from .spend import month_real_spend
         wid = prod["workspace_id"] if "workspace_id" in prod.keys() else None
+        fal = "engine" in prod.keys() and prod["engine"] == "fal"
         try:
-            paid_gate.check_spend(self.db, estimate, workspace_id=wid)
+            paid_gate.check_spend(self.db, estimate, workspace_id=wid, fal=fal, production_id=pid, where="run")
         except paid_gate.PaidCallsBlocked as exc:
             if exc.reason == "platform_cap":
                 return "Seu limite mensal foi atingido. Nada foi cobrado."
             return str(exc)
         ws = self.db.conn.execute("SELECT * FROM workspaces WHERE id=?", (wid,)).fetchone() if wid else None
-        cap = paid_gate.effective_cap(ws["monthly_cap_usd"] if ws else self.s.monthly_cap_usd)
+        cap = paid_gate.ws_cap(ws, self.s.monthly_cap_usd)
         if cap <= 0 or month_real_spend(self.db, workspace_id=wid) + estimate > cap + 1e-9:
             return "Seu limite mensal foi atingido. Nada foi cobrado."
         return None
@@ -704,15 +713,19 @@ class Orchestrator:
             from .spend import month_real_spend
             wid = prod["workspace_id"] if "workspace_id" in prod.keys() else None
             try:   # kill switch, liberação do ambiente, teto da plataforma e teto diário do agente
-                paid_gate.check_spend(self.db, estimate, workspace_id=wid, agent=paid_gate.KIND_AGENT.get(stage or ""))
+                paid_gate.check_spend(self.db, estimate, workspace_id=wid, agent=paid_gate.KIND_AGENT.get(stage or ""),
+                                      fal=stage == "workflow", production_id=pid, where=f"stage:{stage}")
             except paid_gate.PaidCallsBlocked as exc:
+                log.warning("[%s] chamada paga bloqueada (%s) para %s", pid, exc.reason, what)
+                if exc.reason == "fal_budget":   # teto global da fal.ai: não espera, cancela e devolve a reserva inteira
+                    self.cancel_high_demand(pid)
+                    raise BudgetExceeded(str(exc)) from None
                 code = budget_mod.MONTHLY_CAP if exc.reason == "platform_cap" else f"{budget_mod.PAID_GATE}:{exc.reason}"
                 self._pause(pid, str(exc), code)
-                log.warning("[%s] chamada paga bloqueada (%s) para %s", pid, exc.reason, what)
                 raise BudgetExceeded(str(exc)) from None
             ws = self.db.conn.execute("SELECT * FROM workspaces WHERE id=?", (wid,)).fetchone() if wid else None
             # teto e gasto são do workspace; vale o menor entre o da conta e o da plataforma
-            cap = paid_gate.effective_cap(ws["monthly_cap_usd"] if ws else self.s.monthly_cap_usd)
+            cap = paid_gate.ws_cap(ws, self.s.monthly_cap_usd)
             spent = month_real_spend(self.db, workspace_id=wid)
             reason = None
             if cap <= 0:

@@ -3,7 +3,9 @@
 - Senha: scrypt (stdlib) com sal aleatório; comparação em tempo constante.
 - Sessão: token aleatório no cookie HttpOnly; no banco só o SHA-256 do token. CSRF por sessão (cabeçalho).
 - Workspace: unidade de isolamento (produções, mídia, gastos, teto do mês, modo DEMO/real).
-- Contas novas ficam em DEMO: só workspaces com `allow_real` (liberado pelo admin) geram de verdade.
+- Contas novas (não administradoras) nascem em modo REAL, com `allow_real` e SEM teto individual
+  (`no_individual_cap`): o gasto é limitado pelo saldo de créditos, pelo teto da plataforma e pelo teto global da
+  fal.ai. O admin ainda pode voltar a conta ao DEMO (deny-real) ou impor um teto (set-cap).
 """
 
 from __future__ import annotations
@@ -89,7 +91,9 @@ class Accounts:
     def create_user(self, email: str, password: str | None, name: str = "", *, admin: bool = False,
                     workspace_name: str | None = None, verified: bool = False,
                     google_sub: str | None = None, no_password: bool = False,
-                    terms_version: str | None = None) -> tuple[str, str]:
+                    terms_version: str | None = None, real: bool | None = None) -> tuple[str, str]:
+        """`real` (padrão: toda conta que não é administradora) cria o estúdio em modo REAL, liberado e sem teto
+        individual. Saldo inicial 0: o bônus de boas-vindas só vem depois de confirmar o e-mail."""
         email = (email or "").strip().lower()
         if not EMAIL_RE.match(email):
             raise AuthError("e-mail inválido")
@@ -107,6 +111,8 @@ class Accounts:
             self.db.conn.execute("UPDATE users SET terms_accepted_at=?, terms_version=? WHERE id=?", (now(), terms_version, uid))
         self.db.conn.execute("INSERT INTO workspaces(id, name, owner_id, created_at) VALUES (?,?,?,?)",
                              (wid, (workspace_name or f"Estúdio de {name}")[:80], uid, now()))
+        if (not admin) if real is None else real:
+            self.db.conn.execute("UPDATE workspaces SET mode='real', allow_real=1, no_individual_cap=1 WHERE id=?", (wid,))
         self.db.conn.execute("INSERT INTO memberships(user_id, workspace_id, role) VALUES (?,?,'owner')", (uid, wid))
         return uid, wid
 
@@ -124,8 +130,10 @@ class Accounts:
                                     " WHERE m.user_id=? ORDER BY w.created_at", (uid,)).fetchall()
 
     def set_workspace(self, wid: str, **fields) -> None:
-        allowed = {"name", "mode", "allow_real", "monthly_cap_usd", "credits_exempt", "video_engine"}
+        allowed = {"name", "mode", "allow_real", "monthly_cap_usd", "no_individual_cap", "credits_exempt", "video_engine"}
         fields = {k: v for k, v in fields.items() if k in allowed}
+        if "monthly_cap_usd" in fields and "no_individual_cap" not in fields:
+            fields["no_individual_cap"] = 0   # definir um teto é impor o teto: a conta deixa de estar "sem teto individual"
         if "video_engine" in fields and fields["video_engine"] not in (None, "gemini", "fal"):
             raise AuthError("motor inválido (gemini ou fal)")
         if "mode" in fields and fields["mode"] not in {"simulated", "real"}:

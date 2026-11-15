@@ -165,7 +165,7 @@ export default function Stage({ start, startLabel, signupOpen }) {
               <a className="lp-btn is-line is-lg" href="#bastidores" onClick={go('bastidores')}><span>Ver os bastidores</span></a>
             </div>
             <p className="lp-open-note">
-              {signupOpen ? <>Começa no <strong>DEMO</strong>, sem custo.</> : 'Acesso por convite.'}
+              {signupOpen ? <>Confirme o e-mail e o <strong>primeiro vídeo</strong> é por nossa conta.</> : 'Acesso por convite.'}
             </p>
           </div>
           <div className="lp-slot is-hero" ref={heroSlot} />

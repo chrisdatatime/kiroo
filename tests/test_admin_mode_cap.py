@@ -37,7 +37,7 @@ def admin(settings, acao, **kw):
 @pytest.fixture
 def conta(settings):
     db = Database(settings.db_path)
-    _, wid = Accounts(db).create_user(EMAIL, "senha-forte-123")
+    _, wid = Accounts(db).create_user(EMAIL, "senha-forte-123", real=False)   # DEMO padrão antigo (antes do cadastro aberto)
     db.close()
     return wid
 

@@ -105,7 +105,8 @@ def _utc_day_start() -> str:
 
 
 def _ws_view(ws) -> dict:
-    return {"mode": ws["mode"], "allow_real": bool(ws["allow_real"]), "monthly_cap_usd": ws["monthly_cap_usd"]}
+    return {"mode": ws["mode"], "allow_real": bool(ws["allow_real"]), "monthly_cap_usd": ws["monthly_cap_usd"],
+            "no_individual_cap": paid_gate.ws_unlimited(ws)}
 
 
 class AdminOps:
@@ -185,7 +186,7 @@ class AdminOps:
     def accounts(self) -> list[dict]:
         rows = self.db.conn.execute(
             "SELECT u.id, u.email, u.name, u.is_platform_admin, u.email_verified_at, u.google_sub, u.pw_hash, u.created_at,"
-            " w.id wid, w.name wname, w.mode, w.allow_real, w.monthly_cap_usd, w.credits_exempt"
+            " w.id wid, w.name wname, w.mode, w.allow_real, w.monthly_cap_usd, w.no_individual_cap, w.credits_exempt"
             " FROM users u JOIN workspaces w ON w.id = (SELECT id FROM workspaces x WHERE x.owner_id=u.id ORDER BY x.created_at LIMIT 1)"
             " ORDER BY u.created_at").fetchall()
         out = []
@@ -196,7 +197,8 @@ class AdminOps:
                         "has_password": r["pw_hash"] != "!", "created_at": r["created_at"],
                         "workspace": {"id": r["wid"], "name": r["wname"]}, "mode": r["mode"],
                         "allow_real": bool(r["allow_real"]), "monthly_cap_usd": r["monthly_cap_usd"],
-                        "effective_cap_usd": paid_gate.effective_cap(r["monthly_cap_usd"]),
+                        "no_individual_cap": bool(r["no_individual_cap"]),
+                        "effective_cap_usd": paid_gate.effective_cap(r["monthly_cap_usd"], bool(r["no_individual_cap"])),
                         "exempt": bool(r["credits_exempt"]), "balance_cc": bal, "balance": fmt(bal),
                         "held_cc": held, "held": fmt(held)})
         return out
@@ -285,7 +287,7 @@ class AdminOps:
                 after = _ws_view(self.acc.workspace(ws["id"]))
                 self._audit("set-mode", user, ws, before=_ws_view(ws), after=after, reason=reason, self_action=self._self(user))
             warn = None
-            if mode == "real" and paid_gate.effective_cap(ws["monthly_cap_usd"]) <= 0:
+            if mode == "real" and paid_gate.ws_cap(ws) <= 0:
                 warn = "o teto efetivo é US$0.00, então nada será gasto; defina o teto do estúdio"
             return {**after, "previous_mode": ws["mode"], "warning": warn}
         return self._run("set-mode", user, ws, go, reason=reason)
@@ -299,8 +301,8 @@ class AdminOps:
             value = paid_gate.validate_account_cap(usd)      # nunca acima do teto da plataforma (ValueError)
             self._need_reason_if_self(user, value > float(ws["monthly_cap_usd"] or 0), reason)
             plat = paid_gate.platform_cap()
-            with self.ledger.transaction():
-                self.acc.set_workspace(ws["id"], monthly_cap_usd=value)
+            with self.ledger.transaction():   # teto definido pelo admin: a conta deixa de estar "sem teto individual"
+                self.acc.set_workspace(ws["id"], monthly_cap_usd=value, no_individual_cap=0)
                 self.ledger.add(ws["id"], 0, kind="adjust", by=self.actor.label,
                                 note=f"admin set-cap: US${ws['monthly_cap_usd']:.2f} -> US${value:.2f} (plataforma US${plat:.2f})")
                 after = _ws_view(self.acc.workspace(ws["id"]))
@@ -308,6 +310,22 @@ class AdminOps:
             return {**after, "previous_cap_usd": ws["monthly_cap_usd"], "effective_cap_usd": paid_gate.effective_cap(value),
                     "platform_cap_usd": plat}
         return self._run("set-cap", user, ws, go, reason=reason)
+
+    def clear_cap(self, uid: str, reason: str = "") -> dict:
+        """Tira o teto individual: a conta passa a seguir só o teto da plataforma (e o saldo de créditos)."""
+        user, ws = self.target(uid)
+
+        def go():
+            self._need_reason_if_self(user, not paid_gate.ws_unlimited(ws), reason)
+            plat = paid_gate.platform_cap()
+            with self.ledger.transaction():
+                self.acc.set_workspace(ws["id"], no_individual_cap=1)
+                self.ledger.add(ws["id"], 0, kind="adjust", by=self.actor.label,
+                                note=f"admin clear-cap: US${ws['monthly_cap_usd']:.2f} -> sem teto individual (plataforma US${plat:.2f})")
+                after = _ws_view(self.acc.workspace(ws["id"]))
+                self._audit("clear-cap", user, ws, before=_ws_view(ws), after=after, reason=reason, self_action=self._self(user))
+            return {**after, "effective_cap_usd": paid_gate.effective_cap(0, True), "platform_cap_usd": plat}
+        return self._run("clear-cap", user, ws, go, reason=reason)
 
     # ------------------------------------------------------------------ créditos
     def grant(self, uid: str, credits, reason: str, *, idempotency_key: str | None = None) -> dict:

@@ -82,7 +82,10 @@ def test_signup_rules(app):
 def test_admin_is_explicit_and_others_are_demo_only(app):
     chris, cliente = User(app, "chris@x.com"), User(app, "cliente@x.com")
     assert chris.me["admin"] is True and chris.me["workspace"]["allow_real"] is True  # promovido como a CLI faz
-    assert cliente.me["admin"] is False and cliente.me["workspace"]["allow_real"] is False
+    assert cliente.me["admin"] is False and cliente.me["workspace"]["allow_real"] is True   # conta nova: REAL, sem teto
+    s, db, acc = app._db()   # o admin devolve a conta ao DEMO (deny-real): ela não consegue sair sozinha
+    acc.set_workspace(cliente.me["workspace"]["id"], allow_real=0, mode="simulated")
+    db.close()
     status, body = cliente.post("/api/runtime", {"mode": "real", "monthly_cap_usd": 50})
     assert status == 403 and "DEMO" in body["error"]
     assert cliente.post("/api/productions", FORM)[1]["mode"] == "simulated"

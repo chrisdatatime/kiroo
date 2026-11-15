@@ -24,6 +24,8 @@ Como ler as colunas:
 | `STUDIO_MODE` | **sim** | não | execução | `simulated` | Esteira inteira simulada: nenhum provedor pago é chamado. |
 | `STUDIO_ALLOW_PAID_CALLS` | **sim** | não | execução | `0` | Portão único de chamadas pagas (Gemini e Anthropic). Com `0` nada pago roda, mesmo se houver chave. |
 | `STUDIO_MONTHLY_CAP_USD` | não | não | execução | `0` | Teto mensal da plataforma e **limite máximo** do teto de qualquer conta (`studio admin set-cap --usd N` recusa N acima dele; o gasto vale o menor dos dois). Com `STUDIO_ALLOW_PAID_CALLS=0` não tem efeito; deixe `0` para não haver teto a liberar por engano. |
+| `STUDIO_FAL_DAILY_BUDGET_USD` | não | não | execução | `30` | Teto **global** de gasto com a fal.ai no dia (fuso do servidor), somando todas as contas. Ausente ou inválido = `30`; `0` desliga. Estourou: produção nova é recusada **antes** de reservar créditos e de chamar a fal, com "Estamos com alta demanda, tente mais tarde" (código `high_demand`); cada recusa vira `platform_events.fal_budget_refused` e aparece na aba Métricas. |
+| `STUDIO_FAL_MONTHLY_BUDGET_USD` | não | não | execução | `300` | Mesmo freio, no mês. Ausente ou inválido = `300`; `0` desliga. Independe de `STUDIO_MONTHLY_CAP_USD` (que soma todos os provedores): vale o que bloquear primeiro. |
 | `STUDIO_DEFAULT_PRODUCTION_CAP_CREDITS` | não | não | execução | *(não definir; padrão `80`)* | Piso, em créditos, do **orçamento operacional** (freio interno) de uma produção nova; limitado pelo teto efetivo do estúdio (menor entre o da conta e `STUDIO_MONTHLY_CAP_USD`). Valor ausente, inválido ou ≤ 0 volta a 80. Atingir o orçamento operacional pausa com `ops_budget_reached` e avisa o administrador; nunca cobra nem pede upgrade ao cliente. |
 | `STUDIO_OPS_BUDGET_FACTOR` | não | não | execução | *(não definir; padrão `1.5`)* | Orçamento operacional = maior entre o piso acima e pré-orçamento × fator (mínimo 1). |
 | `STUDIO_ESTIMATE_IMAGE_TRIES_PER_SCENE` | não | não | execução | *(não definir; padrão `2`)* | Imagens previstas por cena no **pré-orçamento** (valor reservado do saldo do cliente antes de começar). Mínimo 1; inválido volta ao padrão. |
@@ -121,7 +123,7 @@ em erro. Cada chamada fica em `chat_log` (provedor, tokens, custo) e entra no ga
 
 | Variável | Obrig. | Segredo | Quando | Valor no staging | Para que serve |
 |---|---|---|---|---|---|
-| `STUDIO_SIGNUP` | **sim** | não | execução | `invite` | Cadastro só com código de uso único, gerado por `studio admin create-invite`. Sem código o cadastro responde `403`. |
+| `STUDIO_SIGNUP` | **sim** | não | execução | `open` | `open`: qualquer pessoa cria conta (e-mail com Turnstile ou Google), no máximo `STUDIO_RATE_SIGNUP` (padrão 15/hora) por IP. `invite`: só com código de uso único (`studio admin create-invite`); sem código responde `403`. `closed`: ninguém. Conta nova (não admin) nasce em modo REAL, sem teto individual e com saldo 0; o bônus de boas-vindas só vem depois de confirmar o e-mail. **Para voltar ao convite: `STUDIO_SIGNUP=invite`.** |
 | `STUDIO_BOOTSTRAP_ADMIN_EMAIL` | não | não | execução | `voce@exemplo.com` | Cria o administrador no primeiro boot e manda o link para definir a senha. Depois de usar, pode remover. Exige e-mail configurado (seção 5). |
 | `STUDIO_INVITE_CODES` | — | — | — | *(não usar)* | Aposentado. Se existir, é ignorado com aviso no log. |
 

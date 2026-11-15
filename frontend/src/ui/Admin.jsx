@@ -182,7 +182,7 @@ function Accounts({ ov, ask, tick, setSecret }) {
   return (
     <div className="adm-list">
       <input className="adm-input" placeholder="Buscar por e-mail, nome ou estúdio" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Buscar conta" />
-      <p className="g-muted" style={{ margin: 0, fontSize: 12.5 }}>Teto da plataforma: {usd(ov.limits.platform_cap_usd)}/mês. O teto efetivo de cada estúdio é o menor entre o dele e o da plataforma.</p>
+      <p className="g-muted" style={{ margin: 0, fontSize: 12.5 }}>Teto da plataforma: {usd(ov.limits.platform_cap_usd)}/mês. O teto efetivo de cada estúdio é o menor entre o dele e o da plataforma; estúdio sem teto individual segue só o da plataforma (e o saldo de créditos).</p>
       {list.map((a) => (
         <div key={a.id} className="g-card adm-acc">
           <button type="button" className="adm-acc-head" aria-expanded={open === a.id} onClick={() => setOpen(open === a.id ? null : a.id)}>
@@ -191,7 +191,7 @@ function Accounts({ ov, ask, tick, setSecret }) {
             <span className="adm-acc-cols">
               <span>{a.mode === 'real' ? 'REAL' : 'DEMO'}</span>
               <span>real {a.allow_real ? 'liberado' : 'bloqueado'}</span>
-              <span>teto {usd(a.monthly_cap_usd)}</span>
+              <span>{capLabel(a)}</span>
               <span>saldo {a.exempt ? 'isento' : a.balance}</span>
               <span>reservado {a.held}</span>
               <span>e-mail {a.email_verified ? 'confirmado' : 'pendente'}</span>
@@ -204,6 +204,9 @@ function Accounts({ ov, ask, tick, setSecret }) {
     </div>
   );
 }
+
+const capLabel = (a) => (a.no_individual_cap ? 'sem teto individual' : `teto ${usd(a.monthly_cap_usd)}`);
+const falCap = (v) => (v > 0 ? `teto ${usd(v)}` : 'sem teto');
 
 function AccountActions({ a, ov, ask, setSecret, tick }) {
   const base = `/api/admin/accounts/${a.id}`;
@@ -240,7 +243,8 @@ function AccountActions({ a, ov, ask, setSecret, tick }) {
             <input className="adm-input adm-num" inputMode="decimal" value={cap} onChange={(e) => setCap(e.target.value)} />
           </label>
           <button className="g-btn g-sm" onClick={() => { const n = Number(cap.replace(',', '.')); ask('set-cap', { account: a, input: { usd: n }, path: `${base}/set-cap`, body: { usd: n } }); }}>Definir teto</button>
-          <span className="g-muted">máx. {usd(ov.limits.platform_cap_usd)} (plataforma)</span>
+          <button className="g-btn g-sm" disabled={a.no_individual_cap} onClick={() => ask('clear-cap', { account: a, path: `${base}/clear-cap` })}>Remover teto individual</button>
+          <span className="g-muted">{a.no_individual_cap ? 'sem teto individual: segue o da plataforma' : `máx. ${usd(ov.limits.platform_cap_usd)} (plataforma)`}</span>
         </div>
       </section>
       <section>
@@ -342,6 +346,19 @@ function Metrics() {
                   <span className="g-muted">{m.welcome.converted_total} viraram compra</span></div>
               </div>
               <p className="g-muted" style={{ margin: 0, fontSize: 12 }}>Recusas hoje: {Object.entries(m.welcome.denied_today || {}).map(([k, n]) => `${k}: ${n}`).join(' · ') || 'nenhuma'}</p>
+            </div>
+          )}
+          {m.fal_budget && (
+            <div className="g-card adm-acc-body">
+              <h4>Teto global da fal.ai</h4>
+              <div className="adm-kpis">
+                <div><span className="g-label">Gasto hoje</span><strong>{usd(m.fal_budget.spent_today_usd)}</strong>
+                  <span className="g-muted">{falCap(m.fal_budget.daily_cap_usd)}{m.fal_budget.daily_reached ? ' · atingido' : ''}</span></div>
+                <div><span className="g-label">Gasto no mês</span><strong>{usd(m.fal_budget.spent_month_usd)}</strong>
+                  <span className="g-muted">{falCap(m.fal_budget.monthly_cap_usd)}{m.fal_budget.monthly_reached ? ' · atingido' : ''}</span></div>
+                <div><span className="g-label">Recusadas (alta demanda)</span><strong>{m.fal_budget.refused_today}</strong>
+                  <span className="g-muted">hoje · {m.fal_budget.refused_month} no mês</span></div>
+              </div>
             </div>
           )}
           {m.outside_productions.length > 0 && (

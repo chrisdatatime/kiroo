@@ -34,6 +34,14 @@ assert.equal(needsReason('grant'), true);
 assert.equal(needsReason('set-cap', { self: true, input: { usd: 5 }, account: { monthly_cap_usd: 1 } }), true);
 assert.equal(needsReason('set-cap', { self: true, input: { usd: 0 }, account: { monthly_cap_usd: 1 } }), false);
 assert.equal(needsReason('set-cap', { self: false, input: { usd: 5 }, account: { monthly_cap_usd: 1 } }), false);
+assert.equal(needsReason('clear-cap', { self: true, account: { no_individual_cap: false } }), true);   // tirar o próprio teto = subir
+assert.equal(needsReason('clear-cap', { self: true, account: { no_individual_cap: true } }), false);
+assert.equal(needsReason('clear-cap', { self: false, account: { no_individual_cap: false } }), false);
+{
+  const s = confirmSpec('clear-cap', { email: 'a@b.c', workspace: { name: 'E' }, monthly_cap_usd: 5 }, {});
+  assert.equal(s.financial, true);
+  assert.ok(s.lines.some((l) => l.includes('sem teto individual')));
+}
 
 const acc = { email: 'ana@exemplo.com', workspace: { name: 'Estúdio da Ana' }, balance: '10', balance_cc: 1000, mode: 'simulated', monthly_cap_usd: 0 };
 const neg = confirmSpec('adjust', acc, { credits: -3 });

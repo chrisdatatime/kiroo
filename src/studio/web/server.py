@@ -295,7 +295,7 @@ class App:
             db.close()
         except Exception:  # noqa: BLE001
             pass
-        cap = paid_gate.effective_cap(ws["monthly_cap_usd"])   # o menor entre o teto da conta e o da plataforma
+        cap = paid_gate.ws_cap(ws)   # o menor entre o teto da conta e o da plataforma (sem teto próprio: o da plataforma)
         real = (ws["mode"] == "real" and bool(ws["allow_real"]) and bool(s.gemini_api_key or s.fal_api_key)
                 and cap > 0)   # teto 0 = DEMO
         return dataclasses.replace(s, mode="real" if real else "simulated", allow_paid_calls=real,
@@ -508,6 +508,8 @@ class App:
                 if q.get("consent", [""])[0] != "1":
                     return back("google_consent")
                 flow["terms"] = TERMS_VERSION
+                if self.signup == "open" and self._limited("signup", self._client_ip(headers)):
+                    return back("google_throttled")
                 if self.signup == "invite":
                     invite = re.sub(r"[^A-Za-z0-9-]", "", q.get("invite", [""])[0])[:64]
                     if not invite:
@@ -746,6 +748,8 @@ class App:
                 if p.get("consent") is not True:   # consentimento explícito, registrado com a versão dos textos
                     return _json(400, {"error": "Para criar a conta, aceite os Termos de Uso e a Política de Privacidade."})
                 invite_id = None
+                if self.signup == "open" and (limited := self._limited("signup", ip)):
+                    return limited   # cadastro aberto: poucas contas novas por IP por hora (além do Turnstile)
                 if self.signup == "invite":
                     key = f"s:{ip}"
                     if acc.throttled(key):
@@ -766,7 +770,8 @@ class App:
                 if invite_id:
                     acc.finish_invite(invite_id, uid)
                 token, info = acc.create_session(uid, wid)
-                # a conta já entra (modo DEMO); o código de confirmação vai para o e-mail
+                # a conta já entra (modo REAL, sem teto individual, saldo 0); o código de confirmação vai para o
+                # e-mail e o bônus de boas-vindas só vem depois de confirmar
                 sent = self._send_verification(acc, uid, acc.user(uid)["email"])
                 return _json(200, {"ok": True, "admin": False, "verify": True, "sent": sent,
                                    **({} if sent else {"message": SEND_FAILED_MSG})},
@@ -1082,6 +1087,7 @@ class App:
             if paid_gate.platform_cap() > 0:   # nunca acima do teto da plataforma
                 cap = paid_gate.validate_account_cap(cap)
             fields["monthly_cap_usd"] = cap
+            fields["no_individual_cap"] = 0   # o dono escolheu um teto próprio: passa a valer
         mode = payload.get("mode")
         if mode is not None:
             if mode == "real":
@@ -1091,7 +1097,8 @@ class App:
                     return _json(403, {"error": "Este estúdio está em DEMO até a cobrança por créditos ser liberada."})
                 if not (base.gemini_api_key or base.fal_api_key):
                     raise ValueError("defina GEMINI_API_KEY no .env antes de desligar o DEMO")
-                if fields.get("monthly_cap_usd", ws["monthly_cap_usd"]) <= 0:
+                unlimited = paid_gate.ws_unlimited(ws) and "monthly_cap_usd" not in fields
+                if paid_gate.effective_cap(fields.get("monthly_cap_usd", ws["monthly_cap_usd"]), unlimited) <= 0:
                     raise ValueError("defina um teto mensal de gastos maior que zero antes de desligar o DEMO")
             fields["mode"] = mode
         s0, db, acc = self._db()
@@ -1218,6 +1225,9 @@ class App:
                 return _json(409, {"error": "Confirme o custo antes de começar.", "code": "needs_confirmation"})
             limit = orch.spend_block_message(pid, budget_mod.estimate_workflow(s)["usd"])
             if limit:
+                if limit == paid_gate.MESSAGES["fal_budget"]:   # teto global: cancela e devolve a reserva
+                    orch.cancel_high_demand(pid)
+                    return _json(409, {"error": limit, "code": "high_demand", "cancelled": True})
                 return _json(409, {"error": limit, "code": "spend_limit"})
         finally:
             orch.db.close()
@@ -1265,8 +1275,12 @@ class App:
         if prebudget:
             from .. import budget as budget_mod
             db = Database(s.db_path)
-            try:
+            try:   # teto GLOBAL da fal.ai: recusa antes de reservar créditos e antes de chamar a fal
+                paid_gate.check_fal_budget(db, budget_mod.estimate_workflow(s)["usd"], where="create",
+                                           workspace_id=ctx["wid"])
                 Ledger(db).can_reserve(ctx["wid"], budget_mod.estimate_workflow(s)["cc"])
+            except paid_gate.PaidCallsBlocked as exc:
+                return _json(409, {"error": str(exc), "code": "high_demand", "paid_calls_blocked": True})
             except InsufficientCreditsError as exc:
                 return self._no_credits(exc, fixed=True)
             finally:

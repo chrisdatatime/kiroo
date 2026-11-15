@@ -171,6 +171,8 @@ def internal_metrics(db: Database, days: int = 30) -> dict:
     out["payments"] = month_metrics(db)
     from .welcome import metrics as welcome_metrics
     out["welcome"] = welcome_metrics(db)
+    from .paid_gate import fal_budget_metrics
+    out["fal_budget"] = fal_budget_metrics(db)
     out["outside_productions"] = [{"key": k, "label": OPERATIONS.get(k.split(":")[0], k) if k.startswith("chat") else OPERATIONS[k], **v, "avg_usd": _avg(v["usd"], v["calls"])}
                                   for k, v in extra.items()]
     return out
@@ -223,6 +225,15 @@ def format_text(m: dict) -> str:
                   f"viraram compra no mês: {wm['converted_month']}",
                   f"  desde o início: {wm['granted_total']} concedidos, {wm['converted_total']} viraram compra",
                   "  recusas hoje: " + (", ".join(f"{k}: {v}" for k, v in sorted(wm["denied_today"].items())) or "nenhuma")]
+    fb = m.get("fal_budget")
+    if fb:
+        def cap(v):
+            return usd(v) if v > 0 else "sem teto"
+        lines += ["", "[teto global da fal.ai]",
+                  f"  hoje: {usd(fb['spent_today_usd'])} de {cap(fb['daily_cap_usd'])}"
+                  f"{' (ATINGIDO)' if fb['daily_reached'] else ''} | mês: {usd(fb['spent_month_usd'])} de "
+                  f"{cap(fb['monthly_cap_usd'])}{' (ATINGIDO)' if fb['monthly_reached'] else ''}",
+                  f"  produções recusadas por alta demanda: hoje {fb['refused_today']} | no mês {fb['refused_month']}"]
     lines += ["", "[fora das produções]"]
     lines += [f"  {r['label']:26} {r['provider']:15} {r['calls']:5} chamadas  {usd(r['usd'])}" for r in m["outside_productions"]] or ["  (nada)"]
     return "\n".join(lines)

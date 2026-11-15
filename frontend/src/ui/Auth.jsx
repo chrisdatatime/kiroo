@@ -26,7 +26,7 @@ const TEAM = [
 ];
 const COPY = {
   login: { title: 'Entrar no Kiroo', sub: 'Sua equipe está na sede, esperando o próximo produto.', cta: 'Entrar', busy: 'Entrando…' },
-  signup: { title: 'Criar sua conta', sub: 'Monte seu estúdio em menos de um minuto. Começa em DEMO, sem custo.', cta: 'Criar conta', busy: 'Criando sua conta…' },
+  signup: { title: 'Criar sua conta', sub: 'Monte seu estúdio em menos de um minuto. Confirme o e-mail e ganhe créditos para o primeiro vídeo.', cta: 'Criar conta', busy: 'Criando sua conta…' },
   forgot: { title: 'Esqueceu a senha?', sub: 'Informe o e-mail da conta. Enviamos um link para criar uma nova.', cta: 'Enviar link', busy: 'Enviando…' },
   sent: { title: 'Confira seu e-mail', sub: '' },
   reset: { title: 'Criar nova senha', sub: 'Escolha uma senha nova. Por segurança, as outras sessões serão encerradas.', cta: 'Salvar nova senha', busy: 'Salvando…' },
@@ -412,7 +412,7 @@ export default function AuthScreen({ onDone, resetToken, initialMode, onBack, si
             )}
 
             {mode === 'login' && !cfg.signup && <p className="au-fine">Acesso por convite. Peça sua conta ao administrador do estúdio.</p>}
-            {mode === 'signup' && <p className="au-fine">Contas novas começam no modo DEMO: sem custo, com imagens de exemplo. A produção com IA real é liberada com os planos de créditos.</p>}
+            {mode === 'signup' && <p className="au-fine">Cada vídeo usa créditos, e nada é cobrado sem você confirmar o custo antes. Ao confirmar o e-mail, você ganha os créditos do primeiro vídeo.</p>}
           </div>
         </main>
 

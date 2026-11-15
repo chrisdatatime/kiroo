@@ -41,6 +41,7 @@ export function needsReason(action, { self = false, input = {}, account = {} } =
   if (action === 'allow-real') return !account.allow_real;
   if (action === 'set-mode') return input.mode === 'real' && account.mode !== 'real';
   if (action === 'set-cap') return Number(input.usd) > Number(account.monthly_cap_usd || 0);
+  if (action === 'clear-cap') return !account.no_individual_cap;
   return false;
 }
 
@@ -50,12 +51,15 @@ export function confirmSpec(action, account, input = {}, { self = false } = {}) 
   const c = Number(input.credits);
   const specs = {
     'allow-real': { title: 'Liberar o modo real', financial: true,
-      lines: [`Conta: ${who}`, 'O estúdio poderá gerar com IA real (custo de verdade, dentro do teto efetivo).', 'Ainda é preciso ligar o modo real e ter teto > 0.'] },
+      lines: [`Conta: ${who}`, 'O estúdio poderá gerar com IA real (custo de verdade, dentro do teto efetivo).', 'Ainda é preciso ligar o modo real e ter teto > 0 (ou estar sem teto individual).'] },
     'deny-real': { title: 'Bloquear o modo real', financial: false,
       lines: [`Conta: ${who}`, 'O estúdio volta para DEMO e não gera custo.'] },
     'set-mode': { title: `Trocar o modo para ${input.mode === 'real' ? 'REAL' : 'DEMO'}`, financial: input.mode === 'real',
       lines: [`Conta: ${who}`, `Modo: ${account?.mode === 'real' ? 'REAL' : 'DEMO'} → ${input.mode === 'real' ? 'REAL' : 'DEMO'}`,
         input.mode === 'real' ? 'Produções novas deste estúdio passam a gerar custo real.' : 'Produções novas ficam sem custo (DEMO).'] },
+    'clear-cap': { title: 'Remover o teto individual', financial: true,
+      lines: [`Conta: ${who}`, `Teto: ${account?.no_individual_cap ? 'sem teto individual' : usd(account?.monthly_cap_usd)} → sem teto individual`,
+        'O estúdio passa a seguir só o teto da plataforma; o gasto fica limitado pelo saldo de créditos.'] },
     'set-cap': { title: 'Definir o teto mensal', financial: true,
       lines: [`Conta: ${who}`, `Teto: ${usd(account?.monthly_cap_usd)} → ${usd(Number(input.usd))}`, 'Nunca acima do teto da plataforma; vale o menor dos dois.'] },
     grant: { title: 'Conceder créditos', financial: true,

@@ -131,6 +131,22 @@ def platform_month_spend(db: Database, month: str | None = None) -> float:
     return round(total, 6)
 
 
+def _fal_rows(db: Database):
+    return db.conn.execute("SELECT * FROM attempts WHERE simulated=0 AND (kind='workflow' OR provider LIKE 'fal%')").fetchall()
+
+
+def fal_day_spend(db: Database, day=None) -> float:
+    """Gasto real de hoje (fuso local) com a fal.ai, na plataforma inteira (teto global diário)."""
+    day = day or datetime.now().astimezone().date()
+    return round(sum(_value(r) for r in _fal_rows(db) if _local(r["created_at"]).date() == day), 6)
+
+
+def fal_month_spend(db: Database, month: str | None = None) -> float:
+    """Gasto real do mês (fuso local) com a fal.ai, na plataforma inteira (teto global mensal)."""
+    month = month or datetime.now().astimezone().strftime("%Y-%m")
+    return round(sum(_value(r) for r in _fal_rows(db) if _local(r["created_at"]).strftime("%Y-%m") == month), 6)
+
+
 def agent_day_spend(db: Database, workspace_id: str | None, agent: str) -> float:
     """Gasto real de hoje (fuso local) de um agente: chamadas do orquestrador, testes de treinamento e conversa.
     Sem workspace (produções da CLI), conta as produções sem workspace."""

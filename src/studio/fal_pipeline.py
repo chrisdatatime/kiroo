@@ -374,6 +374,9 @@ class FalRunner:
             self.db.update_attempt(att_id, status="failed", error=str(exc)[:500], error_permanent=0, superseded=1,
                                    finished_at=now(), estimated_cost_usd=0.0)
             self._set_meta(att_id, stage="aborted")
+            if exc.reason == "fal_budget":   # teto global: cancela e devolve a reserva (nada foi enviado nem cobrado)
+                o.cancel_high_demand(pid)
+                return "paused"
             code = budget_mod.MONTHLY_CAP if exc.reason == "platform_cap" else f"{budget_mod.PAID_GATE}:{exc.reason}"
             return self._pause(pid, str(exc), code, alert=False)
         except UncertainSubmit as exc:

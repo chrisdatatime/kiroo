@@ -9,6 +9,7 @@ Configuração ("N/S" = N requisições a cada S segundos; 0 desliga aquela regr
   STUDIO_RATE_API_IP=600/60    /api/* por IP (vários usuários atrás do mesmo NAT)
   STUDIO_RATE_API_USER=300/60  /api/* por usuário (o jogo consulta /api/state a cada 1,5 s)
   STUDIO_RATE_AUTH=20/300      /api/auth/* por IP (entrar, cadastro, esqueci a senha, código)
+  STUDIO_RATE_SIGNUP=15/3600   cadastro (e-mail ou Google) por IP, só com STUDIO_SIGNUP=open
   STUDIO_RATE_CHAT=12/60       conversa com os agentes, por usuário
   STUDIO_RATE_UPLOAD=10/60     envio de arquivos (referências, trilhas, referência de treino), por usuário
   STUDIO_RATE_CREATE=6/300     criação de produção (inclui demo), por usuário
@@ -49,6 +50,7 @@ class RateLimitConfig:
     api_ip: Rule = Rule(600, 60)
     api_user: Rule = Rule(300, 60)
     auth: Rule = Rule(20, 300)
+    signup: Rule = Rule(15, 3600)
     chat: Rule = Rule(12, 60)
     upload: Rule = Rule(10, 60)
     create: Rule = Rule(6, 300)

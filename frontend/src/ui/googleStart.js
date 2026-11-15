@@ -23,7 +23,7 @@ export const GOOGLE_ERRORS = {
   google_unverified: 'O Google não confirmou este e-mail. Entre com e-mail e senha.',
   google_consent: 'Para criar a conta com Google, use Criar conta e aceite os Termos de Uso e a Política de Privacidade.',
   google_other: 'Este e-mail já está ligado a outra conta Google. Entre com ela ou com e-mail e senha.',
-  google_throttled: 'Muitas tentativas de convite. Espere alguns minutos e tente de novo.',
+  google_throttled: 'Muitas tentativas de cadastro. Espere alguns minutos e tente de novo.',
   convite: 'Não há conta com este e-mail. O acesso é por convite: em Criar conta, informe seu código de convite.',
   convite_invalido: 'Código de convite inválido, já usado, expirado ou de outro e-mail.',
 };

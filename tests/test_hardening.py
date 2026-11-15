@@ -60,7 +60,7 @@ def test_open_signup_never_creates_an_admin(loader):
     assert r.status == 200 and json.loads(r.body)["admin"] is False
     cookie = r.headers["Set-Cookie"].split(";")[0]
     me = json.loads(a.handle("GET", "/api/me", {**HOST, "Cookie": cookie}, b"").body)
-    assert me["admin"] is False and me["workspace"]["allow_real"] is False
+    assert me["admin"] is False and me["workspace"]["allow_real"] is True   # REAL sem teto, mas nunca admin
 
 
 def _invite(a) -> str:

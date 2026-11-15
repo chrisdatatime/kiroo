@@ -65,6 +65,12 @@ def world(settings, tmp_path):
     ana = Client(app, "ana@exemplo.com")
     bia = Client(app, "bia@exemplo.com")
     assert admin.me["admin"] and not ana.me["admin"] and not bia.me["admin"]
+    # conta nova nasce REAL e sem teto individual; aqui Ana e Bia partem do DEMO (como um admin as teria deixado),
+    # para as ações de liberar/bloquear terem efeito visível
+    db = Database(settings.db_path)
+    db.conn.execute("UPDATE workspaces SET mode='simulated', allow_real=0, no_individual_cap=0 WHERE owner_id IN "
+                    "(SELECT id FROM users WHERE email IN ('ana@exemplo.com', 'bia@exemplo.com'))")
+    db.close()
     return app, admin, ana, bia
 
 

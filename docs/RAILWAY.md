@@ -84,7 +84,9 @@ STUDIO_ENV=staging
 STUDIO_MODE=simulated
 STUDIO_ALLOW_PAID_CALLS=0
 STUDIO_MONTHLY_CAP_USD=0
-STUDIO_SIGNUP=invite
+STUDIO_SIGNUP=open
+STUDIO_FAL_DAILY_BUDGET_USD=30
+STUDIO_FAL_MONTHLY_BUDGET_USD=300
 STUDIO_PUBLIC_HOST=staging.kiroo.app
 STUDIO_ALLOWED_HOSTS=staging.kiroo.app
 STUDIO_SECURE_COOKIE=1
@@ -262,6 +264,10 @@ cabeçalho à mão e forjar o IP de origem, contornando o limite de requisiçõe
 é o que torna o `trust_proxy` seguro.
 
 ## 10. Criar seu usuário e o primeiro convite
+
+Com `STUDIO_SIGNUP=open` qualquer pessoa cria conta (nasce em modo REAL, sem teto individual, saldo 0); para
+gerar de verdade o serviço precisa de `STUDIO_ALLOW_PAID_CALLS=1`, `FAL_KEY` e `STUDIO_MONTHLY_CAP_USD` > 0 (≥ o
+teto mensal da fal.ai). Para voltar ao cadastro por convite: `STUDIO_SIGNUP=invite`.
 
 Com `STUDIO_SIGNUP=invite`, o cadastro só aceita código de uso único. Duas formas:
 

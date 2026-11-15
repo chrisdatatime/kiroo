@@ -33,6 +33,7 @@ outra pessoa, ou sem sessão, todas as rotas `/api/admin/*` respondem **404**. A
 | Liberar / bloquear modo real | `allow-real` / `deny-real` |
 | Modo DEMO / REAL | `set-mode` |
 | Teto mensal (nunca acima de `STUDIO_MONTHLY_CAP_USD`) | `set-cap` |
+| Remover o teto individual (segue só o da plataforma) | `clear-cap` |
 | Conceder / ajustar créditos (motivo obrigatório; ajuste aceita negativo) | `grant-credits` / `adjust-credits` |
 | Extrato da conta | `credits` |
 | Criar convite (1 a 30 dias), listar, revogar — o código aparece **uma vez** | `create-invite` / `list-invites` / `revoke-invite` |
@@ -124,7 +125,7 @@ interface; só por `delete-user --yes`.
 ## Criar conta sem convite
 
 ```bash
-studio admin create-user --email ana@exemplo.com --name "Ana"      # pede a senha; conta em DEMO
+studio admin create-user --email ana@exemplo.com --name "Ana"      # pede a senha; modo REAL, sem teto individual, saldo 0
 ```
 
 Para a pessoa escolher a própria senha, crie a conta e mande um link: `studio admin reset-link --email ana@exemplo.com`.
@@ -138,9 +139,16 @@ Para a pessoa escolher a própria senha, crie a conta e mande um link: `studio a
 | Ver modo, teto da conta e teto efetivo de cada estúdio | `studio admin list` |
 | Trocar o modo do estúdio (`real` só se estiver liberado) | `studio admin set-mode --email ana@exemplo.com --mode real` (ou `simulated`) |
 | Definir o teto mensal do estúdio em US$ | `studio admin set-cap --email ana@exemplo.com --usd 3` |
+| Tirar o teto individual (segue só o da plataforma) | `studio admin clear-cap --email ana@exemplo.com` |
+| Desfazer o backfill da migração 14 (volta ao DEMO quem ela passou para REAL) | `studio admin revert-backfill-14 --yes` |
 
-- **Modo** (`simulated` = DEMO, `real`) e **teto** (`monthly_cap_usd`) são por estúdio. Conta nova nasce em `simulated` com
-  teto US$ 0. `allow-real` só *libera*; quem liga é `set-mode real` (ou a própria pessoa em Minha conta).
+- **Modo** (`simulated` = DEMO, `real`) e **teto** (`monthly_cap_usd`) são por estúdio. Conta nova (não admin) nasce em
+  `real`, com `allow_real` e **sem teto individual** (`no_individual_cap=1`): o gasto fica limitado pelo saldo de
+  créditos, pelo teto da plataforma e pelo teto global da fal.ai (`STUDIO_FAL_*_BUDGET_USD`). Saldo inicial 0; o bônus
+  de boas-vindas só vem depois de confirmar o e-mail. `allow-real` só *libera*; quem liga é `set-mode real`.
+- `set-cap` impõe um teto (e tira o "sem teto individual"); `clear-cap` volta a seguir só o da plataforma.
+- A migração 14 passou para REAL sem teto os estúdios ainda no DEMO padrão (não admin, sem isenção, teto 0, nunca
+  mexidos por admin com deny-real/set-mode/set-cap). Os ids ficam em `platform_events` (`backfill_14_real`).
 - `set-mode real` recusa estúdio sem `allow-real`. `deny-real` volta o estúdio para `simulated`.
 - `set-cap --usd N` aceita N de 0 até `STUDIO_MONTHLY_CAP_USD` (teto da plataforma); acima disso, valor negativo, `nan`
   ou `inf` são recusados e nada muda. Com a plataforma em 0, só o 0 passa.

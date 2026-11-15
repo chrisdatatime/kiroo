@@ -15,8 +15,10 @@ não puder ser completado (coluna obrigatória ausente, banco corrompido), levan
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Callable
 
 
@@ -531,6 +533,66 @@ def _m013_scene_platform(conn: sqlite3.Connection) -> None:
     conn.execute("UPDATE productions SET scene='dark_premium' WHERE style='dark' AND scene='home_light'")
 
 
+BACKFILL_14_EVENT = "backfill_14_real"
+
+# Quem o backfill da migração 14 passa para REAL sem teto: estúdio de quem NÃO é admin, sem isenção de créditos,
+# ainda no padrão antigo (DEMO, não liberado, teto 0) e que nenhum admin tenha mexido de propósito (deny-real,
+# set-mode, set-cap ou clear-cap na auditoria). Mesma consulta da prévia (`backfill_14_candidates`).
+BACKFILL_14_WHERE = """
+    w.mode='simulated' AND w.allow_real=0 AND w.monthly_cap_usd=0 AND w.credits_exempt=0
+    AND w.owner_id IN (SELECT id FROM users WHERE is_platform_admin=0)
+    AND w.id NOT IN (SELECT target_workspace_id FROM admin_audit WHERE target_workspace_id IS NOT NULL
+                     AND action IN ('deny-real', 'set-mode', 'set-cap', 'clear-cap'))
+"""
+
+
+def backfill_14_candidates(conn: sqlite3.Connection) -> list[tuple[str, str]]:
+    """(workspace_id, e-mail do dono) que o backfill da migração 14 alteraria. Só leitura."""
+    return [(r[0], r[1]) for r in conn.execute(
+        f"SELECT w.id, u.email FROM workspaces w JOIN users u ON u.id=w.owner_id WHERE {BACKFILL_14_WHERE} ORDER BY w.created_at")]
+
+
+def _m014_open_signup(conn: sqlite3.Connection) -> None:
+    """Cadastro aberto: contas sem teto individual, eventos da plataforma e backfill das contas no DEMO padrão.
+
+    - workspaces.no_individual_cap (padrão 0 = como antes): 1 = a conta segue só o teto da plataforma; o gasto fica
+      limitado pelo saldo de créditos e pelo teto global da fal.ai.
+    - platform_events: eventos estruturados sem produção (recusa pelo teto global da fal.ai, backfill, reversão).
+    - backfill: BACKFILL_14_WHERE vira REAL, liberado e sem teto. Os ids vão para um evento, para poder reverter
+      (`studio admin revert-backfill-14 --yes`)."""
+    if "no_individual_cap" not in _columns(conn, "workspaces"):
+        conn.execute("ALTER TABLE workspaces ADD COLUMN no_individual_cap INTEGER NOT NULL DEFAULT 0")
+    conn.execute("""CREATE TABLE IF NOT EXISTS platform_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        type TEXT NOT NULL,
+        data_json TEXT,
+        created_at TEXT NOT NULL
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_platform_events_type ON platform_events(type, created_at)")
+    ids = [wid for wid, _ in backfill_14_candidates(conn)]
+    if not ids:
+        return
+    marks = ",".join("?" * len(ids))
+    conn.execute(f"UPDATE workspaces SET mode='real', allow_real=1, no_individual_cap=1 WHERE id IN ({marks})", ids)
+    conn.execute("INSERT INTO platform_events(type, data_json, created_at) VALUES (?,?,?)",
+                 (BACKFILL_14_EVENT, json.dumps({"workspaces": ids}), datetime.now(timezone.utc).isoformat(timespec="seconds")))
+
+
+def revert_backfill_14(conn: sqlite3.Connection) -> int:
+    """Devolve ao DEMO padrão (simulated, não liberado, teto 0) os estúdios do backfill da migração 14 que ainda
+    estão como o backfill deixou (sem teto individual). Os que o admin mexeu depois ficam como estão."""
+    ids: list[str] = []
+    for (data,) in conn.execute("SELECT data_json FROM platform_events WHERE type=?", (BACKFILL_14_EVENT,)):
+        ids.extend(json.loads(data or "{}").get("workspaces") or [])
+    n = 0
+    for wid in dict.fromkeys(ids):
+        n += conn.execute("UPDATE workspaces SET mode='simulated', allow_real=0, no_individual_cap=0, monthly_cap_usd=0 "
+                          "WHERE id=? AND no_individual_cap=1 AND allow_real=1", (wid,)).rowcount
+    conn.execute("INSERT INTO platform_events(type, data_json, created_at) VALUES (?,?,?)",
+                 ("revert_backfill_14", json.dumps({"reverted": n}), datetime.now(timezone.utc).isoformat(timespec="seconds")))
+    return n
+
+
 MIGRATIONS: list[Migration] = [
     Migration(1, "schema completo", _m001_baseline),
     Migration(2, "convites de uso único e consentimento", _m002_invites_consent),
@@ -545,6 +607,7 @@ MIGRATIONS: list[Migration] = [
     Migration(11, "bônus de boas-vindas: uma decisão por pessoa, únicos por e-mail e dispositivo", _m011_welcome_bonus),
     Migration(12, "CPF/CNPJ para nota fiscal na conta", _m012_tax_doc),
     Migration(13, "workflow único fal.ai: cenário e plataforma por produção", _m013_scene_platform),
+    Migration(14, "cadastro aberto: sem teto individual, eventos da plataforma e backfill do DEMO padrão", _m014_open_signup),
 ]
 LATEST = MIGRATIONS[-1].version
 assert [m.version for m in MIGRATIONS] == list(range(1, LATEST + 1)), "migrações devem ser 1..N em ordem"
