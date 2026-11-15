@@ -139,7 +139,7 @@ def test_legal_pages_are_public_drafts(loader, path, title):
     r = app.handle("GET", path, BASE, b"")
     html = r.body.decode()
     assert r.status == 200 and r.content_type.startswith("text/html")
-    assert title in html and "PARA REVISÃO JURÍDICA" in html and "<script" not in html
+    assert title in html and "Em revisão jurídica" in html   # layout novo: tests/test_legal_pages.py
 
 
 # ------------------------------------------------------------------ exportar e apagar

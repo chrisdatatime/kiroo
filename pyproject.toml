@@ -24,7 +24,7 @@ studio = "studio.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-studio = ["web/static/*.html"]
+studio = ["web/static/*.html", "web/static/legal/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

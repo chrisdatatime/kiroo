@@ -67,6 +67,9 @@ STATIC = Path(__file__).parent / "static"
 PID_RE = re.compile(r"^prod_[0-9a-f]{10}$")
 MEDIA_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".mp4", ".txt", ".md", ".json"}
 LEGAL_PAGES = {"/termos": "termos.html", "/privacidade": "privacidade.html"}
+# CSS, JS e logo das páginas legais (lista fechada; o logo fica num único ponto: static/legal/logo*.svg)
+LEGAL_ASSETS = {"/legal/legal.css": "text/css; charset=utf-8", "/legal/legal.js": "text/javascript; charset=utf-8",
+                "/legal/logo.svg": "image/svg+xml", "/legal/logo-claro.svg": "image/svg+xml"}
 ACTIONS = {"run", "approve", "reject", "final", "pause", "resume", "cancel", "budget", "references", "validate",
            "direction", "go_ahead", "autonomy", "edit", "music", "retry", "confirm", "choose", "anchor"}
 GAME_DIST = Path(__file__).resolve().parents[3] / "frontend" / "dist"   # build do jogo (npm run build)
@@ -671,6 +674,9 @@ class App:
                                    "terms_version": TERMS_VERSION})
             if method == "GET" and path in LEGAL_PAGES:   # rascunhos públicos (PARA REVISÃO JURÍDICA)
                 return Response(200, "text/html; charset=utf-8", (STATIC / LEGAL_PAGES[path]).read_bytes(),
+                                headers={"Cache-Control": "no-cache"}, compress=True)
+            if method == "GET" and path in LEGAL_ASSETS:
+                return Response(200, LEGAL_ASSETS[path], (STATIC / path.lstrip("/")).read_bytes(),
                                 headers={"Cache-Control": "no-cache"}, compress=True)
             if method == "GET" and path.startswith("/api/auth/google/"):
                 return self._google(path, url, headers)
