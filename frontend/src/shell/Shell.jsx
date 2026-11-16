@@ -1,30 +1,24 @@
 import React from 'react';
 import {
-  ArrowLeft, Bell, Bot, Building2, CheckCheck, ChevronDown, CircleDollarSign, GraduationCap, Home, Info, LogOut, PanelLeft, Pause,
-  Package, Plus, Search, Settings, Shield, Sparkles, UserRound, UsersRound, Workflow,
+  ArrowLeft, Bell, Bot, Building2, CheckCheck, CircleDollarSign, GraduationCap, Home, Info, LogOut, Pause,
+  Package, Plus, Search, Settings, Shield, Sparkles, UsersRound, Workflow,
 } from 'lucide-react';
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
-  DropdownMenuSeparator, DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+import { DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import Icon from './icons.jsx';
-import { Avatar, AGENT_STATE } from './Central.jsx';
-import { AgentHead } from './AgentHead.jsx';
 import { usePhone } from '../hooks/use-phone.js';
 import { FalChips } from '../ui/FalMission.jsx';
 import Sidebar from './Sidebar.jsx';
 import { AccountDrawer, Spark } from './AccountMenu.jsx';
 import KirooAvatar from './KirooAvatar.jsx';
 import { phoneTabs } from './accountMenu.js';
-import compactLogo from '../assets/brand/icone-app-preto.svg';
 import wordmark from '../assets/brand/wordmark-preto-laranja.svg';
 import './shell.css';
 import './phone.css';
 
-// Layout (padrão de escritório virtual): trilho de ícones à esquerda, painel colapsável com o contexto do estúdio
-// (próxima ação, equipe, missões) e a área de trabalho num cartão arredondado à direita.
+// Layout: barra lateral nova (Sidebar.jsx) em todas as telas, inclusive o Escritório (Fase 2: o trilho e o painel antigos saíram),
+// barra superior e a área de trabalho num cartão arredondado à direita. No celular, cabeçalho + barra inferior.
 export const VIEWS = [
   { id: 'central', label: 'Início', title: 'Início', icon: Home },
   { id: 'missao', label: 'Produções', title: 'Produção', icon: Workflow },
@@ -46,7 +40,7 @@ function RailTip({ label, children, kbd }) {
   );
 }
 
-// Itens do menu do estúdio (usados no trilho do Escritório e no seletor da barra lateral nova)
+// Itens do menu do estúdio (seletor do estúdio na barra lateral)
 export function WorkspaceItems({ v, newMission }) {
   return (
     <>
@@ -65,24 +59,6 @@ export function WorkspaceItems({ v, newMission }) {
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={v.logout}><LogOut />Sair</DropdownMenuItem>
     </>
-  );
-}
-
-// Menu do estúdio (logo no topo do trilho)
-function WorkspaceMenu({ v, newMission }) {
-  const ws = v.account?.workspace?.name || 'Kiroo';
-  return (
-    <DropdownMenu>
-      <RailTip label={ws}>
-        <DropdownMenuTrigger asChild>
-          <button type="button" className="pv-ws" aria-label={`Menu do estúdio ${ws}`}>
-            <img src={compactLogo} alt="" />
-            <span className="pv-ws-caret" aria-hidden="true"><ChevronDown size={10} strokeWidth={3} /></span>
-          </button>
-        </DropdownMenuTrigger>
-      </RailTip>
-      <DropdownMenuContent side="right" align="start" sideOffset={10} className="pv-menu"><WorkspaceItems v={v} newMission={newMission} /></DropdownMenuContent>
-    </DropdownMenu>
   );
 }
 
@@ -129,105 +105,6 @@ export function Activity({ v, side = 'right', topbar = false }) {
   );
 }
 
-function Rail({ v, onSearch, newMission }) {
-  return (
-    <nav className="pv-rail" aria-label="Navegação principal">
-      <WorkspaceMenu v={v} newMission={newMission} />
-      <div className="pv-rail-search">
-        <RailTip label="Buscar" kbd="Ctrl K"><button type="button" className="pv-rail-btn" onClick={onSearch} aria-label="Buscar (Ctrl K)"><Search size={20} strokeWidth={1.8} aria-hidden="true" /></button></RailTip>
-        <span className="pv-rail-kbd" aria-hidden="true"><kbd>Ctrl</kbd><kbd>K</kbd></span>
-      </div>
-      <span className="pv-rail-sep" aria-hidden="true" />
-      {VIEWS.map((x) => (
-        <RailTip key={x.id} label={x.label}>
-          <button type="button" className="pv-rail-btn" data-tour={x.id === 'escritorio' ? 'office-rail' : undefined} data-active={v.view === x.id || undefined} aria-current={v.view === x.id ? 'page' : undefined}
-            aria-label={x.label + (x.id === 'central' && v.attn.length ? `, ${v.attn.length} pendências` : '')} onClick={() => v.setView(x.id)}>
-            <x.icon size={20} strokeWidth={1.8} aria-hidden="true" />
-          </button>
-        </RailTip>
-      ))}
-      <Activity v={v} />
-      <span className="pv-rail-fill" />
-      <RailTip label="Preferências"><button type="button" className="pv-rail-btn" onClick={() => v.openPrefs('prefs')} aria-label="Preferências"><Settings size={20} strokeWidth={1.8} aria-hidden="true" /></button></RailTip>
-    </nav>
-  );
-}
-
-// Painel: estúdio, missão aberta, próxima ação, busca e equipe com estado
-function Panel({ v, onCollapse, newMission }) {
-  const [q, setQ] = React.useState('');
-  const [teamOpen, setTeamOpen] = React.useState(true);
-  const ws = v.account?.workspace?.name || 'Kiroo';
-  const name = v.account?.user?.name || 'Minha conta';
-  const team = v.team.filter((a) => `${a.name} ${a.role}`.toLowerCase().includes(q.trim().toLowerCase()));
-  const busy = v.team.filter((a) => v.statuses[a.id] !== 'idle').length;
-  const openAgent = (a) => {
-    if (v.view === 'escritorio') { const r = v.rooms.find((x) => x.agent === a.id); if (r) { r.go(); return; } }
-    v.openStep(a.tab);
-  };
-  return (
-    <aside className="pv-panel" aria-label="Painel do estúdio">
-      <header className="pv-panel-head">
-        <div className="pv-brand"><img src={wordmark} alt="Kiroo" height="22" /><h2 title={ws}>{ws}</h2></div>
-        <RailTip label="Recolher painel"><button type="button" className="pv-icon-btn" onClick={onCollapse} aria-label="Recolher painel"><PanelLeft size={18} aria-hidden="true" /></button></RailTip>
-      </header>
-
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button type="button" className="pv-mission-pick"><Workflow size={14} aria-hidden="true" /><span>{v.hasProd ? v.prodName : 'Nenhuma missão aberta'}</span><ChevronDown size={14} aria-hidden="true" /></button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-64">
-          <DropdownMenuLabel>Produções</DropdownMenuLabel>
-          {v.productions.length === 0 && <DropdownMenuItem disabled>Nenhuma missão ainda</DropdownMenuItem>}
-          {v.productions.slice(0, 8).map((p) => (
-            <DropdownMenuItem key={p.id} onSelect={p.open}>{p.current ? <CheckCheck /> : <span className="w-4" />}<span className="truncate">{p.name || p.id}</span>
-              {p.status === 'cancelled' && <span className="ml-auto text-xs text-muted-foreground">Cancelada</span>}</DropdownMenuItem>
-          ))}
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={newMission}><Plus />Nova produção</DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-
-      <section className="pv-next" aria-label="Próxima ação" data-tour="next-action">
-        <strong>{v.nextLabel ? 'Próxima ação' : 'Tudo em andamento'}</strong>
-        <p>{v.nextLong}</p>
-        {v.nextLabel
-          ? <button type="button" className="pv-cta" onClick={v.goNext}>{v.nextLabel}</button>
-          : <button type="button" className="pv-cta" onClick={newMission}><Plus size={16} aria-hidden="true" />Nova produção</button>}
-      </section>
-
-      <label className="pv-search">
-        <Search size={15} aria-hidden="true" />
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Pesquisar agentes" aria-label="Pesquisar agentes" />
-      </label>
-
-      <button type="button" className="pv-group-h" data-tour="team-head" aria-expanded={teamOpen} onClick={() => setTeamOpen((o) => !o)}>
-        Equipe ({busy} de {v.team.length} ativos)<ChevronDown size={13} aria-hidden="true" />
-      </button>
-      {teamOpen && (
-        <ul className="pv-people" data-tour="team">
-          {team.map((a) => { const st = v.statuses[a.id] || 'idle'; const [s, t] = AGENT_STATE[st] || AGENT_STATE.idle; return (
-            <li key={a.id}>
-              <button type="button" onClick={() => openAgent(a)} aria-label={`${a.name}, ${a.role}: ${t}`}>
-                <span className="pv-person-av"><Avatar look={a.look} size={34} /><i data-s={s} aria-hidden="true"><AgentHead active={st !== 'idle'} /></i></span>
-                <span className="pv-grow"><strong>{a.name}</strong><span>{st === 'idle' ? a.role : t}</span></span>
-                {st === 'need' && <span className="pv-need" aria-hidden="true">!</span>}
-              </button>
-            </li>); })}
-          {team.length === 0 && <li className="pv-people-empty">Ninguém com esse nome.</li>}
-        </ul>
-      )}
-
-      <span className="pv-rail-fill" />
-      <button type="button" className="pv-me" data-tour="account" onClick={() => v.openPrefs('account')}>
-        <span className="pv-me-av" aria-hidden="true">{name.trim().charAt(0).toUpperCase() || 'P'}<i /></span>
-        <span className="pv-grow"><strong>{name}</strong><span>Conta e preferências</span></span>
-        <UserRound size={16} aria-hidden="true" />
-      </button>
-    </aside>
-  );
-}
-
 // Celular: barra inferior de 72 px: Início, Escritório, "+" (nova produção), Produções e Entregas.
 // Entregas ainda não tem tela própria e abre Produções. Conta e Créditos ficam no avatar do topo (gaveta da conta).
 const TAB_ICONS = { inicio: Home, escritorio: Building2, producoes: Workflow, entregas: Package };
@@ -261,14 +138,14 @@ function PhoneMe({ v, onOpen }) {
 }
 
 const PHONE_TITLE = { central: 'Início', equipe: 'Equipe', escritorio: 'Escritório', config: 'Configurações' };
-const DESK_TITLE = { central: 'Início', config: 'Configurações' };
+const DESK_TITLE = { central: 'Início', escritorio: 'Escritório', config: 'Configurações' };
+// telas cujo cabeçalho no celular é o da marca (logo, saldo, avisos e conta), como no design do Início e do Escritório
+const PHONE_HOME = { central: true, escritorio: true };
 
 export default function Shell({ v, rootRef, stageRef, onKeyDown, onKeyUp, onBlur, children }) {
   const phone = usePhone();
   const [pal, setPal] = React.useState(false);
   const [drawer, setDrawer] = React.useState(false);
-  const [panel, setPanelRaw] = React.useState(() => LS.get('bc.panel', typeof window === 'undefined' || window.innerWidth >= 900));
-  const setPanel = (x) => { setPanelRaw(x); LS.set('bc.panel', x); };
   React.useEffect(() => {
     const h = (e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setPal((p) => !p); } };
     window.addEventListener('keydown', h);
@@ -278,18 +155,15 @@ export default function Shell({ v, rootRef, stageRef, onKeyDown, onKeyUp, onBlur
   React.useEffect(() => { document.title = `Kiroo — ${cur.label}`; }, [cur.label]);
   const bal = v.wallet ? (v.wallet.exempt ? 'Isento' : `${v.wallet.balance} créditos`) : '';
   const newMission = () => { v.setView('missao'); v.newProd(); };
-  const classic = v.view === 'escritorio';   // o Escritório mantém o trilho e o painel de sempre; as demais telas usam a barra lateral nova
   const falTop = v.view === 'missao' && v.falMission ? v.falMission : null;   // missão fal: topo com chips e Nova missão em accent
 
   return (
-    <div ref={rootRef} tabIndex={-1} onKeyDown={onKeyDown} onKeyUp={onKeyUp} onBlur={onBlur} className="pv" data-panel={panel ? 'open' : 'closed'} data-phone={phone || undefined}
-      aria-label={phone ? 'Kiroo' : 'Kiroo. Trilho de navegação, painel do estúdio e área de trabalho. Ctrl K abre a busca de comandos.'}>
+    <div ref={rootRef} tabIndex={-1} onKeyDown={onKeyDown} onKeyUp={onKeyUp} onBlur={onBlur} className="pv" data-phone={phone || undefined}
+      aria-label={phone ? 'Kiroo' : 'Kiroo. Menu lateral e área de trabalho. Ctrl K abre a busca de comandos.'}>
       <TooltipProvider delayDuration={250}>
-        {!phone && !classic && <Sidebar v={v} menuItems={<WorkspaceItems v={v} newMission={newMission} />} />}
-        {!phone && classic && <Rail v={v} onSearch={() => setPal(true)} newMission={newMission} />}
-        {!phone && classic && panel && <Panel v={v} onCollapse={() => setPanel(false)} newMission={newMission} />}
+        {!phone && <Sidebar v={v} menuItems={<WorkspaceItems v={v} newMission={newMission} />} />}
         <main className="pv-stage">
-          {phone && v.view === 'central' ? (
+          {phone && PHONE_HOME[v.view] ? (
             <header className="pv-top pv-top-phone in-top-phone">
               <img src={wordmark} alt="Kiroo" height="22" />
               <span className="pv-rail-fill" />
@@ -310,7 +184,7 @@ export default function Shell({ v, rootRef, stageRef, onKeyDown, onKeyUp, onBlur
               {falTop && <button type="button" className="pv-cta pv-cta-accent pv-cta-icon" onClick={newMission} aria-label="Nova produção"><Plus size={18} aria-hidden="true" /></button>}
               <PhoneMe v={v} onOpen={() => setDrawer(true)} />
             </header>
-          ) : !classic && DESK_TITLE[v.view] ? (
+          ) : DESK_TITLE[v.view] ? (
           <header className="pv-top in-top">
             <h1>{DESK_TITLE[v.view]}</h1>
             <span className="pv-rail-fill" />
@@ -322,7 +196,6 @@ export default function Shell({ v, rootRef, stageRef, onKeyDown, onKeyUp, onBlur
           </header>
           ) : (
           <header className="pv-top">
-            {!panel && classic && <RailTip label="Abrir painel"><button type="button" className="pv-icon-btn" onClick={() => setPanel(true)} aria-label="Abrir painel"><PanelLeft size={18} aria-hidden="true" /></button></RailTip>}
             <h1>{falTop ? 'Missão' : cur.title}{!falTop && v.view !== 'central' && v.prodName ? <span> · {v.prodName}</span> : null}</h1>
             {falTop && <FalChips chips={falTop.chips} />}
             {v.conn === 'erro' && <span role="alert" className="pv-status pv-status-error">Sem conexão</span>}

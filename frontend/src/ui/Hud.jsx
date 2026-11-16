@@ -1,7 +1,6 @@
 import React from 'react';
-import Boneco from '../Boneco.jsx';
 
-// Interface discreta sobre o cenário: gasto, atalhos, equipe e dicas de controle.
+// Interface discreta sobre o cenário: atalhos (Setores, Jogos, ajuda), a opção Levantar e os avisos.
 export default function Hud({ v }) {
   return (
     <>
@@ -22,24 +21,11 @@ export default function Hud({ v }) {
         </div>
       </div>
 
-      <div style={{ position: 'absolute', left: 14, bottom: 14, zIndex: 10 }} className="g-hud">
-        <ul aria-label="Equipe" style={{ listStyle: 'none', margin: 0, padding: 6, display: 'flex', gap: 4 }}>
-          {v.roster.map((r) => (
-            <li key={r.id}>
-              <button onClick={r.go} aria-label={r.aria} title={r.aria} style={{ position: 'relative', width: 48, height: 58, borderRadius: 12, border: '2px solid transparent', background: r.bg, cursor: 'pointer', padding: '3px 0 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
-                <span style={{ height: 30, overflow: 'hidden', display: 'block' }}><Boneco look={r.look} crop size={30} /></span>
-                <span style={{ font: '800 10px/1 Instrument Sans,sans-serif', color: '#0E0E10' }}>{r.name}</span>
-                <span aria-hidden="true" style={{ position: 'absolute', top: -4, right: -3, width: 16, height: 16, borderRadius: '50%', background: r.dot, border: '1px solid #E7E7E4', font: '900 10px/12px Instrument Sans,sans-serif', color: '#0E0E10', textAlign: 'center' }}>{r.sym}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      {v.near && (
-        <div className="popb" style={{ position: 'absolute', left: '50%', bottom: 86, transform: 'translateX(-50%)', zIndex: 11, display: 'flex', gap: 8 }}>
-          <button className="g-btn g-lime" onClick={v.useNear} style={{ minHeight: 48 }}><span className="kbd">E</span>{v.promptLabel}</button>
-          {v.nearAlt && <button className="g-btn" onClick={v.nearAlt.go} style={{ minHeight: 48 }}>{v.nearAlt.label}</button>}
+      {/* a equipe fica na faixa abaixo do mapa (shell/Office.jsx) e o "E · Falar com" é um balão sobre o boneco (WorldPhaser);
+          aqui sobra só a segunda opção quando você está sentado perto de algo (Levantar) */}
+      {v.near && v.nearAlt && (
+        <div className="popb" style={{ position: 'absolute', left: '50%', bottom: 64, transform: 'translateX(-50%)', zIndex: 11, display: 'flex', gap: 8 }}>
+          <button className="g-btn" onClick={v.nearAlt.go} style={{ minHeight: 44 }}>{v.nearAlt.label}</button>
         </div>
       )}
 

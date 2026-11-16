@@ -44,7 +44,9 @@ import MissionView from './shell/MissionView.jsx';
 import TeamView from './shell/TeamView.jsx';
 import Settings from './shell/Settings.jsx';
 import { PRICING_PATH } from './config/appConfig.js';
-import { OfficeSwitch } from './shell/Phone.jsx';
+import Office from './shell/Office.jsx';
+import { officeKeys, nearPrompt } from './shell/office.js';
+import { kirooLook } from './ui/avatar.js';
 import { normalizeImageName } from './ui/mobile.js';
 import { buildPipeline, attention } from './shell/pipeline.js';
 import { splitRequests, joinRequests, summaryRows } from './ui/direcao.js';
@@ -85,6 +87,14 @@ export default class App extends React.Component {
     this.setRoot = (el) => { this.rootEl = el; if (el && this.measure) this.measure(); };
     // o mundo ocupa só a área útil ao lado da navegação: é ela que define vw/vh (zoom e câmera)
     this.setStage = (el) => { this.stageEl = el; if (el && this.measure) this.measure(); };
+    // Escritório (Fase 2): o mundo mede só o mapa (.of-map), que encolhe com a faixa da equipe, o painel do agente e a gaveta
+    // do celular; o ResizeObserver remede quando o painel abre/fecha (sem resize da janela)
+    this.setMapEl = (el) => {
+      if (this.mapRO) { this.mapRO.disconnect(); this.mapRO = null; }
+      this.mapEl = el;
+      if (el && typeof ResizeObserver !== 'undefined') { this.mapRO = new ResizeObserver(() => this.measure && this.measure()); this.mapRO.observe(el); }
+      if (el && this.measure) this.measure();
+    };
     this.onKey = (e) => this.handleKey(e);
     this.held = [];          // teclas de direção ainda pressionadas (a última manda)
     this.onKeyUp = (e) => { const k = (e.key || '').toLowerCase(); this.held = this.held.filter((h) => h !== k); };
@@ -108,6 +118,7 @@ export default class App extends React.Component {
       cfgTab: LS.get('bc.cfgTab', 'perfil') === 'creditos' ? 'creditos' : 'perfil',   // Configurações: Perfil | Créditos
       vw: window.innerWidth, vh: window.innerHeight,
       player: { i: SPAWN[0], j: SPAWN[1], path: [], dir: 'down', moving: false, seat: null }, pending: null, dest: null, agents,
+      agentSel: null,   // agente escolhido no Escritório (painel à direita no desktop, gaveta no celular)
       // motor real
       onb: null,  // { start, key } enquanto o tour está aberto
       S: null, pid, draftMode: false, conn: 'carregando', busy: null, err: null, authState: 'checking', account: null, signup: 'closed', landing: null,
@@ -117,9 +128,8 @@ export default class App extends React.Component {
       draft: Object.assign({}, EMPTY_DRAFT, LS.get('bc.draft', {})), files: [],
       fal: { scene: null, platform: null, file: null, name: '', reqId: null, busy: false, error: null, reuse: null },   // fluxo foto + cenário + plataforma (só com o motor novo)
       opts: null, creative: null, preview: null, reqText: '', caption: null, pilot: LS.get('bc.autonomy', 'assistido'),
-      ui: { win: null, who: null, tab: 'produto', dirSub: 'dir', ctab: 'personagem', revSel: 1, revView: 'scene', adjust: false, issues: [], adjText: '', toast: null, tut: !LS.get('bc.tutDone', false), playing: false, budgetHit: false },
+      ui: { win: null, who: null, tab: 'produto', dirSub: 'dir', ctab: 'mesa', revSel: 1, revView: 'scene', adjust: false, issues: [], adjText: '', toast: null, tut: !LS.get('bc.tutDone', false), playing: false, budgetHit: false },
       cenario: normalizeTheme(LS.get(THEME_KEY, DEFAULT_THEME)),
-      look: LS.get('bc.look', { shirt: '#D5F45B', acc: 'broto' }),
       setup: LS.get('bc.setup', { desk: 'madeira', chair: 'classica', pc: 'notebook', planta: true, gato: true, luminaria: true, caneca: false, tapete: false }),
     };
   }
@@ -127,7 +137,8 @@ export default class App extends React.Component {
   // ---------- ciclo de vida ----------
   componentDidMount() {
     deviceId();   // cookie do dispositivo antes de qualquer cadastro ou retorno do Google (bônus de boas-vindas)
-    this.measure = () => { const el = this.stageEl || this.rootEl; if (!el) return; const w = el.clientWidth, h = el.clientHeight; if (w !== this.state.vw || h !== this.state.vh) this.setState({ vw: w, vh: h }); };
+    this.measure = () => { const el = (this.state.view === 'escritorio' && this.mapEl) || this.stageEl || this.rootEl; if (!el) return; const w = el.clientWidth, h = el.clientHeight; if (!w || !h) return;   // área ainda sem layout (ou escondida): o Phaser não aceita canvas 0x0
+      if (w !== this.state.vw || h !== this.state.vh) this.setState({ vw: w, vh: h }); };
     this.measure();
     window.addEventListener('resize', this.measure);
     this.iv = setInterval(() => this.tick(), TICK);
@@ -141,10 +152,9 @@ export default class App extends React.Component {
     authConfig().then((c) => this.setState({ signup: c.signup || 'closed', landing: c.landing_url || '' })).catch(() => this.setState({ landing: '' }));  // cadastro: quem decide é o servidor
     this.later(() => this.rootEl && this.rootEl.focus({ preventScroll: true }), 80);
   }
-  componentWillUnmount() { clearInterval(this.iv); clearInterval(this.poll); this.timers.forEach(clearTimeout); window.removeEventListener('resize', this.measure); window.removeEventListener('popstate', this.onPop); }
+  componentWillUnmount() { if (this.mapRO) this.mapRO.disconnect(); clearInterval(this.iv); clearInterval(this.poll); this.timers.forEach(clearTimeout); window.removeEventListener('resize', this.measure); window.removeEventListener('popstate', this.onPop); }
   componentDidUpdate(_, prev) {
     if (prev.cenario !== this.state.cenario) LS.set(THEME_KEY, this.state.cenario);
-    if (prev.look !== this.state.look) LS.set('bc.look', this.state.look);
     if (prev.setup !== this.state.setup) LS.set('bc.setup', this.state.setup);
     if (prev.draft !== this.state.draft) LS.set('bc.draft', this.state.draft);
     if (prev.pid !== this.state.pid) LS.set('bc.pid', this.state.pid);
@@ -357,11 +367,31 @@ export default class App extends React.Component {
       this.setState({ player: { ...p, path, seat: null }, pending: { type: 'sit', id: c.id }, dest: [c.x, c.y], ui: { ...this.state.ui, win: null } });
       return;
     }
-    if (this.isAdjacent(t) || t.type === 'agent') { this.doAction(t); return; }  // conversa a 1 clique, sem andar
+    // agente: o painel abre na hora (1 clique) e o boneco anda até ele pelo caminho em grade
+    if (t.type === 'agent') { this.doAction(t); if (!this.isAdjacent(t)) this.approach(t); return; }
+    if (this.isAdjacent(t)) { this.doAction(t); return; }
     const tiles = this.targetTiles(t);
     const path = bfs([p.i, p.j], (u, v) => this.passP(u, v) && tiles.some((x) => Math.max(Math.abs(x[0] - u), Math.abs(x[1] - v)) <= 1), (u, v) => this.passP(u, v));
     if (!path) { this.toast('Não dá para chegar lá agora.'); return; }
     this.setState({ player: { ...p, path, seat: null }, pending: t, dest: path[path.length - 1], ui: { ...this.state.ui, win: null } });
+  }
+  // Anda até ficar ao lado do alvo (BFS em grade, sem atravessar paredes), sem ação na chegada
+  approach(t) {
+    const p = this.state.player; if (p.seat) this.setState({ player: { ...p, seat: null } });
+    const tiles = this.targetTiles(t); if (!tiles.length) return false;
+    const near = (u, v) => this.passP(u, v) && tiles.some((x) => Math.max(Math.abs(x[0] - u), Math.abs(x[1] - v)) <= 1);
+    if (near(p.i, p.j)) return true;
+    const path = bfs([p.i, p.j], near, (u, v) => this.passP(u, v));
+    if (!path) { this.toast('Não dá para chegar lá agora.'); return false; }
+    this.setState({ player: { ...this.state.player, path, seat: null }, pending: null, dest: path[path.length - 1] });
+    return true;
+  }
+  selectAgent(id) { this.dismissTut(); this.setState({ agentSel: id && AGM[id] ? id : null }); }
+  // Mesa da sala: anda até ela e mostra o agente da sala (painel no desktop, gaveta no celular)
+  goDesk(roomId) {
+    const r = ROOMS.find((x) => x.id === roomId); if (!r) return;
+    if (r.agent) this.selectAgent(r.agent);
+    this.approach({ type: 'monitor', room: r.id });
   }
   sit(id) {
     const c = CHAIR_BY_ID[id]; const p = this.state.player;
@@ -382,8 +412,8 @@ export default class App extends React.Component {
   }
   doAction(t) {
     this.dismissTut();
-    // mundo Phaser (Fase 6): agente abre direto o painel de conversa; o canvas antigo mantém o diálogo roteirizado
-    if (t.type === 'agent') this.setUI({ win: 'chat', who: t.id });
+    // Escritório (Fase 2): E ou clique no agente abre o painel do agente; a conversa é um botão dele (talkTo)
+    if (t.type === 'agent') this.selectAgent(t.id);
     else if (t.type === 'monitor') this.openRoomWork(t.room);
     else if (t.type === 'sit') this.sit(t.id);
     else if (t.type === 'chair') this.goInteract(t);
@@ -448,10 +478,16 @@ export default class App extends React.Component {
   handleKey(e) {
     const tag = ((e.target && e.target.tagName) || '').toLowerCase();
     const k = (e.key || '').toLowerCase();
-    if (k === 'escape') { if (this.state.ui.win) { e.preventDefault(); this.closeWin(); } return; }
-    if (this.state.view !== 'escritorio') return;  // andar e interagir só valem no Escritório
-    // digitando em um campo: os atalhos do jogo ficam suspensos
-    if (tag === 'input' || tag === 'textarea' || tag === 'select' || (e.target && e.target.isContentEditable)) return;
+    if (k === 'escape') {
+      if (this.state.ui.win) { e.preventDefault(); this.closeWin(); }
+      else if (this.state.view === 'escritorio' && this.state.agentSel) { e.preventDefault(); this.selectAgent(null); }
+      return;
+    }
+    // andar e interagir só valem no Escritório e com ele focado (o mapa ou a raiz do app), nunca num campo, menu ou diálogo
+    const tgt = e.target;
+    if (!officeKeys({ view: this.state.view, tag, editable: !!(tgt && tgt.isContentEditable),
+      inMap: !!(tgt && tgt.closest && tgt.closest('.of-map')), isRoot: tgt === this.rootEl,
+      inDialog: !!(tgt && tgt.closest && tgt.closest('[role="dialog"],[role="menu"]')) })) return;
     if (this.state.ui.win && this.state.ui.win !== 'custom') return;
     if ((tag === 'button' || tag === 'a') && (k === 'enter' || k === ' ')) return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -483,7 +519,7 @@ export default class App extends React.Component {
     if (this.state.ui.win === 'dialog' || this.state.ui.win === 'board') this.closeWin();
     const rect = e.currentTarget.getBoundingClientRect(); const sc = rect.width / GRID.W;
     const [i, j] = screenToTile((e.clientX - rect.left) / sc, (e.clientY - rect.top) / sc, T);
-    if (this.rootEl) this.rootEl.focus({ preventScroll: true });
+    const focusEl = this.mapEl || this.rootEl; if (focusEl) focusEl.focus({ preventScroll: true });
     if (!this.inB(i, j)) return;
     const hit = this.targetAtTile(i, j); if (hit) { this.goInteract(hit); return; }
     this.walkTo(i, j);
@@ -499,11 +535,19 @@ export default class App extends React.Component {
   // ---------- mapa e salas ----------
   // A sede inteira sempre na tela, como no Gather: só as paredes externas ficam sob o HUD
   fitZoom() { return Math.min((this.state.vw - 12) / GRID.W, (this.state.vh - 46) / GRID.H); }
-  // Vai direto para a entrada da sala, sem caminhar
+  // Vai até a entrada da sala andando pelo caminho em grade (Fase 2: nada de teleporte). Com movimento reduzido, ou sem
+  // caminho possível, o boneco aparece direto na entrada, como antes.
   goRoom(id) {
     const r = ROOMS.find((x) => x.id === id); const p = this.state.player;
     if (!placedRoom(r)) return false;  // sala ainda fora do mapa novo (Fase 2b): os atalhos seguem funcionando
-    this.setState({ player: { ...p, i: r.entry[0], j: r.entry[1], path: [], moving: false, seat: null, teleport: true }, pending: null, dest: null });
+    if (r.agent) this.setState({ agentSel: r.agent });
+    const [ei, ej] = r.entry;
+    if (p.i === ei && p.j === ej) return true;
+    const reduced = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const path = reduced ? null : bfs([p.i, p.j], (u, v) => u === ei && v === ej, (u, v) => this.passP(u, v));
+    if (path) this.setState({ player: { ...p, path, seat: null }, pending: null, dest: [ei, ej] });
+    else this.setState({ player: { ...p, i: ei, j: ej, path: [], moving: false, seat: null, teleport: true }, pending: null, dest: null });
+    return true;
   }
   openRoomWork(id) {
     const r = ROOMS.find((x) => x.id === id);
@@ -924,6 +968,7 @@ export default class App extends React.Component {
   // ---------- view model: tudo que a UI precisa para desenhar ----------
   viewModel() {
     const s = this.state, ui = s.ui, P = this.prodP(), st = this.stage();
+    const playerLook = kirooLook(s.account && s.account.user);   // o boneco "Você" é o kiroo do avatar da conta
     const scale = this.fitZoom(), zoom = scale;
     const camX = GRID.W / 2, camY = GRID.H / 2;
     const idx = this.stageIdx(), ended = this.ended();
@@ -1109,19 +1154,14 @@ export default class App extends React.Component {
     const issues = issueList.map((lb) => ({ label: lb, sel: ui.issues.indexOf(lb) >= 0, pick: () => { const arr = ui.issues.indexOf(lb) >= 0 ? ui.issues.filter((x) => x !== lb) : ui.issues.concat(lb); this.setUI({ issues: arr }); } }));
 
     // --- personalização (inalterada) ---
-    const ctabs = [{ id: 'personagem', label: 'Personagem' }, { id: 'mesa', label: 'Mesa e cadeira' }, { id: 'computador', label: 'Computador' }, { id: 'decoracao', label: 'Decoração' }]
+    // o personagem é o kiroo da conta (avatar_kiroo, Fase 2): a aba Personagem saiu do Meu setup
+    const ctabs = [{ id: 'mesa', label: 'Mesa e cadeira' }, { id: 'computador', label: 'Computador' }, { id: 'decoracao', label: 'Decoração' }]
       .map((x) => ({ ...x, sel: ui.ctab === x.id, pick: () => this.setUI({ ctab: x.id }) }));
-    const L = s.look;
-    const setLook = (k, v) => () => { const n = Object.assign({}, s.look); n[k] = v; this.setState({ look: n }); };
     const setSet = (k, v) => () => { const n = Object.assign({}, s.setup); n[k] = v; this.setState({ setup: n }); };
     const sw = (label, color, isSel, pick) => ({ type: 'swatch', label, color, sel: isSel, pick });
     const chip = (label, isSel, pick) => ({ type: 'chip', label, sel: isSel, pick });
     let cgroups = [];
-    if (ui.ctab === 'personagem') cgroups = [
-      { label: 'Cor do personagem', opts: [['Lima', '#D5F45B'], ['Céu', '#8ED8F8'], ['Rosa', '#FF8FC0'], ['Laranja', '#FF9A3D'], ['Amarelo', '#F5C542'], ['Verde-água', '#4FD0BF'], ['Lilás', '#A88BF0'], ['Azul', '#4A7BF0'], ['Creme', '#FFF8EC']].map((x) => sw(x[0], x[1], L.shirt === x[1], setLook('shirt', x[1]))) },
-      { label: 'Acessório', opts: [['Nenhum', 'nenhum'], ['Óculos', 'oculos'], ['Boné', 'bone'], ['Fones', 'fones'], ['Gorro', 'boina'], ['Broto', 'broto']].map((x) => chip(x[0], L.acc === x[1], setLook('acc', x[1]))) },
-    ];
-    else if (ui.ctab === 'mesa') cgroups = [
+    if (ui.ctab === 'mesa') cgroups = [
       { label: 'Mesa', opts: [['Madeira', 'madeira'], ['Branca', 'branca'], ['Gamer', 'gamer']].map((x) => chip(x[0], su.desk === x[1], setSet('desk', x[1]))) },
       { label: 'Cadeira', opts: [['Clássica', 'classica'], ['Gamer', 'gamer'], ['Bola de pilates', 'bola']].map((x) => chip(x[0], su.chair === x[1], setSet('chair', x[1]))) },
     ];
@@ -1173,7 +1213,7 @@ export default class App extends React.Component {
         const a = r.agent ? AGM[r.agent] : null;
         const status = this.roomStatus(r);
         const placed = placedRoom(r);
-        return { id: r.id, name: r.name, hint: r.hint, agent: r.agent || null, who: a ? a.name : '', role: a ? a.role : '', look: a ? a.look : s.look, status, need: a ? statuses[a.id] === 'need' : false, placed,
+        return { id: r.id, name: r.name, hint: r.hint, agent: r.agent || null, who: a ? a.name : '', role: a ? a.role : '', look: a ? a.look : playerLook, status, need: a ? statuses[a.id] === 'need' : false, placed,
           x: placed ? ((r.x0 + r.x1 + 1) / 2) * T : 0, y: placed ? r.y0 * T + 1 : 0,
           click: (e) => { e.stopPropagation(); this.goRoom(r.id); },
           go: () => { if (!this.goRoom(r.id) && !placed) this.toast(r.name + ' ainda não está no mapa novo. Use o botão Abrir.'); this.closeWin(); },
@@ -1181,14 +1221,14 @@ export default class App extends React.Component {
       }),
       hots: [
         ...ROOMS.filter((r) => r.agent && placedRoom(r) && r.desk).map((r) => ({ key: 'm' + r.id, x: r.desk.x * T, y: r.desk.y * T - 14 * SC, w: r.desk.w * T, h: r.desk.h * T + 14 * SC, label: 'Monitor',
-          aria: 'Usar o monitor de ' + r.name, click: (e) => { e.stopPropagation(); this.goInteract({ type: 'monitor', room: r.id }); } })),
+          aria: 'Ir até a mesa de ' + r.name, click: (e) => { e.stopPropagation(); this.goDesk(r.id); } })),
         hot('mine', (ROOMS.find((r) => r.id === 'meu' && placedRoom(r)) || {}).desk, 14 * SC, 'Meu setup', 'Meu setup: personalizar móveis e equipamentos', true),
         hot('board', HOT_FURNITURE.board, 22, 'Produções', 'Quadro de produções'),
         hot('coffee', HOT_FURNITURE.coffee, 16, 'Café', 'Café'),
         hot('games', HOT_FURNITURE.games, 4, 'Jogos', 'Mesa de jogos: jogo da velha e damas'),
         hot('music', HOT_FURNITURE.music, 20, 'Trilhas', 'Trilhas da Lia: biblioteca musical'),
       ].filter(Boolean),
-      chars, pl, look: s.look, agentDur: AGENT_EVERY * TICK / 1000,
+      chars, pl, look: playerLook, agentDur: AGENT_EVERY * TICK / 1000,
       onWorldClick: this.onWorldClick,
       hoverAt: (i, j) => this.hoverAt(i, j),
       goBoard: (e) => { e.stopPropagation(); this.goInteract({ type: 'board' }); },
@@ -1210,7 +1250,11 @@ export default class App extends React.Component {
       spentText: balanceLabel(s.S ? s.S.credits : null) || usedLabel(credits), usedText: usedLabel(credits),
       balanceText: balanceLabel(s.S ? s.S.credits : null), credits, confirmation: P ? P.confirmation : null,
       openBoard: () => { this.dismissTut(); this.setUI({ win: 'board' }); },      toggleHelp: () => this.setUI({ tut: !ui.tut }), roster,
-      near, promptLabel: this.labelFor(near), useNear: () => { if (near) this.doAction(near); },
+      near, promptLabel: this.labelFor(near), useNear: () => { if (near) this.doAction(near); }, nearTip: nearPrompt(near ? this.labelFor(near) : ''),
+      // Escritório (Fase 2): painel do agente, conversa e o mapa medido à parte
+      agentSel: s.agentSel, selectAgent: (id) => this.selectAgent(id), setMapEl: this.setMapEl,
+      talkTo: (id) => { this.dismissTut(); this.setUI({ win: 'chat', who: id }); },
+      openAgentWork: (id) => { const r = ROOMS.find((x) => x.agent === id); if (r) this.openRoomWork(r.id); },
       toast: ui.toast ? ui.toast.text : '',
       // janelas
       win: ui.win, showTut: ui.tut,
@@ -1273,11 +1317,11 @@ export default class App extends React.Component {
         {v.view === 'missao' && <MissionView v={v} />}
         {v.view === 'equipe' && <TeamView v={v} />}
         {v.view === 'config' && <Settings v={v} />}
-        {v.view === 'escritorio' && (<OfficeSwitch v={v}>
+        {v.view === 'escritorio' && (<Office v={v}>
           <React.Suspense fallback={null}><WorldPhaser v={v} /></React.Suspense>
           <Hud v={v} />
           {v.showTut && !v.tourOpen && <Tutorial v={v} />}
-        </OfficeSwitch>)}
+        </Office>)}
         {v.win === 'dialog' && v.dlg && <DialogWindow v={v} />}
         {v.win === 'chat' && v.chat && <React.Suspense fallback={null}><AgentChat {...v.chat} /></React.Suspense>}
         {v.win === 'board' && <BoardWindow v={v} />}

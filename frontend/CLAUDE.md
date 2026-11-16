@@ -22,10 +22,18 @@ O produto abre na **Central**, não no mundo. `src/shell/`: `Shell.jsx` (lateral
 `MissionView.jsx` (esteira de agentes como visão principal: `Conveyor.jsx` + `conveyor.js`, 6 estações derivadas de `buildPipeline().stations`, salto da tarefa só em CSS/transform, `prefers-reduced-motion` desliga; o fluxo objetivo → orquestrador → frentes → revisão → entrega fica em "Fluxo detalhado"; `tests/conveyor*.test.mjs`), `TeamView.jsx`, `pipeline.js` (derivação pura, `tests/pipeline.test.mjs`),
 `shell.css` (tokens `.pv`). O Escritório é a 4ª view e continua com o HUD de jogo. `App.state.view` (`bc.view`) escolhe a view; o mundo mede só a área útil (`stageEl`);
 WASD/E só valem na view `escritorio`. Estilo novo = classes `pv-*`; as `g-*` ficam no mundo e nas janelas antigas.
-Layout (Fase 4b, padrão de escritório virtual): trilho de ícones (menu do estúdio no logo, busca, views, Atividade em Popover, Preferências),
-painel colapsável (`bc.panel`: missão aberta, próxima ação, busca e equipe com estado, conta) e a área de trabalho num cartão. Conta, Piloto,
+Layout: barra lateral nova (`Sidebar.jsx`) em todas as telas e a área de trabalho num cartão (o trilho de ícones e o painel `bc.panel` da Fase 4b
+saíram na Fase 2 do novo layout; Atividade continua como Popover no sino da barra superior). Conta, Piloto,
 Créditos e Sobre vivem no modal `ui/Preferences.jsx` (`v.openPrefs(tab)`; `win` = prefs | account | pilot | credits | about); as janelas
 antigas exportam só o conteúdo (`AccountContent`, `PilotContent`, `CreditsContent`, `AboutContent`).
+
+## Escritório (Fase 2 do novo layout)
+`shell/Office.jsx` (+ `office.css`, escopo `.of`; regras puras em `shell/office.js`, `tests/office.test.mjs`) envolve `WorldPhaser` + `Hud` dentro do Shell novo.
+Desktop: mapa (`.of-map`, focável; o mundo mede só ele via `v.setMapEl` + ResizeObserver), faixa da equipe embaixo e painel do agente à direita
+(`state.agentSel`: o que faz agora, produção atual, Abrir produção/Nova produção, Conversar → `AgentChat`). Celular: mapa + gaveta inferior (equipe + agente).
+O boneco "Você" é o kiroo da conta (`kirooLook(user.avatar_kiroo)`, desenhado por `characters.js`; `voce.png` não é carregado; a aba Personagem do Meu setup saiu).
+Clique/toque no agente abre o painel e anda até ele; mesa (`goDesk`) e "Ir à sala" (`goRoom`) andam por BFS (teleporte só com movimento reduzido ou sem caminho);
+no celular a placa da sala também anda (sem diálogo). Perto de algo, balão "E · Falar com X" sobre o boneco. Setas/WASD/E só com o mapa (ou a raiz) em foco (`officeKeys`).
 
 ## Nova produção (fluxo fal)
 `ui/FalWindow.jsx` (+ `falModal.css`): desktop = modal horizontal (prévia 4:5 à esquerda, nome, cenário e plataforma à direita, rodapé com o botão);
@@ -38,16 +46,16 @@ monta tudo em `src/studio/prompts/production.py`). Miniaturas/prévia: `public/a
 ## Início (a antiga Central)
 `shell/Inicio.jsx` (+ `inicio.css`, escopo `in-*`) é a tela inicial; a regra de cada texto/número fica em `shell/inicio.js` (puro, `tests/inicio.test.mjs` e
 `tests/inicio-render.test.mjs`). Barra lateral nova em `shell/Sidebar.jsx` (5 destinos: Início, Produções, Entregas, Equipe, Créditos; Entregas ainda abre
-Produções) para todas as telas menos o Escritório, que mantém trilho + painel. Cartão "Criar novo vídeo" usa `v.falNew` (o mesmo modelo do modal Nova produção:
+Produções) para todas as telas, inclusive o Escritório (Fase 2: trilho e painel antigos removidos). Cartão "Criar novo vídeo" usa `v.falNew` (o mesmo modelo do modal Nova produção:
 `falModel(null, true)`); o botão "Nova produção" continua abrindo o modal. Status mostrados (`statusOf`): Aguardando aprovação, Gerando, Pronto, Baixado
 (só se o servidor um dia mandar `downloaded`), Cancelado, Erro; o nome nunca é o id (nome → título da IA → "Produção de DD/MM, HH:mm"). Custo, saldo, bônus e
 "≈ N vídeos" vêm de `settings.fal_offer`, `wallet` e `account.welcome` (no DEMO `fal_offer.cc` é 0 e a frase some). Tempo: `EST_WORKFLOW_S` (falBelt.js).
 
 ## Celular (< 768 px)
 `usePhone()` (`src/hooks/use-phone.js`, limite `PHONE_MQ` de `ui/mobile.js`) troca o layout no próprio componente; nada muda a partir de 768 px.
-Shell: sem trilho/painel; cabeçalho com voltar + saldo e **barra inferior** (Início, Produções, "+", Entregas, Conta; a Central é o Início). Telas em `shell/Phone.jsx`
+Shell: cabeçalho com voltar + saldo (Início e Escritório: logo, saldo, avisos e conta) e **barra inferior** (Início, Produções, "+", Entregas, Conta; a Central é o Início). Telas em `shell/Phone.jsx`
 (CSS `shell/phone.css`): Central → lista de missões em cards (`missionWord`: status em uma palavra), Missão fal → entrega no topo + esteira
-vertical (`BeltVertical`; barra por etapa = `level` da estação, calculado em `ui/falBelt.js`, a mesma fonte da esteira do desktop), Escritório → `PhoneOffice` (sem o mapa).
+vertical (`BeltVertical`; barra por etapa = `level` da estação, calculado em `ui/falBelt.js`, a mesma fonte da esteira do desktop). Escritório → o mesmo mapa com gaveta inferior (abaixo).
 Nova produção fal = `PhoneSheet` em `ui/FalWindow.jsx` (bottom sheet: prévia horizontal, nome, cenários em carrossel, plataformas em lista; `accept="image/*"` sem `capture`; CSS `ui/falModal.css`, escopo `.fm`, destaque `#5b5bd6`). Uma ação principal por tela no `Dock`
 (sticky, acima da barra inferior). Baixar vídeo/foto usa Web Share com arquivo quando `navigator.canShare` aceita (o arquivo é buscado antes do toque),
 senão o link `?download=1`. Regras: alvos >= 44 px, corpo >= 15 px, rótulos >= 13 px, sem rolagem horizontal. Lógica pura em `tests/mobile.test.mjs`.

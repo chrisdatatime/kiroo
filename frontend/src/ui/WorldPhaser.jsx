@@ -8,6 +8,7 @@ import ZoomControls from './world/ZoomControls.jsx';
 import InfoCard from './world/InfoCard.jsx';
 import { PW } from '../game/phaser/theme.js';
 import Backdrop from '../game/scenery/Backdrop.jsx';
+import { usePhone } from '../hooks/use-phone.js';
 
 // Detalhe da sala só carrega no primeiro clique numa placa
 const RoomDialog = lazyChunk(() => import('./world/RoomDialog.jsx'));
@@ -23,6 +24,9 @@ Object.entries(FILES).forEach(([path, url]) => { URLS[path.split('/').pop().repl
 const CH_FILES = import.meta.glob('../../../assets/characters/*.png', { query: '?url', import: 'default', eager: true });
 const CH_URLS = {};
 Object.entries(CH_FILES).forEach(([path, url]) => { CH_URLS[path.split('/').pop().replace(/\.png$/, '')] = url; });
+// Fase 2 do novo layout: o jogador é o kiroo do avatar da conta (user.avatar_kiroo → kirooLook), desenhado por characters.js
+// a partir do look. A folha fixa do jogador (voce.png) não é carregada; os seis agentes continuam nas folhas Kiroo.
+delete CH_URLS[CHARACTER_SHEETS.__player];
 // Caixa de clique acompanha a escala visual, centralizada nos pés do personagem.
 const T = TMJ.tilewidth;
 const humanBox = (c, who) => {
@@ -46,6 +50,7 @@ export default function WorldPhaser({ v }) {
   const viewRef = React.useRef(view); viewRef.current = view;
   const backdrop = React.useRef(null);
   const [dlg, setDlg] = React.useState({ id: null, open: false });
+  const phone = usePhone();
 
   const zoomStep = React.useCallback((dir, anchor) => {
     const cur = viewRef.current, next = stepLevel(cur.level, dir);
@@ -76,7 +81,7 @@ export default function WorldPhaser({ v }) {
     return () => { o.destroy(); office.current = null; };
   }, []);
   React.useEffect(() => { if (office.current) office.current.update(v); });
-  React.useEffect(() => { if (office.current) office.current.resize(v.vw, v.vh); }, [v.vw, v.vh]);
+  React.useEffect(() => { if (office.current && v.vw > 0 && v.vh > 0) office.current.resize(v.vw, v.vh); }, [v.vw, v.vh]);
 
   // Roda do mouse (zoom no cursor), arrastar o mapa (botão do meio em qualquer ponto do mundo, ou esquerdo no chão) e + / -.
   React.useEffect(() => {
@@ -125,6 +130,9 @@ export default function WorldPhaser({ v }) {
     const onAux = (e) => { if (e.button === 1 && inWorld(e.target)) e.preventDefault(); };
     const onKey = (e) => {
       if (e.ctrlKey || e.metaKey || e.altKey || typing(e.target) || (e.target && e.target.closest && e.target.closest('[role="dialog"]'))) return;
+      // + / − só com o escritório focado (mapa ou raiz do app), nunca com o foco no menu lateral, na barra superior ou no painel
+      const t = e.target, inMap = !!(t && t.closest && t.closest('.of-map'));
+      if (!inMap && !(t && t.classList && t.classList.contains('pv')) && t !== document.body) return;
       const k = e.key;
       if (k === '+' || k === '=' || e.code === 'NumpadAdd') { e.preventDefault(); zoomStep(1); }
       else if (k === '-' || k === '_' || e.code === 'NumpadSubtract') { e.preventDefault(); zoomStep(-1); }
@@ -157,8 +165,10 @@ export default function WorldPhaser({ v }) {
         {v.rooms.filter((r) => r.placed).map((r) => (
           <InfoCard key={r.id} title={r.name} subtitle={r.who ? `${r.who}${r.role ? ' · ' + r.role : ''}` : ''} status={r.status} need={r.need}
             onGo={r.go} onOpen={r.agent ? r.work : null}>
-            <button className={'px-sign' + (r.need ? ' px-sign-need' : '')} onClick={(e) => { e.stopPropagation(); setDlg({ id: r.id, open: true }); }}
-              aria-label={`${r.name}: ${r.status}. Ver detalhes`} aria-haspopup="dialog" style={{ left: r.x, top: r.y }}>
+            <button className={'px-sign' + (r.need ? ' px-sign-need' : '')}
+              // celular: no ajuste à tela a placa cobre a mesa; tocar nela anda até a sala e abre a gaveta do agente (sem diálogo)
+              onClick={(e) => { e.stopPropagation(); if (phone) r.go(); else setDlg({ id: r.id, open: true }); }}
+              aria-label={phone ? `${r.name}: ${r.status}. Ir até a sala` : `${r.name}: ${r.status}. Ver detalhes`} aria-haspopup={phone ? undefined : 'dialog'} style={{ left: r.x, top: r.y }}>
               {r.need && <i className="px-sign-alert" aria-hidden="true">!</i>}
               <strong>{r.name}</strong>
               {r.status && <span>{r.status}</span>}
@@ -173,13 +183,20 @@ export default function WorldPhaser({ v }) {
             <InfoCard key={c.id} title={c.name || c.tagText} subtitle={[c.role, room && room.name].filter(Boolean).join(' · ')} status={c.status} need={c.need} active={c.work}
               onTalk={c.click} onOpen={room ? room.work : null}>
               <button className="px-char" data-walk={c.walking ? '1' : undefined} onClick={c.click} aria-label={c.aria} style={{ ...humanBox(c, c.id), zIndex: c.z }}>
-                {(c.need || c.work || c.near) && c.status && <span className={'px-bubble' + (c.need ? ' px-bubble-need' : '')}>{c.status}</span>}
+                {/* perto do jogador o balão "E · Falar com" e o painel já dizem o estado: o status do agente não cobre o balão */}
+                {(c.need || c.work) && !c.near && c.status && <span className={'px-bubble' + (c.need ? ' px-bubble-need' : '')}>{c.status}</span>}
               </button>
             </InfoCard>
           );
         })}
 
-        <div aria-label="Você" className="px-char px-me" style={{ ...humanBox(v.pl, '__player'), zIndex: v.pl.z }} />
+        <div aria-label="Você" className="px-char px-me" style={{ ...humanBox(v.pl, '__player'), zIndex: v.nearTip ? 1000 : v.pl.z }}>
+          {v.nearTip && (
+            <button type="button" className="of-near" onClick={(e) => { e.stopPropagation(); v.useNear(); }} aria-label={`${v.nearTip.label} (tecla E)`}>
+              <kbd aria-hidden="true">{v.nearTip.key}</kbd>{v.nearTip.label}
+            </button>
+          )}
+        </div>
       </div>
 
       {v.celebrate && (
