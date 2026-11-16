@@ -60,3 +60,10 @@ export function useScrollVar(from = 0.9, to = 0.35) {
   }, [from, to]);
   return ref;
 }
+
+/** Botão de entrada da landing. Com `href` (landing da raiz, kiroo.io) vira link de página inteira para o app;
+ *  sem `href` (home dentro do SPA) continua <button> com `onClick`. Mesmas classes e conteúdo nos dois casos. */
+export function Cta({ href, onClick, children, ...rest }) {
+  return href ? React.createElement('a', { href, ...rest }, children)
+    : React.createElement('button', { type: 'button', onClick, ...rest }, children);
+}

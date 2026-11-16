@@ -32,9 +32,10 @@ import time
 import webbrowser
 import zlib
 from dataclasses import dataclass, field
+from html import escape as html_escape
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, unquote, urlencode, urlparse
+from urllib.parse import parse_qs, parse_qsl, unquote, urlencode, urlparse
 
 from .. import agent_config, asaas as asaas_mod, creative_options, fal_contract, mailer, paid_gate, payments, plans, site_info, welcome
 from ..prompts import production as prompts
@@ -97,6 +98,11 @@ def _csp(script: str) -> str:
 CSP_APP = _csp("'self'")
 CSP_PANEL = _csp("'self' 'unsafe-inline'")
 HSTS = "max-age=31536000"
+# Host da raiz (STUDIO_LANDING_HOST): só a landing, as páginas legais e estes arquivos públicos; o resto vai para o app.
+LANDING_PATHS = {"/healthz", "/readyz", *LEGAL_PAGES, *LEGAL_ASSETS,
+                 *(f"/{n}" for n in BRAND_FILES if n != "manifest.webmanifest")}
+TRACKING_PARAMS = re.compile(r"^(utm_[a-z]+|gclid|fbclid|msclkid)$")   # "/" com só estes na query continua na landing
+NO_INDEX = "noindex, nofollow"
 HASHED_ASSET = re.compile(r".+-[A-Za-z0-9_-]{8,}\.[A-Za-z0-9]+$")   # nome com hash do Vite: index-BO_rcp--.js
 COMPRESSIBLE = {"text/html", "text/css", "text/javascript", "application/javascript", "application/json", "image/svg+xml",
                 "application/manifest+json", "text/plain"}
@@ -245,6 +251,15 @@ class App:
         self.public_host = (public_host or cfg.public_host or "").lower() or None
         if self.public_host:
             self.allowed_hosts = self.allowed_hosts | {self.public_host}
+        # Raiz x app (opcional): kiroo.io serve só a landing e as páginas legais; app.kiroo.io, todo o app.
+        self.landing_host, self.app_url = cfg.landing_host, cfg.app_url
+        self.app_host = urlparse(self.app_url).netloc if self.app_url else None
+        if self.landing_host:
+            if not self.app_url:
+                raise ValueError("STUDIO_LANDING_HOST exige STUDIO_APP_URL (ex.: https://app.kiroo.io)")
+            if self.app_host in (self.landing_host, "www." + self.landing_host):
+                raise ValueError("STUDIO_APP_URL precisa de um host diferente do STUDIO_LANDING_HOST")
+            self.allowed_hosts = self.allowed_hosts | {self.landing_host, "www." + self.landing_host, self.app_host}
         self.secure_cookie = secure_cookie if secure_cookie is not None else cfg.secure_cookie
         self.signup = signup or cfg.signup           # closed | invite | open (padrão closed; não depende do host)
         if self.signup not in ("closed", "invite", "open"):
@@ -621,7 +636,68 @@ class App:
             body["warnings"] = ["backup_not_configured"]
         return _json(200 if ok else 503, body)
 
+    # ------------------------------------------------------------------ hosts: raiz (landing) x app
     def handle(self, method: str, raw_path: str, headers: dict, body: bytes, peer: str = "") -> Response:
+        """Com STUDIO_LANDING_HOST definida, separa a raiz (landing), o www e o host do app; os demais hosts (e tudo,
+        quando a variável está vazia) seguem direto para o roteamento de sempre."""
+        if self.landing_host:
+            host = next((v for k, v in headers.items() if k.title() == "Host"), "").strip().lower()
+            if host in (self.landing_host, "www." + self.landing_host, self.app_host):
+                return self._split_host(host, method, raw_path, headers, body, peer)
+        return self._handle(method, raw_path, headers, body, peer)
+
+    def _moved(self, location: str, method: str) -> Response:
+        """301 (308 fora de GET/HEAD, para não trocar o método). O destino é sempre montado a partir da configuração
+        (STUDIO_APP_URL ou STUDIO_LANDING_HOST) mais o caminho da própria requisição: nunca de um parâmetro."""
+        return Response(301 if method in ("GET", "HEAD") else 308, "text/plain; charset=utf-8", b"",
+                        headers={"Location": location, "Cache-Control": "no-cache"})
+
+    def _split_host(self, host: str, method: str, raw_path: str, headers: dict, body: bytes, peer: str) -> Response:
+        raw, _, query_s = raw_path.split("#", 1)[0].partition("?")   # sem urlparse: "//evil.com" não vira um host
+        path = "/" + raw.lstrip("/")           # "//evil.com" vira "/evil.com": o Location nunca sai do nosso host
+        tail = path + (f"?{query_s}" if query_s else "")
+        if host == "www." + self.landing_host:
+            return self._moved(f"https://{self.landing_host}{tail}", method)
+        if host == self.app_host:              # app.kiroo.io: nada indexável; as páginas legais vivem na raiz
+            if path in LEGAL_PAGES:
+                resp = self._moved(f"https://{self.landing_host}{tail}", method)
+            elif method == "GET" and path == "/robots.txt":
+                resp = Response(200, "text/plain; charset=utf-8", b"User-agent: *\nDisallow: /\n")
+            else:
+                resp = self._handle(method, raw_path, headers, body, peer)
+            return dataclasses.replace(resp, headers={**resp.headers, "X-Robots-Tag": NO_INDEX})
+        # raiz (kiroo.io): só GET, só a lista fechada; nunca sessão nem cookie
+        if method != "GET":
+            return self._moved(f"{self.app_url}{tail}", method)
+        query = parse_qsl(query_s, keep_blank_values=True)
+        if path == "/" and all(TRACKING_PARAMS.match(k) for k, _ in query):
+            resp = self._landing_page()
+        elif path == "/robots.txt":
+            resp = Response(200, "text/plain; charset=utf-8",
+                            f"User-agent: *\nAllow: /\n\nSitemap: https://{self.landing_host}/sitemap.xml\n".encode())
+        elif path == "/sitemap.xml":
+            resp = Response(200, "application/xml; charset=utf-8", (
+                '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+                f"  <url><loc>https://{self.landing_host}/</loc></url>\n</urlset>\n").encode())
+        elif path in LANDING_PATHS or path.startswith("/assets/"):
+            resp = self._handle(method, raw_path, headers, body, peer)
+        else:
+            return self._moved(f"{self.app_url}{tail}", method)
+        resp.headers.pop("Set-Cookie", None)   # defesa: nenhuma rota da lista mexe em sessão, e assim continua
+        return resp
+
+    def _landing_page(self) -> Response:
+        """frontend/dist/landing.html (entrada própria do Vite: só a landing, sem o app). Endereços vêm da configuração."""
+        f = GAME_DIST / "landing.html"
+        if not f.is_file():
+            return Response(503, "text/plain; charset=utf-8", "landing não construída (npm run build)".encode())
+        esc = lambda v: html_escape(v, quote=True)
+        page = (f.read_text(encoding="utf-8").replace("__LANDING_ORIGIN__", esc(f"https://{self.landing_host}"))
+                .replace("__APP_LOGIN_URL__", esc(f"{self.app_url}/login")).replace("__SIGNUP__", esc(self.signup)))
+        return Response(200, "text/html; charset=utf-8", page.encode("utf-8"), headers={"Cache-Control": "no-cache"},
+                        compress=True)
+
+    def _handle(self, method: str, raw_path: str, headers: dict, body: bytes, peer: str = "") -> Response:
         headers = {k.title(): v for k, v in headers.items() if k.title() != "_Peer"}   # chaves canônicas; _Peer não vem do cliente
         if peer:
             headers["_Peer"] = peer

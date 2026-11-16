@@ -7,7 +7,7 @@ import { SHOWCASE, HAS_VIDEO } from './showcase.js';
 import { ROOMS, IMG, fmtTC, fmtFormat } from './stage.js';
 import { AgentHead } from '../shell/AgentHead.jsx';
 import Stage, { Portrait } from './Stage.jsx';
-import { go, useMedia, useInView, useScrollVar } from './util.js';
+import { Cta, go, useMedia, useInView, useScrollVar } from './util.js';
 import './landing.css';
 
 // Home pública (antes do login). Direção de arte: "bastidor em pixel, resultado em filme".
@@ -217,7 +217,7 @@ const LEDGER = [
   ['Débito ou estorno', 'Falhou, o crédito volta.'],
 ];
 
-function Credits({ start, signupOpen }) {
+function Credits({ start, signupOpen, href }) {
   const [ref, inView] = useInView();
   return (
     <section id="planos" className={'lp-cred lp-pad' + (inView ? ' is-in' : '')} ref={ref} aria-labelledby="lp-pl-t" tabIndex={-1}>
@@ -248,7 +248,7 @@ function Credits({ start, signupOpen }) {
         <div className="lp-cred-plan">
           <p className="lp-mono">Planos · em breve</p>
           <p>Por enquanto, os créditos são liberados pelo administrador do estúdio. O DEMO mostra tudo sem custo.</p>
-          <button type="button" className="lp-btn is-line" onClick={start}><span>{signupOpen ? 'Começar no DEMO' : 'Entrar no estúdio'}</span><ArrowRight size={16} aria-hidden="true" /></button>
+          <Cta href={href} className="lp-btn is-line" onClick={start}><span>{signupOpen ? 'Começar no DEMO' : 'Entrar no estúdio'}</span><ArrowRight size={16} aria-hidden="true" /></Cta>
         </div>
       </div>
     </section>
@@ -269,7 +269,7 @@ const FAQ = [
 ];
 
 /* ------------------------------------------------------------------ encerramento: a sede à noite, lanterna no cursor */
-function Finale({ start, startLabel, onEnter, NAV }) {
+function Finale({ start, startLabel, onEnter, NAV, href }) {
   const [ref, inView] = useInView({ rootMargin: '0px 0px -30% 0px' });
   const box = React.useRef(null);
   const raf = React.useRef(0);
@@ -294,7 +294,7 @@ function Finale({ start, startLabel, onEnter, NAV }) {
           </div>
           <h2 className="lp-end-t">O que vamos<br />criar hoje?</h2>
           <p className="lp-end-p">Mande as fotos de um produto e acompanhe a equipe montar o primeiro vídeo.</p>
-          <button type="button" className="lp-btn is-orange is-lg" onClick={start}><span>{startLabel}</span><ArrowRight size={18} aria-hidden="true" /></button>
+          <Cta href={href} className="lp-btn is-orange is-lg" onClick={start}><span>{startLabel}</span><ArrowRight size={18} aria-hidden="true" /></Cta>
         </div>
       </div>
       <div className="lp-foot lp-pad">
@@ -302,7 +302,7 @@ function Finale({ start, startLabel, onEnter, NAV }) {
         <nav aria-label="Rodapé" className="lp-foot-links">
           {NAV.map(([id, l]) => <a key={id} href={'#' + id} onClick={go(id)}>{l}</a>)}
           <a href="#duvidas" onClick={go('duvidas')}>Dúvidas</a>
-          <button type="button" onClick={() => onEnter('login')}>Entrar</button>
+          <Cta href={href} onClick={() => onEnter('login')}>Entrar</Cta>
         </nav>
         <p className="lp-foot-legal">
           Arte da sede: Modern Interiors e Modern Office por LimeZu (<a href="https://limezu.itch.io/moderninteriors" target="_blank" rel="noopener noreferrer">limezu.itch.io</a>).{' '}
@@ -314,7 +314,9 @@ function Finale({ start, startLabel, onEnter, NAV }) {
 }
 
 /* ------------------------------------------------------------------ página */
-export default function Landing({ onEnter, signupOpen }) {
+// `loginHref` (só na landing da raiz): todos os botões de entrada viram links absolutos para o app (`STUDIO_APP_URL/login`).
+export default function Landing({ onEnter, signupOpen, loginHref }) {
+  const href = loginHref || undefined;
   const start = () => onEnter(signupOpen ? 'signup' : 'login');
   const startLabel = signupOpen ? 'Começar a criar' : 'Entrar no estúdio';
   React.useEffect(() => { document.title = 'Kiroo — Estúdio criativo de vídeos com IA'; return () => { document.title = 'Kiroo'; }; }, []);
@@ -331,14 +333,14 @@ export default function Landing({ onEnter, signupOpen }) {
             {NAV.map(([id, l]) => <li key={id}><a href={'#' + id} onClick={go(id)}>{l}</a></li>)}
           </ul>
           <div className="lp-nav-cta">
-            {signupOpen && <button type="button" className="lp-btn is-quiet" onClick={() => onEnter('login')}><span>Entrar</span></button>}
-            <button type="button" className="lp-btn is-ink" onClick={signupOpen ? start : () => onEnter('login')}><span>{signupOpen ? 'Começar a criar' : 'Entrar'}</span></button>
+            {signupOpen && <Cta href={href} className="lp-btn is-quiet" onClick={() => onEnter('login')}><span>Entrar</span></Cta>}
+            <Cta href={href} className="lp-btn is-ink" onClick={signupOpen ? start : () => onEnter('login')}><span>{signupOpen ? 'Começar a criar' : 'Entrar'}</span></Cta>
           </div>
         </nav>
       </header>
 
       <main id="lp-main" tabIndex={-1}>
-        <Stage start={start} startLabel={startLabel} signupOpen={signupOpen} />
+        <Stage start={start} startLabel={startLabel} signupOpen={signupOpen} href={href} />
 
         {HAS_VIDEO && (
           <section id="exemplos" className="lp-reel lp-pad" aria-labelledby="lp-rl-t" tabIndex={-1}>
@@ -352,7 +354,7 @@ export default function Landing({ onEnter, signupOpen }) {
 
         <Today />
         <Control />
-        <Credits start={start} signupOpen={signupOpen} />
+        <Credits start={start} signupOpen={signupOpen} href={href} />
 
         <section id="duvidas" className={'lp-faq lp-pad' + (faqIn ? ' is-in' : '')} ref={faqRef} aria-labelledby="lp-faq-t" tabIndex={-1}>
           <div className="lp-faq-head">
@@ -371,7 +373,7 @@ export default function Landing({ onEnter, signupOpen }) {
         </section>
       </main>
 
-      <Finale start={start} startLabel={startLabel} onEnter={onEnter} NAV={NAV} />
+      <Finale start={start} startLabel={startLabel} onEnter={onEnter} NAV={NAV} href={href} />
     </div>
   );
 }

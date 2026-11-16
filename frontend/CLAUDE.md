@@ -47,7 +47,10 @@ senão o link `?download=1`. Regras: alvos >= 44 px, corpo >= 15 px, rótulos >=
 ## Home pública (antes do login)
 Sem sessão, o servidor manda "/" para `/login` (query preservada) e `/login` abre direto o login (`/login` com sessão volta para "/"). A home `src/landing/Landing.jsx` (lazy, CSS `landing.css` com escopo `.lp`) só aparece por "Voltar para o início"; nela, "Entrar"/"Criar conta" abrem `AuthScreen`
 (`App.state.entry` = `login` | `signup`; "Voltar para o início" limpa). `?entrar` abre direto o login; `?reset=` vai para a nova senha;
-sessão que expira com o estúdio aberto volta direto ao login. Imagens da sede e retratos: `python tools/render_home.py` gera
+sessão que expira com o estúdio aberto volta direto ao login.
+**Landing da raiz** (`STUDIO_LANDING_HOST`, ex.: kiroo.io): entrada própria do Vite `landing.html` → `src/landing/main.jsx`, só a `Landing`
+(sem App, sem sessão, sem `/api`). O servidor injeta nas metas `kiroo-login-url` (`STUDIO_APP_URL/login`) e `kiroo-signup`; com `loginHref`
+os botões de entrada viram `<a href>` absolutos (`Cta` em `landing/util.js`). Mexeu no design da home? Vale para as duas entradas. Imagens da sede e retratos: `python tools/render_home.py` gera
 `src/assets/home/` (derivado da arte LimeZu, fora do git; sem eles a home mostra superfícies neutras). Nada de depoimentos, logos ou números inventados.
 Direção de arte "bastidor em pixel, resultado em filme": composição fluida (margem `--gut`, mídia de ponta a ponta), papel areia, claquete/REC/timecode
 como linguagem; laranja = luz de REC. Formato e duração de vídeo só do próprio arquivo (`stage.js` → `fmtFormat`/`fmtTC`).

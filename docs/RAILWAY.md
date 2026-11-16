@@ -191,8 +191,9 @@ curl -fsS https://app.kiroo.io/readyz
 
 ## 8. Domínio `app.kiroo.io` atrás da Cloudflare
 
-Arquitetura: `kiroo.io` = landing e páginas legais (depois, fora deste serviço); `app.kiroo.io` = este app
-(login em `https://app.kiroo.io/login`). O `kiroo.app` vira domínio **secundário**: tudo nele responde 301 para
+Arquitetura: `kiroo.io` = landing e páginas legais; `app.kiroo.io` = o app (login em `https://app.kiroo.io/login`).
+Os dois saem do **mesmo serviço**: quem separa é o host (`STUDIO_LANDING_HOST=kiroo.io` e
+`STUDIO_APP_URL=https://app.kiroo.io`; ver "Raiz `kiroo.io`" abaixo). O `kiroo.app` vira domínio **secundário**: tudo nele responde 301 para
 `app.kiroo.io`, **exceto** o caminho do webhook do Asaas, até o webhook ser trocado no painel do Asaas e confirmado.
 
 **No Railway:**
@@ -244,6 +245,44 @@ Pontos em que isso costuma dar errado:
   restrição de desligar o proxy vale para nomes mais profundos, tipo `a.b.kiroo.io`.
 - DNS pode levar horas para propagar. O Railway tenta emitir o certificado por até 72 h.
 - O Hobby permite **2 domínios por serviço**: durante a transição são exatamente `app.kiroo.io` e `staging.kiroo.app`.
+
+**Raiz `kiroo.io` (landing) e `www`.**
+
+No serviço (Variables):
+
+- `STUDIO_LANDING_HOST=kiroo.io` e `STUDIO_APP_URL=https://app.kiroo.io` (as duas juntas).
+- `STUDIO_ALLOWED_HOSTS=kiroo.io,www.kiroo.io,app.kiroo.io,staging.kiroo.app` (tire `staging.kiroo.app` quando o
+  webhook do Asaas tiver migrado, como descrito acima).
+- `STUDIO_TERMS_URL=https://kiroo.io/termos` e `STUDIO_PRIVACY_URL=https://kiroo.io/privacidade`.
+
+No Railway: **+ Custom Domain** → `kiroo.io`, e anote o `CNAME` e o `TXT` como no passo 3.
+**Atenção ao limite do Hobby (2 domínios por serviço):** `app.kiroo.io` + `staging.kiroo.app` já ocupam os dois.
+Adicione `kiroo.io` só depois de remover `staging.kiroo.app` (webhook migrado) ou com um plano que permita mais.
+O `www` **não** precisa de domínio no Railway: ele é resolvido na Cloudflare.
+
+Na Cloudflare (zona do `kiroo.io`):
+
+11. **DNS** → `CNAME`, nome `@` (a raiz; a Cloudflare achata o CNAME), destino = o valor do Railway, **Proxied**.
+    `TXT` de verificação exatamente como o Railway mostrou.
+12. **DNS** → `CNAME`, nome `www`, destino `kiroo.io`, **Proxied** (só para a Cloudflare receber o tráfego).
+13. **Rules** → **Redirect Rules** → **Create rule** `www-para-raiz`: condição `http.host eq "www.kiroo.io"`,
+    ação **Dynamic** `concat("https://kiroo.io", http.request.uri.path)`, **301**, **Preserve query string** ligado.
+    (Se a regra faltar, o próprio serviço também responde 301 do `www` para a raiz, desde que o host chegue até ele.)
+
+**Deu certo quando:**
+
+```bash
+curl -sI https://kiroo.io/ | head -1                      # 200 (landing)
+curl -sI https://kiroo.io/login | grep -i location        # https://app.kiroo.io/login
+curl -sI "https://kiroo.io/?reset=abc" | grep -i location  # https://app.kiroo.io/?reset=abc
+curl -sI https://www.kiroo.io/termos | grep -i location   # https://kiroo.io/termos
+curl -sI https://app.kiroo.io/termos | grep -i location   # https://kiroo.io/termos
+curl -sI https://app.kiroo.io/login | grep -i x-robots    # noindex, nofollow
+curl -s https://kiroo.io/robots.txt                        # Allow: / + Sitemap
+```
+
+O cookie de sessão é **host-only** (sem `Domain`): a sessão do `app.kiroo.io` nunca é enviada para a raiz.
+A landing da raiz é uma página própria do build (`frontend/landing.html`): não carrega o app nem chama `/api`.
 
 **Regras de cache na Cloudflare.** Por padrão a Cloudflare não guarda HTML, mas é melhor ser explícito
 para que nenhuma resposta de API ou de mídia privada fique em cache compartilhado:

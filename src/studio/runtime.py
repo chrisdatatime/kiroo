@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import ipaddress
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from .shutdown import STOP_GRACE_DEFAULT_S, budget_error, parse_seconds, parse_settle
 
@@ -24,6 +26,34 @@ class InstanceLockError(RuntimeError):
 
 def _csv(value: str | None) -> list[str]:
     return [v.strip() for v in (value or "").split(",") if v.strip()]
+
+
+HOST_RE = re.compile(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*(:\d{1,5})?$")
+
+
+def parse_landing_host(value: str | None) -> str | None:
+    """STUDIO_LANDING_HOST: só o nome do host (ex.: kiroo.io), sem esquema nem caminho. Vazio: desligado."""
+    v = (value or "").strip().lower()
+    if not v:
+        return None
+    if not HOST_RE.match(v) or v.startswith("www."):
+        raise ValueError(f"STUDIO_LANDING_HOST deve ser só o host da raiz, ex.: kiroo.io (recebido {v!r})")
+    return v
+
+
+def parse_app_url(value: str | None) -> str | None:
+    """STUDIO_APP_URL: origem do app (ex.: https://app.kiroo.io), sem caminho, query nem fragmento. Só https://,
+    exceto localhost/127.0.0.1 (testes locais). Devolve a origem normalizada, sem barra no fim."""
+    v = (value or "").strip()
+    if not v:
+        return None
+    u = urlsplit(v)
+    host = (u.netloc or "").lower()
+    local = host.split(":")[0] in ("localhost", "127.0.0.1")
+    if (u.scheme != "https" and not (u.scheme == "http" and local)) or not HOST_RE.match(host) \
+            or u.path not in ("", "/") or u.query or u.fragment or u.username or u.password:
+        raise ValueError(f"STUDIO_APP_URL deve ser uma origem https://, ex.: https://app.kiroo.io (recebido {v!r})")
+    return f"{u.scheme}://{host}"
 
 
 def _choice(name: str, value: str | None, allowed: tuple[str, ...], default: str) -> str:
@@ -42,6 +72,8 @@ class ServerConfig:
     trust_proxy: str = "none"
     public_host: str | None = None
     allowed_hosts: tuple[str, ...] = ()
+    landing_host: str | None = None     # kiroo.io: só a landing e as páginas legais (ver App._split_host)
+    app_url: str | None = None          # https://app.kiroo.io: destino dos 301 da raiz e dos botões da landing
     secure_cookie: bool = False
     bootstrap_admin_email: str | None = None
     shutdown_grace_s: float = 25.0
@@ -66,6 +98,8 @@ class ServerConfig:
             trust_proxy=_choice("STUDIO_TRUST_PROXY", get("STUDIO_TRUST_PROXY"), TRUST_PROXY_MODES, "none"),
             public_host=(get("STUDIO_PUBLIC_HOST") or "").strip().lower() or None,
             allowed_hosts=tuple(h.lower() for h in _csv(get("STUDIO_ALLOWED_HOSTS"))),
+            landing_host=parse_landing_host(get("STUDIO_LANDING_HOST")),
+            app_url=parse_app_url(get("STUDIO_APP_URL")),
             secure_cookie=get("STUDIO_SECURE_COOKIE") == "1",
             bootstrap_admin_email=(get("STUDIO_BOOTSTRAP_ADMIN_EMAIL") or "").strip().lower() or None,
             shutdown_grace_s=parse_seconds("STUDIO_SHUTDOWN_GRACE_S", get("STUDIO_SHUTDOWN_GRACE_S"), 25.0, 0.0),

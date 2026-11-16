@@ -3,7 +3,7 @@ import { ArrowRight } from 'lucide-react';
 import { ART, AGENT_PINS } from './art.js';
 import { ACTS, ROOMS, IMG, WIDE, clamp01, ease, mix, mixRect, fitCamera, mixCam, pan, fmtTC } from './stage.js';
 import { AgentHead } from '../shell/AgentHead.jsx';
-import { useMedia, go } from './util.js';
+import { Cta, useMedia, go } from './util.js';
 
 /* Abertura + bastidores em três atos, com uma única câmera contínua.
    Uma camada fixa (sticky) desenha o quadro com a sede. O quadro segue "encaixes" invisíveis no conteúdo:
@@ -52,7 +52,7 @@ function Tags() {
   );
 }
 
-export default function Stage({ start, startLabel, signupOpen }) {
+export default function Stage({ start, startLabel, signupOpen, href }) {
   const reduced = useMedia('(prefers-reduced-motion: reduce)');
   const wide = useMedia('(min-width: 900px)');
   const stage = React.useRef(null), cam = React.useRef(null), frame = React.useRef(null), scene = React.useRef(null);
@@ -161,7 +161,7 @@ export default function Stage({ start, startLabel, signupOpen }) {
           <div className="lp-open-row">
             <p className="lp-lead">Uma equipe de agentes planeja, cria, anima, revisa e edita. Você dirige e aprova o que importa.</p>
             <div className="lp-open-cta">
-              <button type="button" className="lp-btn is-ink is-lg" onClick={start}><span>{startLabel}</span><ArrowRight size={18} aria-hidden="true" /></button>
+              <Cta href={href} className="lp-btn is-ink is-lg" onClick={start}><span>{startLabel}</span><ArrowRight size={18} aria-hidden="true" /></Cta>
               <a className="lp-btn is-line is-lg" href="#bastidores" onClick={go('bastidores')}><span>Ver os bastidores</span></a>
             </div>
             <p className="lp-open-note">
