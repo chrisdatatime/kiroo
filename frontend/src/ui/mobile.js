@@ -1,8 +1,8 @@
-// Celular (<= 640 px): lógica pura da interface mobile-first (tests/mobile.test.mjs). Sem React.
+// Celular (< 768 px): lógica pura da interface mobile-first (tests/mobile.test.mjs). Sem React.
 // O layout de celular troca a lateral pela barra inferior, abre a Nova produção em tela cheia, desenha a esteira na
 // vertical e simplifica o Escritório. Nada aqui muda o desktop.
 
-export const PHONE_MAX = 640;
+export const PHONE_MAX = 767;
 export const PHONE_MQ = `(max-width: ${PHONE_MAX}px)`;
 
 // Status da missão em UMA palavra, com tom (cor + texto: o estado nunca depende só da cor).

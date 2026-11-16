@@ -770,14 +770,14 @@ export default class App extends React.Component {
     await this.refresh();
   }
   // Modal "Nova produção" (só envio).
-  falModel(P) {
+  falModel(P, forceDraft = false) {
     const s = this.state;
-    if (!falActive(s.S, P, s.draftMode)) return null;
+    if (!falActive(s.S, P, s.draftMode || forceDraft)) return null;
     const f = s.fal;
     const scene = effectiveScene(s.S, f.scene), platform = effectivePlatform(s.S, f.platform);
     const demo = !!(s.S && s.S.settings.mode !== 'real');
     const reuseBlocked = this.reuseIsBlocked(scene, platform);
-    return { P: P && P.engine === 'fal' ? P : null, draft: !!s.draftMode,
+    return { P: P && P.engine === 'fal' ? P : null, draft: !!s.draftMode || forceDraft,
       scene, scenes: availableScenes(s.S), setScene: (id) => { const sc = availableScenes(s.S).find((x) => x.id === id); if (sc && !sc.locked) this.setFal({ scene: id }); },
       platform, platforms: availablePlatforms(s.S), setPlatform: (id) => this.setFal({ platform: id }), receive: receiveLine(platformLabel(s.S, platform)),
       sceneName: sceneLabel(s.S, scene), file: f.file, name: f.name, setName: (e) => this.setFal({ name: e.target.value }),
@@ -1221,6 +1221,8 @@ export default class App extends React.Component {
       setEdit: (style, music) => this.setEdit(style, music), caption: s.caption || '', onCaption: (e) => this.setState({ caption: e.target.value }),
       exported: st === 'exportado', exportVideo: () => this.exportVideo(),
       fal: this.falModel(P),
+      // Início: o mesmo envio do modal "Nova produção" (foto + cenário + plataforma), embutido no cartão "Criar novo vídeo"
+      falNew: this.falModel(null, true), offer: offerFor(s.S),
     };
   }
 

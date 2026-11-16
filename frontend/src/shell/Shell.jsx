@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   ArrowLeft, Bell, Bot, Building2, CheckCheck, ChevronDown, CircleDollarSign, GraduationCap, Home, Info, LogOut, PanelLeft, Pause,
-  Plus, Search, Settings, Shield, Sparkles, UserRound, UsersRound, Workflow,
+  Package, Plus, Search, Settings, Shield, Sparkles, UserRound, UsersRound, Workflow,
 } from 'lucide-react';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
@@ -14,6 +14,7 @@ import { Avatar, AGENT_STATE } from './Central.jsx';
 import { AgentHead } from './AgentHead.jsx';
 import { usePhone } from '../hooks/use-phone.js';
 import { FalChips } from '../ui/FalMission.jsx';
+import Sidebar from './Sidebar.jsx';
 import compactLogo from '../assets/brand/icone-app-preto.svg';
 import wordmark from '../assets/brand/wordmark-preto-laranja.svg';
 import './shell.css';
@@ -22,8 +23,8 @@ import './phone.css';
 // Layout (padrão de escritório virtual): trilho de ícones à esquerda, painel colapsável com o contexto do estúdio
 // (próxima ação, equipe, missões) e a área de trabalho num cartão arredondado à direita.
 export const VIEWS = [
-  { id: 'central', label: 'Central', title: 'Central', icon: Home },
-  { id: 'missao', label: 'Missões', title: 'Missão', icon: Workflow },
+  { id: 'central', label: 'Início', title: 'Início', icon: Home },
+  { id: 'missao', label: 'Produções', title: 'Produção', icon: Workflow },
   { id: 'equipe', label: 'Agentes', title: 'Equipe', icon: UsersRound },
   { id: 'escritorio', label: 'Escritório', title: 'Escritório virtual', icon: Building2 },
 ];
@@ -42,21 +43,11 @@ function RailTip({ label, children, kbd }) {
   );
 }
 
-// Menu do estúdio (logo no topo do trilho)
-function WorkspaceMenu({ v, newMission }) {
-  const ws = v.account?.workspace?.name || 'Kiroo';
+// Itens do menu do estúdio (usados no trilho do Escritório e no seletor da barra lateral nova)
+export function WorkspaceItems({ v, newMission }) {
   return (
-    <DropdownMenu>
-      <RailTip label={ws}>
-        <DropdownMenuTrigger asChild>
-          <button type="button" className="pv-ws" aria-label={`Menu do estúdio ${ws}`}>
-            <img src={compactLogo} alt="" />
-            <span className="pv-ws-caret" aria-hidden="true"><ChevronDown size={10} strokeWidth={3} /></span>
-          </button>
-        </DropdownMenuTrigger>
-      </RailTip>
-      <DropdownMenuContent side="right" align="start" sideOffset={10} className="pv-menu">
-        <div className="pv-menu-cta"><button type="button" className="pv-cta" onClick={newMission}><Plus size={16} aria-hidden="true" />Nova missão</button></div>
+    <>
+        <div className="pv-menu-cta"><button type="button" className="pv-cta" onClick={newMission}><Plus size={16} aria-hidden="true" />Nova produção</button></div>
         <DropdownMenuItem onSelect={() => v.openPrefs('prefs')}><Settings />Preferências</DropdownMenuItem>
         <DropdownMenuItem onSelect={() => v.openPrefs('pilot')}><Bot />Piloto: {v.pilot.label}</DropdownMenuItem>
         <DropdownMenuItem onSelect={() => v.openPrefs('credits')}><CircleDollarSign />Créditos e extrato</DropdownMenuItem>
@@ -70,13 +61,30 @@ function WorkspaceMenu({ v, newMission }) {
         </>)}
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={v.logout}><LogOut />Sair</DropdownMenuItem>
-      </DropdownMenuContent>
+    </>
+  );
+}
+
+// Menu do estúdio (logo no topo do trilho)
+function WorkspaceMenu({ v, newMission }) {
+  const ws = v.account?.workspace?.name || 'Kiroo';
+  return (
+    <DropdownMenu>
+      <RailTip label={ws}>
+        <DropdownMenuTrigger asChild>
+          <button type="button" className="pv-ws" aria-label={`Menu do estúdio ${ws}`}>
+            <img src={compactLogo} alt="" />
+            <span className="pv-ws-caret" aria-hidden="true"><ChevronDown size={10} strokeWidth={3} /></span>
+          </button>
+        </DropdownMenuTrigger>
+      </RailTip>
+      <DropdownMenuContent side="right" align="start" sideOffset={10} className="pv-menu"><WorkspaceItems v={v} newMission={newMission} /></DropdownMenuContent>
     </DropdownMenu>
   );
 }
 
 // Atividade: o que precisa de você. Lido = guardado neste navegador; o ponto azul some, o item continua até ser resolvido.
-function Activity({ v }) {
+export function Activity({ v, side = 'right', topbar = false }) {
   const [seen, setSeen] = React.useState(() => LS.get('bc.seen', []));
   const [open, setOpen] = React.useState(false);
   const key = (a) => `${a.id}:${a.text}`;
@@ -91,13 +99,13 @@ function Activity({ v }) {
     <Popover open={open} onOpenChange={setOpen}>
       <RailTip label="Atividade">
         <PopoverTrigger asChild>
-          <button type="button" className="pv-rail-btn" aria-label={`Atividade${unread ? `, ${unread} não lidas` : ''}`} data-active={open || undefined}>
+          <button type="button" className={topbar ? 'in-bell' : 'pv-rail-btn'} aria-label={`Atividade${unread ? `, ${unread} não lidas` : ''}`} data-active={open || undefined}>
             <Bell size={20} strokeWidth={1.8} aria-hidden="true" />
             {unread > 0 && <span className="pv-badge" aria-hidden="true">{unread}</span>}
           </button>
         </PopoverTrigger>
       </RailTip>
-      <PopoverContent side="right" align="start" sideOffset={10} className="pv-activity" onOpenAutoFocus={(e) => e.preventDefault()}>
+      <PopoverContent side={side} align={topbar ? 'end' : 'start'} sideOffset={10} className="pv-activity" onOpenAutoFocus={(e) => e.preventDefault()}>
         <header><h2>Atividade</h2>
           <RailTip label="Marcar tudo como lido"><button type="button" className="pv-icon-btn" onClick={markAll} aria-label="Marcar tudo como lido" disabled={!unread}><CheckCheck size={17} aria-hidden="true" /></button></RailTip>
         </header>
@@ -166,14 +174,14 @@ function Panel({ v, onCollapse, newMission }) {
           <button type="button" className="pv-mission-pick"><Workflow size={14} aria-hidden="true" /><span>{v.hasProd ? v.prodName : 'Nenhuma missão aberta'}</span><ChevronDown size={14} aria-hidden="true" /></button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-64">
-          <DropdownMenuLabel>Missões</DropdownMenuLabel>
+          <DropdownMenuLabel>Produções</DropdownMenuLabel>
           {v.productions.length === 0 && <DropdownMenuItem disabled>Nenhuma missão ainda</DropdownMenuItem>}
           {v.productions.slice(0, 8).map((p) => (
             <DropdownMenuItem key={p.id} onSelect={p.open}>{p.current ? <CheckCheck /> : <span className="w-4" />}<span className="truncate">{p.name || p.id}</span>
               {p.status === 'cancelled' && <span className="ml-auto text-xs text-muted-foreground">Cancelada</span>}</DropdownMenuItem>
           ))}
           <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={newMission}><Plus />Nova missão</DropdownMenuItem>
+          <DropdownMenuItem onSelect={newMission}><Plus />Nova produção</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 
@@ -182,7 +190,7 @@ function Panel({ v, onCollapse, newMission }) {
         <p>{v.nextLong}</p>
         {v.nextLabel
           ? <button type="button" className="pv-cta" onClick={v.goNext}>{v.nextLabel}</button>
-          : <button type="button" className="pv-cta" onClick={newMission}><Plus size={16} aria-hidden="true" />Nova missão</button>}
+          : <button type="button" className="pv-cta" onClick={newMission}><Plus size={16} aria-hidden="true" />Nova produção</button>}
       </section>
 
       <label className="pv-search">
@@ -217,28 +225,34 @@ function Panel({ v, onCollapse, newMission }) {
   );
 }
 
-// Celular: barra inferior com 4 destinos no lugar do trilho e do painel (Missões, Escritório, Créditos, Conta).
-const ACCOUNT_WINS = ['account', 'prefs', 'pilot', 'about', 'admin'];
-function TabBar({ v }) {
+// Celular: barra inferior de 72 px: Início, Produções, "+" (nova produção), Entregas e Conta.
+// Entregas ainda não tem tela própria e abre Produções. Escritório e Créditos seguem pelo menu/saldo e pela busca.
+const ACCOUNT_WINS = ['account', 'prefs', 'pilot', 'about', 'admin', 'credits'];
+function TabBar({ v, newMission }) {
+  const waiting = v.productions.filter((p) => ['awaiting_final_review', 'paused', 'awaiting_references'].includes(p.status)).length;
+  const go = (view) => () => { if (v.win) v.closeWin(); v.setView(view); };
   const items = [
-    { id: 'missoes', label: 'Missões', icon: Workflow, on: !v.win && (v.view === 'central' || v.view === 'missao' || v.view === 'equipe'), go: () => { if (v.win) v.closeWin(); v.setView('central'); } },
-    { id: 'escritorio', label: 'Escritório', icon: Building2, on: !v.win && v.view === 'escritorio', go: () => { if (v.win) v.closeWin(); v.setView('escritorio'); } },
-    { id: 'creditos', label: 'Créditos', icon: CircleDollarSign, on: v.win === 'credits', go: () => v.openPrefs('credits') },
+    { id: 'inicio', label: 'Início', icon: Home, on: !v.win && v.view === 'central', go: go('central') },
+    { id: 'producoes', label: 'Produções', icon: Workflow, on: !v.win && v.view === 'missao', go: go('missao'), dot: waiting },
+    { id: 'nova', label: 'Nova produção', icon: Plus, plus: true, go: newMission },
+    { id: 'entregas', label: 'Entregas', icon: Package, on: false, go: go('missao') },
     { id: 'conta', label: 'Conta', icon: UserRound, on: ACCOUNT_WINS.includes(v.win), go: () => v.openPrefs('account') },
   ];
   return (
-    <nav className="pv-tabbar" aria-label="Navegação principal">
-      {items.map((x) => (
-        <button key={x.id} type="button" className="pv-tab" data-active={x.on || undefined} aria-current={x.on ? 'page' : undefined} onClick={x.go}>
-          <x.icon size={22} strokeWidth={x.on ? 2.2 : 1.8} aria-hidden="true" /><span>{x.label}</span>
-          {x.id === 'missoes' && v.attn.length > 0 && <i className="pv-tab-dot" aria-label={`${v.attn.length} pendências`} />}
-        </button>
-      ))}
+    <nav className="pv-tabbar in-tabbar" aria-label="Navegação principal">
+      {items.map((x) => x.plus
+        ? <button key={x.id} type="button" className="in-tab-plus" onClick={x.go} aria-label={x.label}><Plus size={26} aria-hidden="true" /></button>
+        : (
+          <button key={x.id} type="button" className="pv-tab" data-active={x.on || undefined} aria-current={x.on ? 'page' : undefined} onClick={x.go}>
+            <x.icon size={22} strokeWidth={x.on ? 2.2 : 1.8} aria-hidden="true" /><span>{x.label}</span>
+            {x.dot > 0 && <i className="pv-tab-dot" aria-label={`${x.dot} esperando ação`} />}
+          </button>)
+      )}
     </nav>
   );
 }
 
-const PHONE_TITLE = { central: 'Missões', equipe: 'Equipe', escritorio: 'Escritório' };
+const PHONE_TITLE = { central: 'Início', equipe: 'Equipe', escritorio: 'Escritório' };
 
 export default function Shell({ v, rootRef, stageRef, onKeyDown, onKeyUp, onBlur, children }) {
   const phone = usePhone();
@@ -254,28 +268,49 @@ export default function Shell({ v, rootRef, stageRef, onKeyDown, onKeyUp, onBlur
   React.useEffect(() => { document.title = `Kiroo — ${cur.label}`; }, [cur.label]);
   const bal = v.wallet ? (v.wallet.exempt ? 'Isento' : `${v.wallet.balance} créditos`) : '';
   const newMission = () => { v.setView('missao'); v.newProd(); };
+  const classic = v.view === 'escritorio';   // o Escritório mantém o trilho e o painel de sempre; as demais telas usam a barra lateral nova
   const falTop = v.view === 'missao' && v.falMission ? v.falMission : null;   // missão fal: topo com chips e Nova missão em accent
 
   return (
     <div ref={rootRef} tabIndex={-1} onKeyDown={onKeyDown} onKeyUp={onKeyUp} onBlur={onBlur} className="pv" data-panel={panel ? 'open' : 'closed'} data-phone={phone || undefined}
       aria-label={phone ? 'Kiroo' : 'Kiroo. Trilho de navegação, painel do estúdio e área de trabalho. Ctrl K abre a busca de comandos.'}>
       <TooltipProvider delayDuration={250}>
-        {!phone && <Rail v={v} onSearch={() => setPal(true)} newMission={newMission} />}
-        {!phone && panel && <Panel v={v} onCollapse={() => setPanel(false)} newMission={newMission} />}
+        {!phone && !classic && <Sidebar v={v} menuItems={<WorkspaceItems v={v} newMission={newMission} />} />}
+        {!phone && classic && <Rail v={v} onSearch={() => setPal(true)} newMission={newMission} />}
+        {!phone && classic && panel && <Panel v={v} onCollapse={() => setPanel(false)} newMission={newMission} />}
         <main className="pv-stage">
-          {phone ? (
+          {phone && v.view === 'central' ? (
+            <header className="pv-top pv-top-phone in-top-phone">
+              <img src={wordmark} alt="Kiroo" height="22" />
+              <span className="pv-rail-fill" />
+              {v.conn === 'erro' && <span role="alert" className="pv-status pv-status-error">Sem conexão</span>}
+              {v.mode === 'simulated' && <span className="pv-status pv-status-demo">DEMO</span>}
+              {bal && <button type="button" className="pv-top-credits" onClick={() => v.openPrefs('credits')} aria-label={`Saldo: ${bal}. Abrir créditos`}><CircleDollarSign size={17} aria-hidden="true" />{v.wallet.exempt ? 'Isento' : v.wallet.balance}</button>}
+              <Activity v={v} side="bottom" topbar />
+            </header>
+          ) : phone ? (
             <header className="pv-top pv-top-phone">
-              {v.view === 'missao' && <button type="button" className="pv-back" onClick={() => v.setView('central')} aria-label="Voltar para as missões"><ArrowLeft size={22} aria-hidden="true" /></button>}
-              <h1>{v.view === 'missao' ? (v.hasProd && v.prodName ? v.prodName : 'Missão') : (PHONE_TITLE[v.view] || cur.title)}</h1>
+              {v.view === 'missao' && <button type="button" className="pv-back" onClick={() => v.setView('central')} aria-label="Voltar para o início"><ArrowLeft size={22} aria-hidden="true" /></button>}
+              <h1>{v.view === 'missao' ? (v.hasProd && v.prodName ? v.prodName : 'Produção') : (PHONE_TITLE[v.view] || cur.title)}</h1>
               {v.conn === 'erro' && <span role="alert" className="pv-status pv-status-error">Sem conexão</span>}
               {v.mode === 'simulated' && <span className="pv-status pv-status-demo">DEMO</span>}
               <span className="pv-rail-fill" />
               {bal && <button type="button" className="pv-top-credits" onClick={() => v.openPrefs('credits')} aria-label={`Saldo: ${bal}. Abrir créditos`}><CircleDollarSign size={17} aria-hidden="true" />{v.wallet.exempt ? 'Isento' : v.wallet.balance}</button>}
-              {falTop && <button type="button" className="pv-cta pv-cta-accent pv-cta-icon" onClick={newMission} aria-label="Nova missão"><Plus size={18} aria-hidden="true" /></button>}
+              {falTop && <button type="button" className="pv-cta pv-cta-accent pv-cta-icon" onClick={newMission} aria-label="Nova produção"><Plus size={18} aria-hidden="true" /></button>}
             </header>
+          ) : !classic && v.view === 'central' ? (
+          <header className="pv-top in-top">
+            <h1>Início</h1>
+            <span className="pv-rail-fill" />
+            {v.conn === 'erro' && <span role="alert" className="pv-status pv-status-error">Sem conexão</span>}
+            {v.mode === 'simulated' && <span className="pv-status pv-status-demo" title="Nada é cobrado; imagens e vídeos são de exemplo">DEMO</span>}
+            <button type="button" className="in-search" onClick={() => setPal(true)} aria-label="Buscar produções (Ctrl K)"><Search size={16} aria-hidden="true" /><span>Buscar produções</span><kbd aria-hidden="true">Ctrl K</kbd></button>
+            <Activity v={v} side="bottom" topbar />
+            <button type="button" className="pv-cta pv-cta-sm in-new" data-tour="new-mission" onClick={newMission}><Plus size={16} aria-hidden="true" />Nova produção</button>
+          </header>
           ) : (
           <header className="pv-top">
-            {!panel && <RailTip label="Abrir painel"><button type="button" className="pv-icon-btn" onClick={() => setPanel(true)} aria-label="Abrir painel"><PanelLeft size={18} aria-hidden="true" /></button></RailTip>}
+            {!panel && classic && <RailTip label="Abrir painel"><button type="button" className="pv-icon-btn" onClick={() => setPanel(true)} aria-label="Abrir painel"><PanelLeft size={18} aria-hidden="true" /></button></RailTip>}
             <h1>{falTop ? 'Missão' : cur.title}{!falTop && v.view !== 'central' && v.prodName ? <span> · {v.prodName}</span> : null}</h1>
             {falTop && <FalChips chips={falTop.chips} />}
             {v.conn === 'erro' && <span role="alert" className="pv-status pv-status-error">Sem conexão</span>}
@@ -292,12 +327,12 @@ export default function Shell({ v, rootRef, stageRef, onKeyDown, onKeyUp, onBlur
               {bal && <button type="button" className="pv-top-btn pv-hide-sm" onClick={() => v.openPrefs('credits')}><CircleDollarSign size={15} aria-hidden="true" />{bal}</button>}
               <button type="button" className="pv-top-btn pv-hide-md" onClick={() => v.openPrefs('pilot')}><Bot size={15} aria-hidden="true" />{v.pilot.label}</button>
             </span>
-            <button type="button" className={'pv-cta pv-cta-sm' + (falTop ? ' pv-cta-accent' : '')} data-tour="new-mission" onClick={newMission}><Plus size={16} aria-hidden="true" /><span className="pv-hide-sm">Nova missão</span></button>
+            <button type="button" className={'pv-cta pv-cta-sm' + (falTop ? ' pv-cta-accent' : '')} data-tour="new-mission" onClick={newMission}><Plus size={16} aria-hidden="true" /><span className="pv-hide-sm">Nova produção</span></button>
           </header>
           )}
           <div className="pv-body" ref={stageRef} data-tour={v.view === 'escritorio' ? 'office' : undefined}>{children}</div>
         </main>
-        {phone && <TabBar v={v} />}
+        {phone && <TabBar v={v} newMission={newMission} />}
         {pal && <Palette v={v} onClose={() => setPal(false)} />}
       </TooltipProvider>
     </div>
@@ -309,7 +344,7 @@ function Palette({ v, onClose }) {
   const [sel, setSel] = React.useState(0);
   const items = React.useMemo(() => [
     ...VIEWS.map((x) => ({ id: `v-${x.id}`, label: `Ir para ${x.label}`, hint: 'Navegar', icon: 'flow', run: () => v.setView(x.id) })),
-    { id: 'new', label: 'Nova missão', hint: 'Ação', icon: 'plus', run: () => { v.setView('missao'); v.newProd(); } },
+    { id: 'new', label: 'Nova produção', hint: 'Ação', icon: 'plus', run: () => { v.setView('missao'); v.newProd(); } },
     ...(v.nextLabel ? [{ id: 'next', label: v.nextLabel, hint: v.nextLong, icon: 'arrow', run: v.goNext }] : []),
     ...v.rooms.filter((r) => r.placed).map((r) => ({ id: `r-${r.id}`, label: `Ir à sala ${r.name}`, hint: 'Escritório', icon: 'flow', run: () => { v.setView('escritorio'); r.go(); } })),
     { id: 'credits', label: 'Créditos e extrato', hint: 'Conta', icon: 'coin', run: () => v.openPrefs('credits') },

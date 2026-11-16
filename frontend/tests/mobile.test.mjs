@@ -4,7 +4,7 @@ import { falStations, EST_WORKFLOW_S } from '../src/ui/falFlow.js';
 import * as falFlow from '../src/ui/falFlow.js';
 import * as mobile from '../src/ui/mobile.js';
 
-assert.equal(PHONE_MQ, '(max-width: 640px)');
+assert.equal(PHONE_MQ, '(max-width: 767px)');
 
 // status em uma palavra (com tom)
 assert.deepEqual(missionWord({ status: 'producing' }), { word: 'Criando', tone: 'work' });

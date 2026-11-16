@@ -35,9 +35,17 @@ celular = bottom sheet. Cenário (`home_light`, `studio`, `natural`, `dark_premi
 monta tudo em `src/studio/prompts/production.py`). Miniaturas/prévia: `public/assets/scenes/<id>.jpg` (+ `-thumb.jpg`); logos: `public/assets/platforms/<id>.png`
 (sumindo graciosamente se faltarem). Lógica pura em `ui/falFlow.js`, testada em `tests/falflow.test.mjs`.
 
-## Celular (<= 640 px)
-`usePhone()` (`src/hooks/use-phone.js`, limite `PHONE_MQ` de `ui/mobile.js`) troca o layout no próprio componente; nada muda acima de 640 px.
-Shell: sem trilho/painel; cabeçalho com voltar + saldo e **barra inferior** (Missões, Escritório, Créditos, Conta). Telas em `shell/Phone.jsx`
+## Início (a antiga Central)
+`shell/Inicio.jsx` (+ `inicio.css`, escopo `in-*`) é a tela inicial; a regra de cada texto/número fica em `shell/inicio.js` (puro, `tests/inicio.test.mjs` e
+`tests/inicio-render.test.mjs`). Barra lateral nova em `shell/Sidebar.jsx` (5 destinos: Início, Produções, Entregas, Equipe, Créditos; Entregas ainda abre
+Produções) para todas as telas menos o Escritório, que mantém trilho + painel. Cartão "Criar novo vídeo" usa `v.falNew` (o mesmo modelo do modal Nova produção:
+`falModel(null, true)`); o botão "Nova produção" continua abrindo o modal. Status mostrados (`statusOf`): Aguardando aprovação, Gerando, Pronto, Baixado
+(só se o servidor um dia mandar `downloaded`), Cancelado, Erro; o nome nunca é o id (nome → título da IA → "Produção de DD/MM, HH:mm"). Custo, saldo, bônus e
+"≈ N vídeos" vêm de `settings.fal_offer`, `wallet` e `account.welcome` (no DEMO `fal_offer.cc` é 0 e a frase some). Tempo: `EST_WORKFLOW_S` (falBelt.js).
+
+## Celular (< 768 px)
+`usePhone()` (`src/hooks/use-phone.js`, limite `PHONE_MQ` de `ui/mobile.js`) troca o layout no próprio componente; nada muda a partir de 768 px.
+Shell: sem trilho/painel; cabeçalho com voltar + saldo e **barra inferior** (Início, Produções, "+", Entregas, Conta; a Central é o Início). Telas em `shell/Phone.jsx`
 (CSS `shell/phone.css`): Central → lista de missões em cards (`missionWord`: status em uma palavra), Missão fal → entrega no topo + esteira
 vertical (`BeltVertical`; barra por etapa = `level` da estação, calculado em `ui/falBelt.js`, a mesma fonte da esteira do desktop), Escritório → `PhoneOffice` (sem o mapa).
 Nova produção fal = `PhoneSheet` em `ui/FalWindow.jsx` (bottom sheet: prévia horizontal, nome, cenários em carrossel, plataformas em lista; `accept="image/*"` sem `capture`; CSS `ui/falModal.css`, escopo `.fm`, destaque `#5b5bd6`). Uma ação principal por tela no `Dock`
