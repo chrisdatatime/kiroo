@@ -720,7 +720,7 @@ class App:
             # --- públicas: o jogo (que mostra a tela de entrar) e seus arquivos
             # "/" sem sessão vai para /login; /login com sessão volta para "/". A query string vai junto (reset, compra,
             # entrar/erro do Google), então os links já enviados continuam valendo.
-            if method == "GET" and path in ("/", "/index.html", "/login") and (GAME_DIST / "index.html").is_file():
+            if method == "GET" and path in ("/", "/index.html", "/login", "/pricing") and (GAME_DIST / "index.html").is_file():
                 logged = self._has_session(headers)
                 if path == "/login" and logged:
                     return Response(302, "text/plain", b"", headers={"Location": "/" + (f"?{url.query}" if url.query else "")})
@@ -946,13 +946,15 @@ class App:
                 if path == "/api/credits":  # extrato e consumo por produção/cena/operação (Fase C)
                     # visão do cliente: extrato e "por vídeo". O detalhe por chamada/etapa (`led.usage`) é só do admin.
                     return _json(200, {**credits, "statement": led.statement(ws["id"]), "videos": led.videos(ws["id"]),
-                                       "topup": payments.topup_options()})
+                                       "origins": led.origins(ws["id"]), "topup": payments.topup_options()})
+                avatar = Accounts(db).avatar_of(ctx["sess"]["user_id"])
             finally:
                 db.close()
             return _json(200, {"csrf": ctx["sess"]["csrf"], "admin": ctx["admin"],
                                "user": {"email": ctx["sess"]["email"], "name": ctx["sess"]["name"],
                                         "email_verified": bool(ctx["sess"]["email_verified_at"]),
                                         "has_password": bool(me and me["pw_hash"] != "!"),
+                                        "google": bool(me and me["google_sub"]), "avatar_kiroo": avatar,
                                         "tax_doc": mask_tax_doc(me["tax_doc"] if me else None),
                                         "onboarding": {"done_at": ctx["sess"]["onboarding_done_at"],
                                                        "step": int(ctx["sess"]["onboarding_step"] or 0)}},

@@ -15,6 +15,9 @@ import { AgentHead } from './AgentHead.jsx';
 import { usePhone } from '../hooks/use-phone.js';
 import { FalChips } from '../ui/FalMission.jsx';
 import Sidebar from './Sidebar.jsx';
+import { AccountDrawer, Spark } from './AccountMenu.jsx';
+import KirooAvatar from './KirooAvatar.jsx';
+import { phoneTabs } from './accountMenu.js';
 import compactLogo from '../assets/brand/icone-app-preto.svg';
 import wordmark from '../assets/brand/wordmark-preto-laranja.svg';
 import './shell.css';
@@ -225,38 +228,45 @@ function Panel({ v, onCollapse, newMission }) {
   );
 }
 
-// Celular: barra inferior de 72 px: Início, Produções, "+" (nova produção), Entregas e Conta.
-// Entregas ainda não tem tela própria e abre Produções. Escritório e Créditos seguem pelo menu/saldo e pela busca.
-const ACCOUNT_WINS = ['account', 'prefs', 'pilot', 'about', 'admin', 'credits'];
+// Celular: barra inferior de 72 px: Início, Escritório, "+" (nova produção), Produções e Entregas.
+// Entregas ainda não tem tela própria e abre Produções. Conta e Créditos ficam no avatar do topo (gaveta da conta).
+const TAB_ICONS = { inicio: Home, escritorio: Building2, producoes: Workflow, entregas: Package };
 function TabBar({ v, newMission }) {
-  const waiting = v.productions.filter((p) => ['awaiting_final_review', 'paused', 'awaiting_references'].includes(p.status)).length;
   const go = (view) => () => { if (v.win) v.closeWin(); v.setView(view); };
-  const items = [
-    { id: 'inicio', label: 'Início', icon: Home, on: !v.win && v.view === 'central', go: go('central') },
-    { id: 'producoes', label: 'Produções', icon: Workflow, on: !v.win && v.view === 'missao', go: go('missao'), dot: waiting },
-    { id: 'nova', label: 'Nova produção', icon: Plus, plus: true, go: newMission },
-    { id: 'entregas', label: 'Entregas', icon: Package, on: false, go: go('missao') },
-    { id: 'conta', label: 'Conta', icon: UserRound, on: ACCOUNT_WINS.includes(v.win), go: () => v.openPrefs('account') },
-  ];
   return (
     <nav className="pv-tabbar in-tabbar" aria-label="Navegação principal">
-      {items.map((x) => x.plus
-        ? <button key={x.id} type="button" className="in-tab-plus" onClick={x.go} aria-label={x.label}><Plus size={26} aria-hidden="true" /></button>
-        : (
-          <button key={x.id} type="button" className="pv-tab" data-active={x.on || undefined} aria-current={x.on ? 'page' : undefined} onClick={x.go}>
-            <x.icon size={22} strokeWidth={x.on ? 2.2 : 1.8} aria-hidden="true" /><span>{x.label}</span>
-            {x.dot > 0 && <i className="pv-tab-dot" aria-label={`${x.dot} esperando ação`} />}
-          </button>)
-      )}
+      {phoneTabs(v).map((x) => {
+        if (x.plus) return <button key={x.id} type="button" className="in-tab-plus" onClick={newMission} aria-label={x.label}><Plus size={26} aria-hidden="true" /></button>;
+        const Ic = TAB_ICONS[x.id];
+        return (
+          <button key={x.id} type="button" className="pv-tab" data-active={x.on || undefined} aria-current={x.on ? 'page' : undefined} onClick={go(x.view)}
+            aria-label={x.label + (x.live ? ', ao vivo' : '') + (x.badge ? `, ${x.badge} aguardando você` : '')}>
+            <Ic size={22} strokeWidth={x.on ? 2.2 : 1.8} aria-hidden="true" /><span>{x.label}</span>
+            {(x.badge > 0 || x.live) && <i className="pv-tab-dot" data-live={x.live && !x.badge ? '' : undefined} aria-hidden="true" />}
+          </button>
+        );
+      })}
     </nav>
   );
 }
 
-const PHONE_TITLE = { central: 'Início', equipe: 'Equipe', escritorio: 'Escritório' };
+// Avatar do topo no celular: abre a gaveta da conta.
+function PhoneMe({ v, onOpen }) {
+  const user = (v.account && v.account.user) || {};
+  return (
+    <button type="button" className="pv-me-phone" onClick={onOpen} aria-label="Conta" aria-haspopup="dialog" data-tour="account">
+      <KirooAvatar user={user} size={34} />
+    </button>
+  );
+}
+
+const PHONE_TITLE = { central: 'Início', equipe: 'Equipe', escritorio: 'Escritório', config: 'Configurações' };
+const DESK_TITLE = { central: 'Início', config: 'Configurações' };
 
 export default function Shell({ v, rootRef, stageRef, onKeyDown, onKeyUp, onBlur, children }) {
   const phone = usePhone();
   const [pal, setPal] = React.useState(false);
+  const [drawer, setDrawer] = React.useState(false);
   const [panel, setPanelRaw] = React.useState(() => LS.get('bc.panel', typeof window === 'undefined' || window.innerWidth >= 900));
   const setPanel = (x) => { setPanelRaw(x); LS.set('bc.panel', x); };
   React.useEffect(() => {
@@ -264,7 +274,7 @@ export default function Shell({ v, rootRef, stageRef, onKeyDown, onKeyUp, onBlur
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
   }, []);
-  const cur = VIEWS.find((x) => x.id === v.view) || VIEWS[0];
+  const cur = VIEWS.find((x) => x.id === v.view) || (v.view === 'config' ? { id: 'config', label: 'Configurações', title: 'Configurações' } : VIEWS[0]);
   React.useEffect(() => { document.title = `Kiroo — ${cur.label}`; }, [cur.label]);
   const bal = v.wallet ? (v.wallet.exempt ? 'Isento' : `${v.wallet.balance} créditos`) : '';
   const newMission = () => { v.setView('missao'); v.newProd(); };
@@ -285,22 +295,24 @@ export default function Shell({ v, rootRef, stageRef, onKeyDown, onKeyUp, onBlur
               <span className="pv-rail-fill" />
               {v.conn === 'erro' && <span role="alert" className="pv-status pv-status-error">Sem conexão</span>}
               {v.mode === 'simulated' && <span className="pv-status pv-status-demo">DEMO</span>}
-              {bal && <button type="button" className="pv-top-credits" onClick={() => v.openPrefs('credits')} aria-label={`Saldo: ${bal}. Abrir créditos`}><CircleDollarSign size={17} aria-hidden="true" />{v.wallet.exempt ? 'Isento' : v.wallet.balance}</button>}
+              {bal && <button type="button" className="pv-top-credits" onClick={() => v.openSettings('creditos')} aria-label={`Saldo: ${bal}. Abrir créditos`}><Spark size={14} />{v.wallet.exempt ? 'Isento' : v.wallet.balance}</button>}
               <Activity v={v} side="bottom" topbar />
+              <PhoneMe v={v} onOpen={() => setDrawer(true)} />
             </header>
           ) : phone ? (
             <header className="pv-top pv-top-phone">
-              {v.view === 'missao' && <button type="button" className="pv-back" onClick={() => v.setView('central')} aria-label="Voltar para o início"><ArrowLeft size={22} aria-hidden="true" /></button>}
+              {(v.view === 'missao' || v.view === 'config') && <button type="button" className="pv-back" onClick={() => v.setView('central')} aria-label="Voltar para o início"><ArrowLeft size={22} aria-hidden="true" /></button>}
               <h1>{v.view === 'missao' ? (v.hasProd && v.prodName ? v.prodName : 'Produção') : (PHONE_TITLE[v.view] || cur.title)}</h1>
               {v.conn === 'erro' && <span role="alert" className="pv-status pv-status-error">Sem conexão</span>}
               {v.mode === 'simulated' && <span className="pv-status pv-status-demo">DEMO</span>}
               <span className="pv-rail-fill" />
-              {bal && <button type="button" className="pv-top-credits" onClick={() => v.openPrefs('credits')} aria-label={`Saldo: ${bal}. Abrir créditos`}><CircleDollarSign size={17} aria-hidden="true" />{v.wallet.exempt ? 'Isento' : v.wallet.balance}</button>}
+              {bal && <button type="button" className="pv-top-credits" onClick={() => v.openSettings('creditos')} aria-label={`Saldo: ${bal}. Abrir créditos`}><Spark size={14} />{v.wallet.exempt ? 'Isento' : v.wallet.balance}</button>}
               {falTop && <button type="button" className="pv-cta pv-cta-accent pv-cta-icon" onClick={newMission} aria-label="Nova produção"><Plus size={18} aria-hidden="true" /></button>}
+              <PhoneMe v={v} onOpen={() => setDrawer(true)} />
             </header>
-          ) : !classic && v.view === 'central' ? (
+          ) : !classic && DESK_TITLE[v.view] ? (
           <header className="pv-top in-top">
-            <h1>Início</h1>
+            <h1>{DESK_TITLE[v.view]}</h1>
             <span className="pv-rail-fill" />
             {v.conn === 'erro' && <span role="alert" className="pv-status pv-status-error">Sem conexão</span>}
             {v.mode === 'simulated' && <span className="pv-status pv-status-demo" title="Nada é cobrado; imagens e vídeos são de exemplo">DEMO</span>}
@@ -333,6 +345,7 @@ export default function Shell({ v, rootRef, stageRef, onKeyDown, onKeyUp, onBlur
           <div className="pv-body" ref={stageRef} data-tour={v.view === 'escritorio' ? 'office' : undefined}>{children}</div>
         </main>
         {phone && <TabBar v={v} newMission={newMission} />}
+        {phone && <AccountDrawer v={v} open={drawer} onOpenChange={setDrawer} />}
         {pal && <Palette v={v} onClose={() => setPal(false)} />}
       </TooltipProvider>
     </div>

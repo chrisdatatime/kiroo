@@ -94,7 +94,7 @@ export function AccountView({ a, site, edit, setEdit, busy, msg, onSave, onVerif
   );
 }
 
-function DeleteBox({ email, hasPassword, busy, onDelete, onCancel }) {
+export function DeleteBox({ email, hasPassword, busy, onDelete, onCancel }) {
   const [typed, setTyped] = React.useState('');
   const [pw, setPw] = React.useState('');
   const ok = canDelete(typed, email) && (!hasPassword || pw.length > 0);

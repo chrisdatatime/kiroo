@@ -175,3 +175,7 @@
 /* Preferências (Créditos e Conta) no celular: em styles.css, logo depois das regras base de .pref (a ordem importa). */
 /* falha: etapa atual em vermelho ("Não deu certo"), seguintes pendentes */
 .pv-vrow[data-fail] .pv-vstate { color: #A42A20; } .pv-vrow[data-fail] .pv-vbar > i { background: #C7362B; }
+/* avatar da conta no topo (abre a gaveta da conta) */
+.pv-me-phone { flex: none; width: 44px; height: 44px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 999px; background: transparent; cursor: pointer; }
+.pv-me-phone:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+.pv-tab-dot[data-live] { background: #FFB199; }

@@ -98,18 +98,19 @@ try {
   html = render(base({ falNew: null }));
   assert.ok(has(html, 'Nova produção'));
 
-  // 9) barra lateral: 5 destinos, badge de pendências, saldo e "≈ N vídeos" do custo configurado
+  // 9) menu lateral (novo layout, Fase 1): 4 destinos (Créditos e Equipe saíram), contador "aguardando você",
+  //    AO VIVO só com produção gerando, Ajuda (mailto do suporte) e a linha da conta com nome e saldo (o cartão de saldo saiu).
   const side = (v) => renderToStaticMarkup(React.createElement(Sidebar, { v, menuItems: null }));
   html = side(base({ productions: [aprov, gen] }));
-  ['Início', 'Produções', 'Entregas', 'Equipe', 'Créditos'].forEach((t) => assert.ok(has(html, `>${t}<`), t));
-  assert.ok(has(html, '1 esperando ação'));
-  assert.ok(has(html, 'Dá para ≈ 4 vídeos'));
-  assert.ok(has(html, 'suporte@kiroo.io') && has(html, 'Ajuda e suporte'));
-  html = side(base({ offer: { cc: 4000, credits: '40' } }));
-  assert.ok(has(html, 'Dá para ≈ 2 vídeos'), 'o custo vem da configuração');
-  html = side(base({ offer: { cc: 0, credits: '0' } }));
-  assert.ok(!has(html, 'Dá para'), 'sem custo real (DEMO) a frase some');
-  assert.ok(!has(side(base({ productions: [] })), 'esperando ação'));
+  ['Início', 'Escritório', 'Produções', 'Entregas'].forEach((t) => assert.ok(has(html, `>${t}<`), t));
+  ['Equipe', 'Créditos'].forEach((t) => assert.ok(!has(html, `>${t}<`), `${t} não fica no menu principal`));
+  assert.ok(has(html, '1 aguardando você'));
+  assert.ok(has(html, 'AO VIVO'), 'produção gerando: Escritório ao vivo');
+  assert.ok(has(html, 'mailto:suporte@kiroo.io') && has(html, 'Ajuda e suporte'));
+  assert.ok(has(html, 'Christian Silva') && has(html, '80 créditos. Menu da conta'));
+  assert.ok(!has(html, 'Dá para'), 'o saldo fica na linha da conta, sem o cartão');
+  html = side(base({ productions: [] }));
+  assert.ok(!has(html, 'aguardando você') && !has(html, 'AO VIVO'));
 
   console.log('inicio-render.test ok');
 } finally { await vite.close(); }

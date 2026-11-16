@@ -272,7 +272,7 @@ def _ws(conn, wid):
 def test_backfill_only_touches_default_demo_accounts_and_can_be_reverted(tmp_path):
     conn = _legacy_db(tmp_path / "v13.sqlite3")
     assert migrations.backfill_14_candidates(conn) == [("ws_demo", "demo@ex.com")]   # prévia = o que a migração faz
-    assert migrations.migrate(conn) == [14]
+    assert migrations.migrate(conn)[0] == 14   # a 14 roda primeiro (as seguintes, como a 15 do avatar, vêm depois)
     assert _ws(conn, "ws_demo") == ("real", 1, 0, 1)
     assert _ws(conn, "ws_admin") == ("simulated", 0, 0, 0)          # admin: intocado
     assert _ws(conn, "ws_isento") == ("simulated", 0, 0, 0)         # isento: intocado

@@ -16,6 +16,7 @@ import re
 import secrets
 from datetime import datetime, timedelta, timezone
 
+from . import avatars
 from .db import Database, new_id, now
 
 SESSION_DAYS = 30
@@ -103,10 +104,10 @@ class Accounts:
             raise AuthError("já existe uma conta com este e-mail")
         uid, wid = new_id("usr"), new_id("ws")
         name = (name or email.split("@")[0]).strip()[:80]
-        self.db.conn.execute("INSERT INTO users(id, email, name, pw_hash, is_platform_admin, created_at, email_verified_at, google_sub)"
-                             " VALUES (?,?,?,?,?,?,?,?)",
+        self.db.conn.execute("INSERT INTO users(id, email, name, pw_hash, is_platform_admin, created_at, email_verified_at, google_sub,"
+                             " avatar_kiroo) VALUES (?,?,?,?,?,?,?,?,?)",
                              (uid, email, name, hash_password(password) if password else NO_PASSWORD, int(admin), now(),
-                              now() if verified else None, google_sub))
+                              now() if verified else None, google_sub, avatars.random_kiroo()))
         if terms_version:   # consentimento dado no cadastro (Termos de Uso + Política de Privacidade)
             self.db.conn.execute("UPDATE users SET terms_accepted_at=?, terms_version=? WHERE id=?", (now(), terms_version, uid))
         self.db.conn.execute("INSERT INTO workspaces(id, name, owner_id, created_at) VALUES (?,?,?,?)",
@@ -118,6 +119,17 @@ class Accounts:
 
     def user(self, uid: str):
         return self.db.conn.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
+
+    def avatar_of(self, uid: str) -> str:
+        """Kiroo do avatar. Conta antiga sem valor: escolhe pelo id (determinístico) e salva — nunca muda depois."""
+        row = self.db.conn.execute("SELECT avatar_kiroo FROM users WHERE id=?", (uid,)).fetchone()
+        if row and avatars.valid(row["avatar_kiroo"]):
+            return row["avatar_kiroo"]
+        k = avatars.kiroo_for(uid)
+        if row:
+            self.db.conn.execute("UPDATE users SET avatar_kiroo=? WHERE id=? AND (avatar_kiroo IS NULL OR avatar_kiroo=?)",
+                                 (k, uid, row["avatar_kiroo"] or ""))
+        return k
 
     def user_by_email(self, email: str):
         return self.db.conn.execute("SELECT * FROM users WHERE email=?", ((email or "").strip().lower(),)).fetchone()

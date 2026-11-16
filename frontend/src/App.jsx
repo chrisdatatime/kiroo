@@ -42,6 +42,8 @@ import Shell, { VIEWS } from './shell/Shell.jsx';
 import Central from './shell/Central.jsx';
 import MissionView from './shell/MissionView.jsx';
 import TeamView from './shell/TeamView.jsx';
+import Settings from './shell/Settings.jsx';
+import { PRICING_PATH } from './config/appConfig.js';
 import { OfficeSwitch } from './shell/Phone.jsx';
 import { normalizeImageName } from './ui/mobile.js';
 import { buildPipeline, attention } from './shell/pipeline.js';
@@ -102,7 +104,8 @@ export default class App extends React.Component {
     const pid = LS.get('bc.pid', null);
     const view0 = LS.get('bc.view', 'central');
     this.state = {
-      view: VIEWS.some((x) => x.id === view0) ? view0 : 'central',
+      view: VIEWS.some((x) => x.id === view0) || view0 === 'config' ? view0 : 'central',
+      cfgTab: LS.get('bc.cfgTab', 'perfil') === 'creditos' ? 'creditos' : 'perfil',   // Configurações: Perfil | Créditos
       vw: window.innerWidth, vh: window.innerHeight,
       player: { i: SPAWN[0], j: SPAWN[1], path: [], dir: 'down', moving: false, seat: null }, pending: null, dest: null, agents,
       // motor real
@@ -132,10 +135,13 @@ export default class App extends React.Component {
     // sessão expirou com o estúdio aberto: volta direto ao login (no primeiro /api/me sem sessão, fica a home)
     setLoggedOutHandler(() => this.setState((s) => ({ authState: 'out', account: null, entry: s.authState === 'in' ? 'login' : s.entry })));
     this.checkSession();
+    // voltar do navegador saindo de /pricing fecha a tela de compra
+    this.onPop = () => { if (window.location.pathname !== PRICING_PATH && this.state.ui.win === 'buy') this.setUI({ win: null }); };
+    window.addEventListener('popstate', this.onPop);
     authConfig().then((c) => this.setState({ signup: c.signup || 'closed', landing: c.landing_url || '' })).catch(() => this.setState({ landing: '' }));  // cadastro: quem decide é o servidor
     this.later(() => this.rootEl && this.rootEl.focus({ preventScroll: true }), 80);
   }
-  componentWillUnmount() { clearInterval(this.iv); clearInterval(this.poll); this.timers.forEach(clearTimeout); window.removeEventListener('resize', this.measure); }
+  componentWillUnmount() { clearInterval(this.iv); clearInterval(this.poll); this.timers.forEach(clearTimeout); window.removeEventListener('resize', this.measure); window.removeEventListener('popstate', this.onPop); }
   componentDidUpdate(_, prev) {
     if (prev.cenario !== this.state.cenario) LS.set(THEME_KEY, this.state.cenario);
     if (prev.look !== this.state.look) LS.set('bc.look', this.state.look);
@@ -143,6 +149,7 @@ export default class App extends React.Component {
     if (prev.draft !== this.state.draft) LS.set('bc.draft', this.state.draft);
     if (prev.pid !== this.state.pid) LS.set('bc.pid', this.state.pid);
     if (prev.view !== this.state.view) { LS.set('bc.view', this.state.view); this.measure && this.measure(); }
+    if (prev.cfgTab !== this.state.cfgTab) LS.set('bc.cfgTab', this.state.cfgTab);
   }
   later(fn, ms) { this.timers.push(setTimeout(fn, ms)); }
 
@@ -157,8 +164,10 @@ export default class App extends React.Component {
       }
       // voltou da fatura do cartão (?compra=kpay_...): abre "Comprar créditos", que acompanha a compra
       const back = /[?&]compra=kpay_[0-9a-f]{10}/.test(window.location.search) && account.payments && account.payments.online;
-      this.setState({ authState: 'in', account }, () => { this.refresh(); if (back) this.setUI({ win: 'buy' }); });
-      if (!back) this.maybeStartTour(account);
+      // /pricing (Planos e créditos): até a Fase 6, abre a tela de compra que já existe
+      const pricing = !back && window.location.pathname === PRICING_PATH;
+      this.setState({ authState: 'in', account }, () => { this.refresh(); if (back) this.setUI({ win: 'buy' }); else if (pricing) this.openPricing(); });
+      if (!back && !pricing) this.maybeStartTour(account);
     } catch (e) {
       this.setState({ authState: 'out', conn: e instanceof AuthRequired ? 'ok' : 'erro', err: e instanceof AuthRequired ? null : e.message });
     }
@@ -522,7 +531,24 @@ export default class App extends React.Component {
   // ---------- helpers de estado ----------
   setUI(patch) { this.setState((s) => ({ ui: Object.assign({}, s.ui, patch) })); }
   setDraft(patch) { this.setState((s) => ({ draft: Object.assign({}, s.draft, patch) })); }
-  closeWin() { this.setUI({ win: null, adjust: false, playing: false }); this.later(() => this.rootEl && this.rootEl.focus({ preventScroll: true }), 30); }
+  // Planos e créditos: a URL vira /pricing (link compartilhável); fechar volta para "/".
+  openPricing() {
+    const a = this.state.account;
+    if (!(a && a.payments && a.payments.online)) {   // sem compra online: o saldo e o extrato
+      if (window.location.pathname === PRICING_PATH) { try { window.history.replaceState(null, '', '/'); } catch { /* sem history */ } }
+      this.openSettings('creditos'); return;
+    }
+    if (window.location.pathname !== PRICING_PATH) { try { window.history.pushState(null, '', PRICING_PATH); } catch { /* sem history */ } }
+    this.setUI({ win: 'buy' });
+  }
+  // Configurações (Perfil | Créditos) é uma tela, não um modal: fecha janelas abertas e troca a view.
+  openSettings(tab) {
+    if (this.state.ui.win) this.closeWin();
+    this.setState({ view: 'config', cfgTab: tab === 'creditos' ? 'creditos' : 'perfil' });
+  }
+  closeWin() {
+    if (window.location.pathname === PRICING_PATH) { try { window.history.replaceState(null, '', '/'); } catch { /* sem history */ } }
+    this.setUI({ win: null, adjust: false, playing: false }); this.later(() => this.rootEl && this.rootEl.focus({ preventScroll: true }), 30); }
   dismissTut() { if (this.state.ui.tut) { this.setUI({ tut: false }); LS.set('bc.tutDone', true); } }
   toast(text) { const id = Date.now() + Math.random(); this.setUI({ toast: { text, id } }); this.later(() => { if (this.state.ui.toast && this.state.ui.toast.id === id) this.setUI({ toast: null }); }, 3800); }
 
@@ -783,7 +809,7 @@ export default class App extends React.Component {
       sceneName: sceneLabel(s.S, scene), file: f.file, name: f.name, setName: (e) => this.setFal({ name: e.target.value }),
       clearFile: () => this.setFal({ file: null, reqId: null }), pick: (e) => this.falPick(e), pickFile: (file) => this.falPickFile(file),
       errors: falDraftErrors({ ...f, scene, platform }), error: f.error || null, noFunds: !!f.noFunds, busy: f.busy, demo,
-      openBuy: () => { this.setFal({ error: null, noFunds: false }); this.setUI({ win: s.account && s.account.payments && s.account.payments.online ? 'buy' : 'credits' }); },
+      openBuy: () => { this.setFal({ error: null, noFunds: false }); this.openPricing(); },
       reuse: f.reuse ? { kind: f.reuse.kind } : null,
       reuseBlocked, reuseLabel: reuseBlocked ? REUSE_LABEL[f.reuse.kind] : null,
       label: createLabel(offerFor(s.S), demo), create: () => this.falCreate(),
@@ -1134,7 +1160,10 @@ export default class App extends React.Component {
       openTour: () => this.openTour(), tourOpen: !!s.onb,
       openAbout: () => { this.dismissTut(); this.setUI({ win: 'about' }); },
       cenario: s.cenario, setCenario: (t) => this.setState({ cenario: normalizeTheme(t) }),
-      openPrefs: (tab) => { this.dismissTut(); this.setUI({ win: tab || 'prefs' }); },
+      // Minha conta e Créditos viraram a tela Configurações; as outras abas seguem no modal de Preferências
+      openPrefs: (tab) => { this.dismissTut(); if (tab === 'account' || tab === 'credits') { this.openSettings(tab === 'credits' ? 'creditos' : 'perfil'); return; } this.setUI({ win: tab || 'prefs' }); },
+      openSettings: (tab) => { this.dismissTut(); this.openSettings(tab); }, cfgTab: s.cfgTab, setCfgTab: (t) => this.setState({ cfgTab: t }),
+      openPricing: () => { this.dismissTut(); this.openPricing(); }, landingUrl: s.landing || '',
       nearAlt: ch && near && near.type !== 'stand' ? { label: 'Levantar', go: () => this.standUp() } : null,
       openSectors: () => { this.dismissTut(); this.setUI({ win: 'sectors' }); },
       openMusic: () => this.setUI({ win: 'music' }), trainAgent: ui.trainAgent, team: AGENTS, openTraining: (id) => this.setUI({ win: 'training', trainAgent: id, learn: null }),
@@ -1166,10 +1195,10 @@ export default class App extends React.Component {
       goCoffee: (e) => { e.stopPropagation(); this.goInteract({ type: 'coffee' }); },
       goMine: (e) => { e.stopPropagation(); this.goInteract({ type: 'mine' }); },
       goGames: (e) => { e.stopPropagation(); this.goInteract({ type: 'games' }); }, games, pilot,
-      account: s.account, refreshAccount: async () => { const account = await me(); this.setState({ account }); }, logout: () => this.logout(), openAccount: () => { this.dismissTut(); this.setUI({ win: 'account' }); },
+      account: s.account, refreshAccount: async () => { const account = await me(); this.setState({ account }); }, logout: () => this.logout(), openAccount: () => { this.dismissTut(); this.openSettings('perfil'); },
       welcomeEmpty: emptyMissionsCopy(s.account, productions), firstVideo: firstVideoCopy({ P, productions, wallet: s.S ? s.S.credits : null }),
-      wallet: s.S ? s.S.credits : null, openCredits: () => { this.dismissTut(); this.setUI({ win: 'credits' }); },
-      openBuy: () => { this.dismissTut(); this.setUI({ win: s.account && s.account.payments && s.account.payments.online ? 'buy' : 'credits' }); },
+      wallet: s.S ? s.S.credits : null, openCredits: () => { this.dismissTut(); this.openSettings('creditos'); },
+      openBuy: () => { this.dismissTut(); this.openPricing(); },
       openProduction: (id) => { this.setState({ pid: id, draftMode: false }); this.closeWin(); },
       openGames: () => { this.dismissTut(); this.setUI({ win: 'games' }); }, openPilot: () => { this.dismissTut(); this.setUI({ win: 'pilot' }); },
       celebrate: st === 'exportado', confetti: CONFETTI,
@@ -1243,6 +1272,7 @@ export default class App extends React.Component {
         {v.view === 'central' && <Central v={v} />}
         {v.view === 'missao' && <MissionView v={v} />}
         {v.view === 'equipe' && <TeamView v={v} />}
+        {v.view === 'config' && <Settings v={v} />}
         {v.view === 'escritorio' && (<OfficeSwitch v={v}>
           <React.Suspense fallback={null}><WorldPhaser v={v} /></React.Suspense>
           <Hud v={v} />

@@ -1,0 +1,58 @@
+/* Menu da conta (popover do desktop e gaveta do celular) e avatar kiroo. Escopo am-* e kv-*. */
+.kv-av { flex: none; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; border-radius: 999px; }
+.kv-av canvas { margin-top: 18%; }
+
+.am-spark { display: block; flex: none; color: #FF5B2E; }
+
+/* linha da conta no rodapé do menu lateral */
+.am-row { width: 100%; min-height: 50px; display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 12px; border: 1px solid #E8E6E1; background: #fff;
+  color: #0F0F11; text-align: left; cursor: pointer; font: inherit; }
+.am-row:hover { background: #FAF9F7; }
+.am-row[data-state='open'] { box-shadow: 0 0 0 2px #0F0F11; }
+.am-row-name { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.am-row-bal { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 700; color: #0F0F11; font-variant-numeric: tabular-nums; }
+.am-row:focus-visible { outline: 2px solid #0F0F11; outline-offset: 2px; }
+
+/* popover (Radix): sobrescreve as utilidades do shadcn (CSS sem camada vence @layer utilities) */
+.am { width: 300px; max-width: calc(100vw - 24px); padding: 8px; border-radius: 16px; background: #fff; color: #0F0F11; border: 1px solid #E8E6E1;
+  box-shadow: 0 12px 32px rgba(15, 15, 17, .12); font-family: Inter, 'Instrument Sans', system-ui, sans-serif; }
+.am.am-subm { width: 230px; padding: 6px; border-radius: 14px; }
+.am-head { display: flex; align-items: center; gap: 12px; padding: 8px 10px 14px; min-width: 0; }
+.am-head-txt { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.am-head-txt strong { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.am-head-txt span, .am-dr-desc { display: flex; align-items: center; gap: 4px; font-size: 13px; color: #62626A; }
+.am-sep { height: 1px; background: #E8E6E1; margin: 6px 4px; }
+
+.am-item { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 44px; padding: 0 10px; border: 0; border-radius: 9px; background: transparent;
+  text-align: left; font-weight: 500; font-size: 14px; line-height: 1.2; font-family: inherit; color: #0F0F11; text-decoration: none; cursor: pointer; }
+.am-item > span { flex: 1; min-width: 0; }
+.am-item svg { width: 18px; height: 18px; flex: none; color: #0F0F11; stroke-width: 1.75; }
+.am-item:hover, .am-item[data-highlighted], .am-item[data-state='open'], .am-item:focus-visible { background: #F4F3F0; outline: none; color: #0F0F11; }
+.am-item:focus-visible { box-shadow: inset 0 0 0 2px #0F0F11; }
+.am-item[data-disabled], .am-item:disabled { opacity: 1; color: #8A8A92; cursor: default; }
+.am-item[data-disabled] > span, .am-item:disabled > span { color: #8A8A92; }
+.am-plain { padding: 0 12px; font-weight: 400; }
+.am-val { margin-left: auto; font-size: 13px; color: #62626A; }
+.am-soon { margin-left: auto; font-size: 11px; font-weight: 600; letter-spacing: .02em; color: #62626A; background: #F4F3F0; border-radius: 6px; padding: 2px 6px; }
+/* indicador do Radix no item de rádio (fica à direita, como no design) */
+.am [data-slot='dropdown-menu-radio-item'] { position: relative; padding-right: 34px; }
+.am [data-slot='dropdown-menu-radio-item'] > span:first-child { position: absolute; right: 10px; left: auto; }
+.am [data-slot='dropdown-menu-sub-trigger'] > svg:last-child { width: 16px; height: 16px; color: #62626A; margin-left: 4px; }
+
+/* gaveta do celular */
+.am-drawer { padding: 10px 12px calc(20px + env(safe-area-inset-bottom)); border-radius: 22px 22px 0 0; background: #fff; color: #0F0F11; gap: 0;
+  max-height: 88vh; overflow-y: auto; font-family: Inter, 'Instrument Sans', system-ui, sans-serif; }
+.am-grip { display: block; width: 40px; height: 4px; border-radius: 999px; background: #D9D6CE; margin: 0 auto 12px; }
+.am-drawer .am-head { padding: 6px 10px 14px; }
+.am-dr-title { font-size: 15px; font-weight: 600; color: #0F0F11; }
+.am-dr-cta { padding: 0 6px 12px; }
+.am-buy { width: 100%; min-height: 46px; border-radius: 10px; border: 1px solid #FF5B2E; background: #FF5B2E; color: #0F0F11; font-weight: 600; font-size: 15px; line-height: 1; font-family: inherit; cursor: pointer; }
+.am-buy:focus-visible { outline: 2px solid #0F0F11; outline-offset: 2px; }
+.am-sep-dr { margin: 0 6px 6px; }
+.am-dr-list { display: flex; flex-direction: column; }
+.am-dr-item { font-size: 15px; }
+.am-chev { margin-left: 4px; transition: transform .15s; color: #62626A !important; width: 16px !important; height: 16px !important; }
+.am-dr-item[aria-expanded='true'] .am-chev { transform: rotate(180deg); }
+.am-dr-sub { display: flex; flex-direction: column; margin: 0 0 6px 30px; padding-left: 8px; border-left: 1px solid #E8E6E1; }
+.am-check { margin-left: auto; }
+@media (prefers-reduced-motion: reduce) { .am-chev { transition: none; } }

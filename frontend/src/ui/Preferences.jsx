@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bot, CircleDollarSign, GraduationCap, Info, Settings, Shield, ShoppingBag, UserRound, X } from 'lucide-react';
+import { Bot, GraduationCap, Info, Settings, Shield, ShoppingBag, X } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { AccountContent } from './Account.jsx';
 import { PilotContent } from './Pilot.jsx';
@@ -21,9 +21,8 @@ const GROUPS = [
     { id: 'prefs', label: 'Geral', icon: Settings },
     { id: 'pilot', label: 'Piloto', icon: Bot },
   ] },
+  // Minha conta e Créditos e extrato viraram a tela Configurações (shell/Settings.jsx): saem daqui.
   { label: 'Estúdio', items: [
-    { id: 'account', label: 'Minha conta', icon: UserRound },
-    { id: 'credits', label: 'Créditos e extrato', icon: CircleDollarSign },
     { id: 'buy', label: 'Comprar créditos', icon: ShoppingBag, buy: true },
     { id: 'about', label: 'Sobre', icon: Info },
     { id: 'admin', label: 'Administrador', icon: Shield, admin: true },

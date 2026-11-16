@@ -72,6 +72,31 @@ def fmt(cc: int) -> str:
     return ("−" if cc < 0 else "") + s
 
 
+# ------------------------------------------------------------------ saldo por origem (tela Configurações › Créditos)
+# O livro de hoje guarda um saldo único; a divisão por origem é uma LEITURA: quanto entrou de cada origem e quanto
+# ainda resta dela, supondo o consumo na ordem bônus → liberados → comprados (a mesma ordem do ledger por origem da
+# Fase 6: bônus → plano → avulso). Ordem de consumo: primeiro da lista é gasto primeiro.
+ORIGINS = (("bonus", "Bônus de boas-vindas", ("welcome_bonus",)),
+           ("granted", "Créditos liberados", ("grant", "adjust")),
+           ("purchased", "Créditos comprados", ("purchase", "reversal")))
+
+
+def split_by_origin(received_cc: dict[str, int], balance_cc: int) -> list[dict]:
+    """Pura (testada): `received_cc` = total que entrou por origem (centésimos). O saldo atual é atribuído de trás
+    para frente (o último a ser gasto fica cheio primeiro). Origens sem entrada não aparecem."""
+    left = max(int(balance_cc), 0)
+    out = []
+    for key, label, _ in reversed(ORIGINS):
+        got = max(int(received_cc.get(key, 0)), 0)
+        if got <= 0:
+            continue
+        rest = min(left, got)
+        left -= rest
+        out.append({"key": key, "label": label, "received_cc": got, "left_cc": rest,
+                    "received": fmt_balance(got), "left": fmt_balance(rest)})
+    return list(reversed(out))
+
+
 # ------------------------------------------------------------------ extrato do cliente (texto, status, CSV)
 STATUS = {"paid": "Pago", "done": "Concluído", "not_charged": "Não cobrado", "gift": "Presente", "reversed": "Estornado"}
 CRLF = chr(13) + chr(10)
@@ -189,6 +214,17 @@ class Ledger:
         bal, held = self.balance(wid), self.held(wid)
         return {"balance_cc": bal, "held_cc": held, "available_cc": bal, "exempt": self.exempt(wid),
                 "balance": fmt_balance(bal), "balance_exact": fmt(bal), "held": fmt_balance(held), "held_exact": fmt(held)}
+
+    def origins(self, wid: str) -> list[dict]:
+        """Saldo por origem (bônus, liberados, comprados) para as barras da tela de Créditos."""
+        kinds = {k: key for key, _, ks in ORIGINS for k in ks}
+        marks = ",".join("?" * len(kinds))
+        rows = self.db.conn.execute(f"SELECT kind, COALESCE(SUM(amount_cc),0) cc FROM credit_entries"
+                                    f" WHERE workspace_id=? AND kind IN ({marks}) GROUP BY kind", (wid, *kinds)).fetchall()
+        got: dict[str, int] = {}
+        for r in rows:
+            got[kinds[r["kind"]]] = got.get(kinds[r["kind"]], 0) + int(r["cc"])
+        return split_by_origin(got, self.balance(wid))
 
     def statement(self, wid: str, limit: int = 60) -> list[dict]:
         """Extrato do CLIENTE: o que entrou e o uso por vídeo (reserva+liberação+débito viram uma linha), com título,

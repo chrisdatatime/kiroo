@@ -593,6 +593,13 @@ def revert_backfill_14(conn: sqlite3.Connection) -> int:
     return n
 
 
+def _m015_avatar_kiroo(conn: sqlite3.Connection) -> None:
+    """Avatar da conta (sempre um kiroo): id do boneco, sorteado na criação. Contas antigas ficam NULL e recebem um
+    valor determinístico (pelo id do usuário) no primeiro acesso — ver `avatars.py` e `Accounts.avatar_of`."""
+    if "avatar_kiroo" not in _columns(conn, "users"):
+        conn.execute("ALTER TABLE users ADD COLUMN avatar_kiroo TEXT")
+
+
 MIGRATIONS: list[Migration] = [
     Migration(1, "schema completo", _m001_baseline),
     Migration(2, "convites de uso único e consentimento", _m002_invites_consent),
@@ -608,6 +615,7 @@ MIGRATIONS: list[Migration] = [
     Migration(12, "CPF/CNPJ para nota fiscal na conta", _m012_tax_doc),
     Migration(13, "workflow único fal.ai: cenário e plataforma por produção", _m013_scene_platform),
     Migration(14, "cadastro aberto: sem teto individual, eventos da plataforma e backfill do DEMO padrão", _m014_open_signup),
+    Migration(15, "avatar da conta: kiroo sorteado na criação", _m015_avatar_kiroo),
 ]
 LATEST = MIGRATIONS[-1].version
 assert [m.version for m in MIGRATIONS] == list(range(1, LATEST + 1)), "migrações devem ser 1..N em ordem"
