@@ -747,6 +747,8 @@ class App:
                 return _json(200, {"signup": self.signup, "google": self.google_enabled,
                                    "turnstile": self.turnstile_site if self.turnstile_on and not self.turnstile_broken else None,
                                    "email": mailer.configured(),
+                                   # raiz pública (https://<STUDIO_LANDING_HOST>) ou "": o app não mostra a landing quando há URL
+                                   "landing_url": f"https://{self.landing_host}" if self.landing_host else "",
                                    "terms_version": TERMS_VERSION})
             if method == "GET" and path in LEGAL_PAGES:   # rascunhos públicos (PARA REVISÃO JURÍDICA)
                 return Response(200, "text/html; charset=utf-8", (STATIC / LEGAL_PAGES[path]).read_bytes(),

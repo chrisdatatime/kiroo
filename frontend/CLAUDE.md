@@ -45,7 +45,7 @@ Nova produção fal = `PhoneSheet` em `ui/FalWindow.jsx` (bottom sheet: prévia 
 senão o link `?download=1`. Regras: alvos >= 44 px, corpo >= 15 px, rótulos >= 13 px, sem rolagem horizontal. Lógica pura em `tests/mobile.test.mjs`.
 
 ## Home pública (antes do login)
-Sem sessão, o servidor manda "/" para `/login` (query preservada) e `/login` abre direto o login (`/login` com sessão volta para "/"). A home `src/landing/Landing.jsx` (lazy, CSS `landing.css` com escopo `.lp`) só aparece por "Voltar para o início"; nela, "Entrar"/"Criar conta" abrem `AuthScreen`
+Sem sessão, o servidor manda "/" para `/login` (query preservada) e `/login` abre direto o login (`/login` com sessão volta para "/"). A home `src/landing/Landing.jsx` (lazy, CSS `landing.css` com escopo `.lp`) só aparece por "Voltar para o início" **enquanto `STUDIO_LANDING_HOST` estiver vazia**; com ela definida, `GET /api/config` traz `landing_url` (`https://<raiz>`), a logo e o "Voltar para o início" de `AuthScreen` viram `<a href>` de página inteira para a raiz e o app nunca renderiza a `Landing` (`ui/accessScreen.js` decide; sem sessão e sem entrada vai para o login; `tests/landing-nav.test.mjs`); nela, "Entrar"/"Criar conta" abrem `AuthScreen`
 (`App.state.entry` = `login` | `signup`; "Voltar para o início" limpa). `?entrar` abre direto o login; `?reset=` vai para a nova senha;
 sessão que expira com o estúdio aberto volta direto ao login.
 **Landing da raiz** (`STUDIO_LANDING_HOST`, ex.: kiroo.io): entrada própria do Vite `landing.html` → `src/landing/main.jsx`, só a `Landing`

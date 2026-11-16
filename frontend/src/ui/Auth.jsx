@@ -185,7 +185,7 @@ function Showcase() {
   );
 }
 
-export default function AuthScreen({ onDone, resetToken, initialMode, onBack, signup = 'closed' }) {
+export default function AuthScreen({ onDone, resetToken, initialMode, onBack, signup = 'closed', landingUrl = '' }) {
   const params = React.useMemo(() => new URLSearchParams(window.location.search), []);
   const [cfg, setCfg] = React.useState({ signup, google: false, email: false });
   const [mode, setMode] = React.useState(resetToken ? 'reset' : initialMode === 'signup' && signup !== 'closed' ? 'signup' : 'login');
@@ -279,14 +279,21 @@ export default function AuthScreen({ onDone, resetToken, initialMode, onBack, si
     <div className="au">
       <div className="au-main">
         <header className="au-top">
-          {onBack && mode !== 'reset' && mode !== 'verify'
-            ? <button type="button" className="au-brand" onClick={onBack} aria-label="Kiroo: voltar para o início"><img src={logo} alt="" height="26" /></button>
+          {(landingUrl || onBack) && mode !== 'reset' && mode !== 'verify'
+            ? (landingUrl
+              ? <a className="au-brand" href={landingUrl} aria-label="Kiroo: voltar para o início"><img src={logo} alt="" height="26" /></a>
+              : <button type="button" className="au-brand" onClick={onBack} aria-label="Kiroo: voltar para o início"><img src={logo} alt="" height="26" /></button>)
             : <span className="au-brand"><img src={logo} alt="Kiroo" height="26" /></span>}
-          {onBack && mode !== 'reset' && mode !== 'verify' && (
-            <Button variant="ghost" className="h-10 rounded-[10px] px-3 text-[14px] text-[var(--au-ink-2)]" onClick={onBack}>
-              <ArrowLeft aria-hidden="true" />Início
-            </Button>
-          )}
+          {(landingUrl || onBack) && mode !== 'reset' && mode !== 'verify' && (landingUrl
+            ? (
+              <Button asChild variant="ghost" className="h-10 rounded-[10px] px-3 text-[14px] text-[var(--au-ink-2)]">
+                <a href={landingUrl}><ArrowLeft aria-hidden="true" />Início</a>
+              </Button>
+            ) : (
+              <Button variant="ghost" className="h-10 rounded-[10px] px-3 text-[14px] text-[var(--au-ink-2)]" onClick={onBack}>
+                <ArrowLeft aria-hidden="true" />Início
+              </Button>
+            ))}
         </header>
 
         <main className="au-center" id="au-main">

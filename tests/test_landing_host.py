@@ -188,3 +188,15 @@ def test_config_validation(make):
         make(app_url="https://www.kiroo.io")
     assert ServerConfig.from_env({"STUDIO_LANDING_HOST": "kiroo.io", "STUDIO_APP_URL": "https://app.kiroo.io"}).app_url \
         == "https://app.kiroo.io"
+
+
+def test_public_config_exposes_landing_url(make):
+    # o app descobre a landing pela config pública (sem sessão); o destino vem só do ambiente, nunca da requisição
+    app = make()
+    for path in ("/api/config", "/api/auth/config"):
+        r = get(app, path, APPH)
+        assert r.status == 200 and json.loads(r.body)["landing_url"] == "https://kiroo.io"
+    r = get(app, "/api/config?landing_url=https://evil.example", {**APPH, "Referer": "https://evil.example/"})
+    assert json.loads(r.body)["landing_url"] == "https://kiroo.io"
+    off = make(landing=None, app_url=None)
+    assert json.loads(get(off, "/api/config", APPH).body)["landing_url"] == ""
