@@ -123,8 +123,8 @@ export function PhoneFalMission({ v, m: m0 }) {
   const ended = ['failed', 'cancelled', 'partial'].includes(st.kind);
   return (
     <div className="pv-scroll"><div className="pv-wrap pv-ph">
-      {done && <FalDone m={m} team={v.team} product={v.prodName} stations={belt.stations} phone />}
-      {done && v.firstVideo && <UpsellNote copy={v.firstVideo} onClick={v.openBuy} />}
+      {done && <FalDone m={m} team={v.team} product={v.prodName} stations={belt.stations} phone
+        footer={v.firstVideo ? <UpsellNote copy={v.firstVideo} onClick={v.newProd} /> : null} />}
       {!done && (
         <section className="pv-ph-status" role="status" data-kind={st.kind}>
           <strong>{st.label}</strong>

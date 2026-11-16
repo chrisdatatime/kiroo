@@ -82,8 +82,8 @@ export function FalMissionView({ v, m }) {
   if (done) {
     return (
       <div className="pv-scroll"><div className="pv-wrap" style={{ maxWidth: 1180 }}>
-        <FalDone m={m} team={v.team} product={v.prodName} stations={belt.stations} phone={false} />
-        {v.firstVideo ? <UpsellNote copy={v.firstVideo} onClick={v.openBuy} /> : null}
+        <FalDone m={m} team={v.team} product={v.prodName} stations={belt.stations} phone={false}
+          footer={v.firstVideo ? <UpsellNote copy={v.firstVideo} onClick={v.newProd} /> : null} />
       </div></div>
     );
   }

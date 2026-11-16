@@ -55,7 +55,23 @@ try {
   // player 9:16 com poster, controles e selo; ações; cards
   assert.match(html, /<video[^>]*src="\/media\/prod_1\/delivery\/final\.mp4"[^>]*poster="\/media\/prod_1\/delivery\/cover\.jpg"[^>]*controls=""[^>]*aria-label="Vídeo final: Fone azul"/);
   assert.match(html, /15 s · 9:16/);
-  assert.match(html, /class="fd-btn fd-primary" href="\/media\/prod_1\/delivery\/final\.mp4\?download=1" download=""/);
+  // aguardando aprovação: barra fixa com "Aprovar vídeo" (principal) e "Baixar vídeo" (ao lado); sem "Marcar como exportado"
+  assert.match(html, /<div class="fd-bar" role="region" aria-label="Ações do vídeo">/);
+  assert.match(html, /<button type="button" class="fd-btn fd-approve"[^>]*>.*Aprovar vídeo<\/button>/);
+  assert.match(html, /class="fd-btn fd-secondary" href="\/media\/prod_1\/delivery\/final\.mp4\?download=1" download=""/);
+  assert.ok(!/Marcar como exportado/.test(html) && !/Pedir ajuste/.test(html) && !/Aprovado<\/span>/.test(html), 'nada de exportado, nada de ajuste inventado, sem selo antes de aprovar');
+  assert.ok(html.indexOf('fd-bar') > html.indexOf('Algo saiu errado'), 'a barra é o último bloco (gruda no fim da área)');
+  // aprovado: selo "Aprovado", Baixar vídeo vira a ação principal e não há mais "Aprovar vídeo"
+  const done = render(view(), mission(delivered({ status: 'completed' })));
+  assert.match(done, /class="fd-approved" role="status">.*Aprovado<\/span>/);
+  assert.match(done, /class="fd-btn fd-primary" href="\/media\/prod_1\/delivery\/final\.mp4\?download=1" download=""/);
+  assert.ok(!/Aprovar vídeo/.test(done) && !/Marcar como exportado/.test(done));
+  // faixa "Criar outro vídeo" (texto de appConfig) fica antes da barra, sem valor em reais
+  const strip = render(view({ firstVideo: { text: 'Seu produto já tem um vídeo pronto para vender. Que tal dar o mesmo impulso ao próximo da sua loja?', cta: 'Criar outro vídeo' }, newProd: () => {} }), mission(delivered({ status: 'completed' })));
+  assert.match(strip, /Seu produto já tem um vídeo pronto para vender\. Que tal dar o mesmo impulso ao próximo da sua loja\?/);
+  assert.match(strip, />Criar outro vídeo<\/button>/);
+  assert.ok(!/R\$|Ver pacotes|vendendo sozinho/.test(strip));
+  assert.ok(strip.indexOf('pv-upsell') < strip.indexOf('fd-bar'));
   assert.match(html, /Pronto pra postar no TikTok Shop/); assert.match(html, /Copie e cole na hora de publicar/);
   assert.match(html, /Fone de Ouvido Azul Marinho/); assert.match(html, /27 caracteres/); assert.match(html, /Copiar título/);
   assert.match(html, /<li>#FoneDeOuvido<\/li><li>#TikTokAchados<\/li>/);

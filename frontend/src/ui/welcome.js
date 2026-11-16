@@ -1,11 +1,13 @@
 // Bônus de boas-vindas e convites para comprar: lógica pura (tests/welcome.test.mjs). Sem React.
 // O servidor decide e concede o bônus (src/studio/welcome.py); `account.welcome` = {credits, granted_at} quando houve.
 
+import { NEXT_VIDEO_COPY } from '../config/appConfig.js';
+
 export const VIDEO_CC = 2000;   // 1 vídeo = 20 créditos (catálogo); em centésimos, como o livro
 const READY = new Set(['awaiting_final_review', 'completed']);
 
+export const SEE_PACKS = 'Ver pacotes';   // botão do aviso de saldo insuficiente no modal Nova produção (não é a faixa do vídeo pronto)
 export const NO_BALANCE_CREATE = 'Você já sabe o resultado. Escolha quantos vídeos quer fazer este mês.';
-export const SEE_PACKS = 'Ver pacotes';
 
 // Missões vazias depois do bônus: "Seus 20 créditos estão esperando..."
 export function emptyMissionsCopy(account, productions) {
@@ -15,13 +17,13 @@ export function emptyMissionsCopy(account, productions) {
     text: 'Solte a foto do seu produto e veja o vídeo pronto em 3 minutos.', cta: 'Criar meu primeiro vídeo' };
 }
 
-// Primeiro vídeo pronto e saldo abaixo de um vídeo: convite para os pacotes.
+// Primeiro vídeo pronto: convite para criar o próximo (texto em config/appConfig.js, sem valores). O botão leva ao fluxo de nova
+// produção; se faltar saldo, esse fluxo já oferece a compra. Conta isenta não vê o convite.
 export function firstVideoCopy({ P, productions, wallet }) {
-  if (!P || !READY.has(P.status) || !wallet || wallet.exempt) return null;
-  if ((Number(wallet.balance_cc) || 0) >= VIDEO_CC) return null;
+  if (!P || !READY.has(P.status) || (wallet && wallet.exempt)) return null;
   const ready = (productions || []).filter((p) => READY.has(p.status)).length;
   if (ready !== 1) return null;
-  return { text: 'Esse é o seu produto vendendo sozinho. Continue criando: no Pro, cada vídeo sai por R$ 6,66.', cta: SEE_PACKS };
+  return { text: NEXT_VIDEO_COPY.text, cta: NEXT_VIDEO_COPY.cta };
 }
 
 // Erro ao criar: saldo insuficiente (402 com insufficient_credits) vira o convite para os pacotes.

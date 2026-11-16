@@ -185,10 +185,13 @@ console.log('ok: credits');
   assert.equal(W.emptyMissionsCopy({ welcome: null }, []), null);
   const P = { status: 'awaiting_final_review' };
   const low = { balance_cc: 0, exempt: false };
-  assert.equal(W.firstVideoCopy({ P, productions: [P], wallet: low }).text,
-    'Esse é o seu produto vendendo sozinho. Continue criando: no Pro, cada vídeo sai por R$ 6,66.');
-  assert.equal(W.firstVideoCopy({ P, productions: [P], wallet: low }).cta, 'Ver pacotes');
-  assert.equal(W.firstVideoCopy({ P, productions: [P], wallet: { balance_cc: 2000 } }), null);       // ainda dá 1 vídeo
+  // faixa do primeiro vídeo: texto vem de config/appConfig.js, sem valor em reais e sem "pacotes"
+  const copy = W.firstVideoCopy({ P, productions: [P], wallet: low });
+  assert.equal(copy.text, 'Seu produto já tem um vídeo pronto para vender. Que tal dar o mesmo impulso ao próximo da sua loja?');
+  assert.equal(copy.cta, 'Criar outro vídeo');
+  assert.doesNotMatch(copy.text + copy.cta, /R\$|vendendo sozinho|pacote/i);
+  assert.ok(W.firstVideoCopy({ P, productions: [P], wallet: { balance_cc: 2000 } }), 'aparece também com saldo (o fluxo de nova produção cuida da compra)');
+  assert.ok(W.firstVideoCopy({ P: { status: 'completed' }, productions: [{ status: 'completed' }], wallet: null }));
   assert.equal(W.firstVideoCopy({ P, productions: [P, { status: 'completed' }], wallet: low }), null); // não é o primeiro
   assert.equal(W.firstVideoCopy({ P: { status: 'producing' }, productions: [P], wallet: low }), null);
   assert.equal(W.firstVideoCopy({ P, productions: [P], wallet: { balance_cc: 0, exempt: true } }), null);

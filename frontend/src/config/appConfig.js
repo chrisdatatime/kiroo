@@ -8,6 +8,12 @@ export const DARK_THEME_ENABLED = false;
 // para "Cada vídeo usa N créditos" e "≈ N vídeos".
 export const VIDEO_CREDITS = 20;
 
+// Faixa no fim da tela do vídeo pronto (primeiro vídeo). Sem valores em reais. Ajuste os textos aqui.
+export const NEXT_VIDEO_COPY = {
+  text: 'Seu produto já tem um vídeo pronto para vender. Que tal dar o mesmo impulso ao próximo da sua loja?',
+  cta: 'Criar outro vídeo',
+};
+
 // Página de planos (Fase 6). Até lá, /pricing abre a tela de compra que já existe.
 export const PRICING_PATH = '/pricing';
 

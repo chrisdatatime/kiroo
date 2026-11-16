@@ -182,17 +182,16 @@ export function FalResult({ m, product }) {
   const share = () => { navigator.share({ files: [shareFile], title: vName }).catch(() => {}); };
   const credits = m.variantCredits && m.variantCredits !== '0' ? m.variantCredits : null;
   const nar = g.narration;
+  const approved = m.P.status === 'completed';
   return (
     <div className="fd-grid">
       <div className="fd-left">
+        {approved && <span className="fd-approved" role="status"><Check size={15} sw={2.6} />Aprovado</span>}
         <div className="fd-player">
           <video src={g.video.url} poster={g.cover || undefined} controls playsInline preload="metadata" aria-label={'Vídeo final' + (product ? ': ' + product : '')} />
           <span className="fd-badge">15 s · 9:16</span>
         </div>
-        <div className="fd-acts">
-          <a className="fd-btn fd-primary" href={g.video.download} download><Icon name="download" />Baixar vídeo</a>
-          {shareFile && <button type="button" className="fd-btn fd-secondary" onClick={share}><Icon name="share" />Compartilhar</button>}
-        </div>
+        {shareFile && <div className="fd-acts"><button type="button" className="fd-btn fd-secondary" onClick={share}><Icon name="share" />Compartilhar</button></div>}
       </div>
       <div className="fd-right">
         <div className="fd-rhead"><h2>Pronto pra postar no {plat}</h2><span>Copie e cole na hora de publicar</span></div>
@@ -239,21 +238,42 @@ export function FalResult({ m, product }) {
           </div>
         </section>
         {g.partial && <div className="fd-note fd-card" role="note">Entrega parcial: a foto não ficou pronta.</div>}
-        {m.P.status === 'awaiting_final_review' && (
-          <div className="fd-export"><button type="button" className="fd-btn" onClick={m.exportVideo} disabled={m.busy}>Marcar como exportado</button>
-            <span>Ao publicar no {plat}, marque o conteúdo como publicidade. A publicação é manual.</span></div>
-        )}
+        <p className="fd-pubnote">Ao publicar no {plat}, marque o conteúdo como publicidade. A publicação é manual.</p>
         <Report support={m.support} />
       </div>
     </div>
   );
 }
 
-export function FalDone({ m, team, product, stations, phone }) {
+// Barra de ação fixa no fim da área de conteúdo. Aguardando aprovação: "Aprovar vídeo" é a ação principal (o servidor aceita
+// a aprovação só nesse estado) e "Baixar vídeo" fica ao lado. Aprovado: "Baixar vídeo" é a principal. "Pedir ajuste" não
+// existe no motor fal (não há ajuste de vídeo pronto), então não é oferecido.
+export function ActionBar({ m }) {
+  const href = m.gallery.video.download;
+  const waiting = m.P.status === 'awaiting_final_review';
+  const download = (primary) => <a className={'fd-btn ' + (primary ? 'fd-primary' : 'fd-secondary')} href={href} download><Icon name="download" />Baixar vídeo</a>;
+  return (
+    <div className="fd-bar" role="region" aria-label="Ações do vídeo">
+      {waiting ? (<>
+        <p className="fd-bar-txt"><strong>Seu vídeo está pronto para aprovar.</strong><span>Aprove para concluir; você pode baixar antes.</span></p>
+        <div className="fd-bar-btns">
+          {download(false)}
+          <button type="button" className="fd-btn fd-approve" onClick={m.approve} disabled={m.busy}><Check size={18} sw={2.6} />Aprovar vídeo</button>
+        </div>
+      </>) : (
+        <div className="fd-bar-btns">{download(true)}</div>
+      )}
+    </div>
+  );
+}
+
+export function FalDone({ m, team, product, stations, phone, footer }) {
   return (
     <div className="fd" data-testid="fal-done">
       <DoneBanner g={m.gallery} stations={stations} team={team} chips={m.chips} phone={phone} />
       <FalResult m={m} product={product} />
+      {footer}
+      <ActionBar m={m} />
     </div>
   );
 }

@@ -893,10 +893,16 @@ export default class App extends React.Component {
     const credits = P.confirmation && P.confirmation.summary ? P.confirmation.summary.total_credits : null;
     return { P, status: belt.status, stations: belt.stations, progress: belt.progress, gallery: falGallery(P),
       start: () => this.falStart(), startLabel: cc > 0 && credits ? `Criar vídeo · ${credits} créditos` : 'Criar vídeo',
-      busy: s.fal.busy || !!s.busy, error: s.fal.error, exportVideo: () => this.exportVideo(),
+      busy: s.fal.busy || !!s.busy, error: s.fal.error, approve: () => this.approveFal(),
       chips: { scene: { id: P.fal && P.fal.scene, label: (P.fal && P.fal.scene_label) || '' }, platform: { id: P.fal && P.fal.platform, label: (P.fal && P.fal.platform_label) || '' } },
       reuse: (kind) => this.falReuse(kind), variantCredits: offerFor(s.S).credits,
       support: s.account && s.account.plan ? s.account.plan.support : null };
+  }
+  // Aprovar o vídeo pronto: o mesmo POST /final (decision approve) do antigo "Marcar como exportado"; o servidor só aceita em
+  // awaiting_final_review e passa a produção para completed (acerta o saldo). Pedir ajuste não existe no motor fal.
+  approveFal() {
+    const P = this.prodP(); if (!P) return;
+    this.act('exportar', () => post(`/api/productions/${P.id}/final`, { decision: 'approve', note: 'aprovado pelo cliente' }), 'Vídeo aprovado! Baixe os arquivos e publique pelo app da plataforma.');
   }
   exportVideo() {
     const P = this.prodP(); if (!P) return;
