@@ -7,8 +7,8 @@
 //   apple-touch-icon.png   180 px, quadrado tinta sem cantos (o iOS arredonda)
 //   icon-192.png, icon-512.png       ícone de app tinta, raio 25%, cabeça laranja (arquivo como está)
 //   icon-maskable-512.png  mesmo ícone em quadrado cheio (a plataforma recorta; cabeça dentro da zona segura)
-//   og-image.png           1200x630, wordmark sobre #FAFAF8
-// Saídas em src/assets/brand/: cópias dos SVG usados pela interface (sem alteração).
+//   og-image-v2.png        1200x630, wordmark sobre #FAFAF8
+// Saídas em src/assets/brand/: cópias dos SVG usados pela interface (só sem o bloco <metadata> C2PA).
 import { Resvg } from '@resvg/resvg-js';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -64,6 +64,7 @@ fs.mkdirSync(BRAND, { recursive: true });
 
 const appIcon = read('icone-app-preto.svg');
 const fullBleed = appIcon.replace(/rx="25"/, 'rx="0"');
+fs.rmSync(path.join(PUB, 'og-image.png'), { force: true }); // nome antigo (cache das redes)
 const out = {
   'favicon.svg': faviconSvg(),
   'favicon.ico': ico([16, 32].map((size) => ({ size, data: png(appIcon, size) }))),
@@ -71,11 +72,11 @@ const out = {
   'icon-192.png': png(appIcon, 192),
   'icon-512.png': png(appIcon, 512),
   'icon-maskable-512.png': png(fullBleed, 512),
-  'og-image.png': new Resvg(ogImage()).render().asPng(),
+  'og-image-v2.png': new Resvg(ogImage()).render().asPng(),
 };
 for (const [name, data] of Object.entries(out)) fs.writeFileSync(path.join(PUB, name), data);
 
 for (const name of ['wordmark-preto-laranja.svg', 'wordmark-branco-laranja.svg', 'simbolo-laranja.svg', 'icone-app-preto.svg']) {
-  fs.copyFileSync(path.join(SRC, name), path.join(BRAND, name));
+  fs.writeFileSync(path.join(BRAND, name), stripMeta(read(name)));
 }
 console.log(`marca: ${Object.keys(out).length} arquivos em public/ e 4 SVG em src/assets/brand/`);

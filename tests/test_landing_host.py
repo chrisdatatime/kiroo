@@ -14,7 +14,7 @@ from studio.web.server import App
 ROOT, WWW, APPH, OTHER = {"Host": "kiroo.io"}, {"Host": "www.kiroo.io"}, {"Host": "app.kiroo.io"}, {"Host": "staging.kiroo.app"}
 LANDING_SRC = ('<!doctype html><html lang="pt-BR"><head><link rel="canonical" href="__LANDING_ORIGIN__/">'
                '<meta name="kiroo-login-url" content="__APP_LOGIN_URL__"><meta name="kiroo-signup" content="__SIGNUP__">'
-               '<meta property="og:image" content="__LANDING_ORIGIN__/og-image.png"></head><body><div id="root"></div></body></html>')
+               '<meta property="og:image" content="__LANDING_ORIGIN__/og-image-v2.png"></head><body><div id="root"></div></body></html>')
 
 
 @pytest.fixture
@@ -24,7 +24,7 @@ def dist(tmp_path, monkeypatch):
     (d / "index.html").write_text("<!doctype html><html><body>APP</body></html>", encoding="utf-8")
     (d / "landing.html").write_text(LANDING_SRC, encoding="utf-8")
     (d / "assets" / "landing-AbCdEf12.js").write_text("console.log(1)", encoding="utf-8")
-    (d / "og-image.png").write_bytes(b"\x89PNG")
+    (d / "og-image-v2.png").write_bytes(b"\x89PNG")
     (d / "manifest.webmanifest").write_text("{}", encoding="utf-8")
     monkeypatch.setattr(srv, "GAME_DIST", d)
     return d
@@ -54,12 +54,12 @@ def test_root_serves_landing_with_config(make):
     assert r.status == 200 and r.content_type.startswith("text/html")
     assert '<link rel="canonical" href="https://kiroo.io/">' in html
     assert 'content="https://app.kiroo.io/login"' in html and 'content="open"' in html
-    assert 'content="https://kiroo.io/og-image.png"' in html and "__" not in html
+    assert 'content="https://kiroo.io/og-image-v2.png"' in html and "__" not in html
     assert "Set-Cookie" not in r.headers
 
 
 @pytest.mark.parametrize("path", ["/termos", "/privacidade", "/legal/legal.css", "/legal/logo.svg", "/healthz",
-                                  "/assets/landing-AbCdEf12.js", "/og-image.png", "/?utm_source=ig&utm_medium=bio"])
+                                  "/assets/landing-AbCdEf12.js", "/og-image-v2.png", "/?utm_source=ig&utm_medium=bio"])
 def test_root_public_paths(make, path):
     r = get(make(), path, ROOT)
     assert r.status == 200, (path, r.status, r.headers)

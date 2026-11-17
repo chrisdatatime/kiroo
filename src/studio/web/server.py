@@ -93,7 +93,7 @@ GAME_DIST = Path(__file__).resolve().parents[3] / "frontend" / "dist"   # build 
 # Arquivos da raiz do dist (vêm de frontend/public; ver frontend/scripts/brand-assets.mjs). Lista fechada, nada de listar pasta.
 BRAND_FILES = {"favicon.ico": "image/x-icon", "favicon.svg": "image/svg+xml", "apple-touch-icon.png": "image/png",
                "icon-192.png": "image/png", "icon-512.png": "image/png", "icon-maskable-512.png": "image/png",
-               "og-image.png": "image/png", "manifest.webmanifest": "application/manifest+json"}
+               "og-image-v2.png": "image/png", "manifest.webmanifest": "application/manifest+json"}
 MAX_BODY = 150 * 1024 * 1024  # uploads em base64
 MAX_AUTH_BODY = 64 * 1024  # rotas sem sessão não recebem envio grande
 WEBHOOK_PATH = "/api/payments/stripe/webhook"   # pública: autenticada pela assinatura da Stripe, não por sessão
