@@ -44,25 +44,30 @@ Como ler as colunas:
 | `STUDIO_LEGAL_CNPJ` | não | não | execução | `11.222.333/0001-81` | CNPJ no rodapé do Sobre (texto, não é validado). |
 | `STUDIO_WELCOME_CREDITS` | não | não | execução | `20` *(padrão)* | Bônus de boas-vindas (1 vídeo = 20), concedido uma vez por pessoa depois de confirmar o e-mail. `0` desliga. Lançamento `welcome_bonus`: não é compra, não dá plano, não é estornado. |
 | `STUDIO_WELCOME_DAILY_CAP` | não | não | execução | `100` *(padrão)* | Teto global de bônus concedidos por dia (horário de Brasília). Ao atingir, as próximas confirmações ficam sem bônus, com aviso `welcome_denied`/`daily_cap` no log e em Administrador → Métricas. |
-| `STUDIO_PAYMENTS_PROVIDER` | não | não | execução | *(não definir)* | **Obsoleta** (era o ponto de integração do Mercado Pago). A compra pelo site agora é o Asaas, ligada por `PAYMENTS_ENABLED` (abaixo). |
+| `STUDIO_PAYMENTS_PROVIDER` | não | não | execução | *(não definir)* | **Obsoleta**. A compra pelo site é a Stripe, ligada por `PAYMENTS_ENABLED` (abaixo). |
 | `STUDIO_KILL_SWITCH` | não | não | execução | *(não definir)* | `1` bloqueia qualquer chamada paga em qualquer ambiente. Trava de emergência; com `ALLOW_PAID_CALLS=0` já é redundante. |
 
 > Em staging nunca coloque `GEMINI_API_KEY` nem `ANTHROPIC_API_KEY`. Sem chave o modo simulado funciona
 > normalmente e o chat cai no modo "sem IA". Chave que não existe é chave que não vaza.
 
-### Compra de créditos (Asaas; desligada por padrão)
+### Planos e créditos (Stripe; desligada por padrão)
 
-Pix e cartão para **comprar créditos** (o ledger continua o mesmo). Cartão é pago na **fatura hospedada do Asaas**
-(`invoiceUrl`): nenhum dado de cartão passa pelo Kiroo. Preço sempre calculado no servidor pelo catálogo
-`profiles/billing/catalog.json` (centavos; o vídeo custa 20 créditos fixos). Regras e passo a passo do painel em
-[docs/ADMIN.md](ADMIN.md), seção "Compra de créditos (Asaas)".
+Assinatura mensal (Básico, Pro, Estúdio) e créditos avulsos por quantidade, pelo **Checkout hospedado da Stripe**
+(cartão e Pix; nenhum dado de cartão passa pelo Kiroo) e pelo **Portal do cliente** (trocar plano, cancelar, cartão,
+recibos). O servidor escolhe o preço (id da Stripe em variável) e valida a quantidade do avulso; os créditos do ciclo vêm
+do metadado `credits` do produto/preço na Stripe (sem ele, do catálogo `profiles/billing/catalog.json`). Livro por
+origem: bônus → plano (vence no fim do ciclo) → avulso (não vence). Webhook: `POST /api/payments/stripe/webhook`.
 
 | Variável | Obrig. | Segredo | Quando | Valor no staging | Para que serve |
 |---|---|---|---|---|---|
-| `PAYMENTS_ENABLED` | não | não | execução | `false` *(padrão)* | Liga a tela "Comprar créditos", o checkout e o webhook `POST /api/payments/asaas/webhook`. Desligado, a tela volta ao "Adicionar créditos" manual e a rota do webhook responde 404. |
-| `ASAAS_ENV` | com pagamentos | não | execução | `sandbox` | `sandbox` (`https://api-sandbox.asaas.com/v3`) ou `production` (`https://api.asaas.com/v3`). **Recusa subir** com `production` fora de `STUDIO_ENV=production` e com `sandbox` em `STUDIO_ENV=production`. |
-| `ASAAS_API_KEY` | com pagamentos | **sim** | execução | *(selada)* | Chave de API (cabeçalho `access_token`). Sandbox começa com `$aact_hmlg_`, produção com `$aact_prod_`: chave do ambiente errado **impede a subida**. |
-| `ASAAS_WEBHOOK_TOKEN` | com pagamentos | **sim** | execução | *(selada)* | O mesmo "Token de autenticação" cadastrado no webhook do painel do Asaas; chega no cabeçalho `asaas-access-token` e é comparado em tempo constante. 32 a 255 caracteres, sem espaço, não pode ser uma chave de API. |
+| `PAYMENTS_ENABLED` | não | não | execução | `false` *(padrão)* | Kill switch. Liga o checkout, o Portal e o webhook. Desligado, a tela de Planos só mostra os valores (sem pagar), "Adicionar créditos" volta ao manual e o webhook responde 404. |
+| `STRIPE_SECRET_KEY` | com pagamentos | **sim** | execução | *(selada, `sk_test_...`)* | Chave secreta (ou restrita `rk_`). **Recusa subir** com chave de teste em `STUDIO_ENV=production` e com chave live fora dele. |
+| `STRIPE_WEBHOOK_SECRET` | com pagamentos | **sim** | execução | *(selada, `whsec_...`)* | Segredo de assinatura do endpoint do webhook (cada endpoint tem o seu; o da Stripe CLI é outro). |
+| `STRIPE_PUBLISHABLE_KEY` | não | não | execução | `pk_test_...` | Opcional (o Checkout é hospedado). Se definida, precisa ser do mesmo modo da secreta. |
+| `STRIPE_PRICE_BASICO_M` / `STRIPE_PRICE_PRO_M` / `STRIPE_PRICE_ESTUDIO_M` | com pagamentos | não | execução | ids `price_...` do sandbox | Preço mensal de cada plano. Nunca no código. |
+| `STRIPE_PRICE_AVULSO` | com pagamentos | não | execução | id `price_...` do sandbox | Preço por crédito avulso (a sessão usa `quantity` = créditos). |
+| `TOPUP_MIN_CREDITS` / `TOPUP_MAX_CREDITS` | não | não | execução | `50` / `1000` | Limites do avulso por compra, validados no servidor. |
+| `STRIPE_API_VERSION` | não | não | execução | *(não definir)* | Versão fixa das chamadas (padrão `2025-02-24.acacia`). |
 | `STUDIO_CREDIT_CATALOG_FILE` | não | não | execução | *(não definir)* | Caminho de outro catálogo (mesmo formato de `profiles/billing/catalog.json`). |
 
 ### Motor fal.ai (workflows; desligado por padrão)

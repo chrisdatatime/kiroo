@@ -138,7 +138,7 @@ export function AccountContent({ v }) {
     <AccountView a={a} site={a.site} edit={edit} setEdit={setEdit} busy={busy} msg={msg} onSave={onSave} codeSent={codeSent}
       onVerify={() => run(async () => { await auth('resend'); setCodeSent(true); }, 'Enviamos um código para o seu e-mail.')}
       onCode={(code) => run(async () => { await auth('verify', { code: String(code || '') }); setCodeSent(false); }, 'E-mail confirmado.')}
-      onLogout={v.logout} openPackages={() => v.openPrefs('buy')} del={del} setDel={setDel}
+      onLogout={v.logout} openPackages={() => v.openPricing()} del={del} setDel={setDel}
       onDelete={(typed, pw) => run(async () => { await post('/api/account/delete', { confirm: typed, password: pw, email: typed }); window.location.assign('/'); })} />
   );
 }

@@ -191,3 +191,8 @@
 @media (prefers-reduced-motion: reduce) {
   .in-spin { animation: none; } .in-bar i, .in-nav-btn, .in-btn { transition: none; }
 }
+
+/* Fase 6: saldo menor que o preço do vídeo → avulso em um clique (Checkout da Stripe) */
+.in-quickbuy { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 12px; padding: 12px 14px;
+  border: 1px solid #E8E6E1; border-radius: 12px; background: #F7F6F3; font-size: 14px; }
+.in-quickbuy .in-btn { min-height: 44px; }

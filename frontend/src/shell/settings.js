@@ -10,10 +10,22 @@ export function barPct(o) {
   return Math.max(0, Math.min(100, Math.round((left / got) * 100)));
 }
 
-// Linhas das barras por origem (vindas de /api/credits → origins), com a nota de configuração de cada uma.
+const day = (iso) => { const d = iso ? new Date(iso) : null; return d && !Number.isNaN(d.getTime()) ? `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}` : ''; };
+
+// Linhas das barras por origem (vindas de /api/credits → origins: bonus, subscription, topup), com a nota de cada uma.
+// Plano: a nota diz quando o ciclo acaba ("Valem até 16/12; não acumulam").
 export function originRows(origins) {
-  return (origins || []).map((o) => ({ key: o.key, label: o.label, note: ORIGIN_NOTES[o.key] || '', left: o.left, received: o.received,
-    pct: barPct(o), accent: o.key === 'bonus' }));
+  return (origins || []).map((o) => ({ key: o.key, label: o.label,
+    note: o.key === 'subscription' && o.expires_at ? `Valem até ${day(o.expires_at)}; não acumulam` : (ORIGIN_NOTES[o.key] || ''),
+    left: o.left, received: o.received, pct: barPct(o), accent: o.key === 'bonus' }));
+}
+
+// Botões de pagamento (Portal do cliente da Stripe): "Gerenciar assinatura" com plano; "Recibos" com qualquer compra.
+export function billingActions(d) {
+  const b = (d && d.billing) || {};
+  const sub = d && d.plan && d.plan.subscription;
+  if (!b.online || !b.has_customer) return { manage: false, receipts: false };
+  return { manage: !!sub, receipts: true };
 }
 
 // "Cada vídeo usa 20 créditos. Com o saldo atual, dá para ≈ 4 vídeos."

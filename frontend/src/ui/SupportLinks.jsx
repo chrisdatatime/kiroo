@@ -1,7 +1,7 @@
 import React from 'react';
 import { Mail, MessageCircle } from 'lucide-react';
 
-// Suporte conforme o plano (servidor: plans.view → account.plan.support). Pro e Escala: "Falar no WhatsApp" (link wa.me de
+// Suporte conforme o plano (servidor: plans.view → account.plan.support). Pro e Estúdio: "Falar no WhatsApp" (link wa.me de
 // STUDIO_SUPPORT_WHATSAPP; sem a variável, o servidor não manda o link e o botão não aparece). Demais: e-mail.
 const LINK = { display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none', whiteSpace: 'nowrap' };
 

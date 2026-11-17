@@ -23,6 +23,7 @@ function useActions(v) {
     profile: () => v.openSettings('perfil'),
     statement: () => v.openSettings('creditos'),
     pricing: () => v.openPricing(),
+    receipts: () => v.openReceipts(),
     logout: () => v.logout(),
   };
 }
@@ -51,7 +52,7 @@ export function AccountMenu({ v, children, side = 'top', align = 'start' }) {
           <DropdownMenuSubContent className="am am-subm" sideOffset={10}>
             {credits.map((c) => (
               <DropdownMenuItem key={c.id} className="am-item am-plain" disabled={!!c.soon}
-                onSelect={c.id === 'statement' ? a.statement : c.id === 'pricing' ? a.pricing : undefined}>
+                onSelect={c.id === 'statement' ? a.statement : c.id === 'pricing' ? a.pricing : c.id === 'receipts' && !c.soon ? a.receipts : undefined}>
                 <span>{c.label}</span>{c.soon && <small className="am-soon">em breve</small>}
               </DropdownMenuItem>
             ))}
@@ -138,7 +139,7 @@ export function AccountDrawer({ v, open, onOpenChange }) {
           <button type="button" data-am-item className="am-item am-dr-item" onClick={run(a.profile)}><UserRound aria-hidden="true" /><span>Perfil</span></button>
           {section({ id: 'creditos', icon: Coins, label: 'Créditos e extrato', children: creditItems().map((c) => (
             <button key={c.id} type="button" data-am-item className="am-item am-plain am-dr-item" disabled={!!c.soon}
-              onClick={c.id === 'statement' ? run(a.statement) : c.id === 'pricing' ? run(a.pricing) : undefined}>
+              onClick={c.id === 'statement' ? run(a.statement) : c.id === 'pricing' ? run(a.pricing) : c.id === 'receipts' && !c.soon ? run(a.receipts) : undefined}>
               <span>{c.label}</span>{c.soon && <small className="am-soon">em breve</small>}
             </button>
           )) })}

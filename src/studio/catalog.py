@@ -1,17 +1,17 @@
-"""Catálogo de compra de créditos e preço fixo do vídeo em créditos (profiles/billing/catalog.json).
+"""Catálogo de planos e créditos avulsos (Stripe) e preço fixo do vídeo em créditos (profiles/billing/catalog.json).
 
 Regras:
-  * Valores em CENTAVOS (inteiros) e créditos inteiros. Todo preço é calculado aqui, no servidor: o navegador só
-    escolhe um código de pacote ou uma quantidade avulsa, nunca envia valor.
-  * O vídeo do motor fal.ai (Claro, e Escuro quando ligado) custa `video_price_credits` créditos FIXOS, independente
-    do custo real da fal (que continua na tabela de custos em US$, só para os tetos/orçamento operacional).
-  * "Economize X%" é calculado contra o preço unitário do avulso (`unit_price_cents`).
+  * Valores em CENTAVOS (inteiros) e créditos inteiros, só para EXIBIR. Quem cobra é o preço da Stripe, cujo id vem de
+    variável de ambiente (`price_env` de cada plano e do avulso): nenhum id da Stripe fica no código.
+  * O vídeo do motor fal.ai custa `video_price_credits` créditos FIXOS (20), independente do custo real da fal.
+  * Avulso: quantidade livre, inteira, entre TOPUP_MIN_CREDITS e TOPUP_MAX_CREDITS (padrão 50 e 1.000, do catálogo).
+    O servidor valida SEMPRE (`topup_quote`); o navegador só manda a quantidade, nunca valor.
+  * Planos só mensais na v1 (`annual_enabled: false`); cada plano já tem o lugar do preço anual (`annual`).
 """
 
 from __future__ import annotations
 
 import json
-import math
 import os
 from functools import lru_cache
 from pathlib import Path
@@ -19,10 +19,11 @@ from pathlib import Path
 from .config import PROJECT_ROOT
 
 DEFAULT_FILE = PROJECT_ROOT / "profiles" / "billing" / "catalog.json"
+INTERVALS = ("month", "year")
 
 
 class CatalogError(ValueError):
-    """Pedido de compra fora do catálogo (pacote inexistente, avulso fora do mínimo/incremento/máximo)."""
+    """Pedido fora do catálogo (plano inexistente, avulso fora do mínimo/máximo, quantidade que não é inteira)."""
 
 
 def _file() -> Path:
@@ -42,24 +43,27 @@ def load() -> dict:
     return _load(str(f), f.stat().st_mtime)
 
 
+def _pos_int(v) -> bool:
+    return isinstance(v, int) and not isinstance(v, bool) and v > 0
+
+
 def _validate(c: dict) -> None:
-    def pos_int(v, what):
-        if not isinstance(v, int) or isinstance(v, bool) or v <= 0:
+    def need(v, what):
+        if not _pos_int(v):
             raise CatalogError(f"catálogo: {what} precisa ser inteiro positivo")
-    pos_int(c.get("video_price_credits"), "video_price_credits")
-    pos_int(c.get("unit_price_cents"), "unit_price_cents")
+    need(c.get("video_price_credits"), "video_price_credits")
     codes = set()
-    for p in c.get("packages") or []:
-        pos_int(p.get("credits"), f"créditos do pacote {p.get('code')}")
-        pos_int(p.get("price_cents"), f"preço do pacote {p.get('code')}")
-        if not p.get("code") or p["code"] in codes:
-            raise CatalogError("catálogo: código de pacote vazio ou repetido")
+    for p in c.get("plans") or []:
+        need(p.get("credits"), f"créditos do plano {p.get('code')}")
+        need(p.get("price_cents"), f"preço do plano {p.get('code')}")
+        if not p.get("code") or p["code"] in codes or not p.get("price_env"):
+            raise CatalogError("catálogo: plano sem código, repetido ou sem price_env")
         codes.add(p["code"])
-    cu = c.get("custom") or {}
-    for k in ("unit_price_cents", "min_credits", "step_credits", "max_credits"):
-        pos_int(cu.get(k), f"custom.{k}")
-    if cu["min_credits"] % cu["step_credits"] or cu["max_credits"] % cu["step_credits"] or cu["min_credits"] > cu["max_credits"]:
-        raise CatalogError("catálogo: mínimo e máximo do avulso precisam ser múltiplos do incremento (mínimo <= máximo)")
+    t = c.get("topup") or {}
+    for k in ("unit_price_cents", "credits_per_unit", "min_credits", "max_credits"):
+        need(t.get(k), f"topup.{k}")
+    if not t.get("price_env") or t["min_credits"] > t["max_credits"]:
+        raise CatalogError("catálogo: topup sem price_env ou com mínimo maior que o máximo")
 
 
 # ------------------------------------------------------------------ preço do vídeo
@@ -72,80 +76,127 @@ def video_price_cc() -> int:
     return video_price_credits() * 100
 
 
-# ------------------------------------------------------------------ compra
-def savings_pct(credits: int, price_cents: int, unit_cents: int) -> int:
-    """Desconto do pacote contra o avulso, arredondado para baixo (nunca promete mais do que dá)."""
-    full = credits * unit_cents
-    if full <= 0 or price_cents >= full:
-        return 0
-    return math.floor((full - price_cents) * 100 / full)
+# ------------------------------------------------------------------ planos
+def plans() -> list[dict]:
+    return list(load().get("plans") or [])
 
 
-def per_credit_cents(price_cents: int, credits: int) -> int:
-    """Preço por crédito, em centavos, arredondado ao centavo (7990/200 → 40; 54990/2000 → 27)."""
-    return math.floor(price_cents / credits + 0.5) if credits > 0 else 0
-
-
-def _free_view(c: dict) -> dict:
-    """Card "Free" (conta sem compra paga): os créditos são o bônus de boas-vindas (STUDIO_WELCOME_CREDITS)."""
-    from .welcome import credits as welcome_credits
-    f = c.get("free") or {}
-    return {"name": f.get("name") or "Free", "credits": welcome_credits(), "tagline": f.get("tagline") or "",
-            "price_note": f.get("price_note") or "", "missing": [str(x) for x in f.get("missing") or []]}
-
-
-def package(code: str) -> dict:
-    for p in load()["packages"]:
+def plan(code: str) -> dict:
+    for p in plans():
         if p["code"] == code:
             return p
-    raise CatalogError("pacote inexistente")
+    raise CatalogError("plano inexistente")
 
 
-def custom_total_cents(credits) -> int:
-    """Total do avulso. Recusa fora do mínimo, do incremento ou do máximo (e qualquer coisa que não seja inteiro)."""
-    cu = load()["custom"]
+def annual_enabled() -> bool:
+    return bool(load().get("annual_enabled"))
+
+
+def _env(name: str | None) -> str | None:
+    if not name:
+        return None
+    return (os.environ.get(name) or "").strip() or None
+
+
+def price_id(code: str, interval: str = "month") -> str | None:
+    """Id do preço da Stripe do plano (variável de ambiente). None = não configurado."""
+    p = plan(code)
+    if interval == "year":
+        return _env((p.get("annual") or {}).get("price_env"))
+    return _env(p.get("price_env"))
+
+
+def plan_for_price(price: str | None) -> tuple[dict, str] | None:
+    """(plano, intervalo) do preço da Stripe, ou None se o preço não é de nenhum plano configurado."""
+    if not price:
+        return None
+    for p in plans():
+        if _env(p.get("price_env")) == price:
+            return p, "month"
+        if _env((p.get("annual") or {}).get("price_env")) == price:
+            return p, "year"
+    return None
+
+
+def price_envs() -> list[str]:
+    """Variáveis de preço obrigatórias com a compra ligada (os planos mensais e o avulso; anual só se ligado)."""
+    out = [p["price_env"] for p in plans()]
+    if annual_enabled():
+        out += [(p.get("annual") or {}).get("price_env") for p in plans() if (p.get("annual") or {}).get("price_env")]
+    out.append(load()["topup"]["price_env"])
+    return out
+
+
+# ------------------------------------------------------------------ avulso
+def _limit(env: str, default: int) -> int:
+    raw = (os.environ.get(env) or "").strip()
+    if not raw:
+        return int(default)
+    try:
+        v = int(raw)
+    except ValueError as exc:
+        raise CatalogError(f"{env} precisa ser um inteiro") from exc
+    if v <= 0:
+        raise CatalogError(f"{env} precisa ser positivo")
+    return v
+
+
+def topup_limits() -> tuple[int, int]:
+    """(mínimo, máximo) de créditos por compra avulsa: TOPUP_MIN_CREDITS / TOPUP_MAX_CREDITS ou o catálogo."""
+    t = load()["topup"]
+    lo, hi = _limit("TOPUP_MIN_CREDITS", t["min_credits"]), _limit("TOPUP_MAX_CREDITS", t["max_credits"])
+    if lo > hi:
+        raise CatalogError("TOPUP_MIN_CREDITS maior que TOPUP_MAX_CREDITS")
+    return lo, hi
+
+
+def topup_price_id() -> str | None:
+    return _env(load()["topup"]["price_env"])
+
+
+def topup_quote(credits) -> dict:
+    """O que será cobrado no avulso: {credits, quantity, amount_cents}. Recusa o que não for inteiro (decimal, texto,
+    booleano), negativo, abaixo do mínimo ou acima do máximo. O valor exibido é quantidade × preço unitário."""
     if isinstance(credits, bool) or not isinstance(credits, int):
-        raise CatalogError("quantidade de créditos inválida")
-    if credits < cu["min_credits"]:
-        raise CatalogError(f"o mínimo do avulso é {cu['min_credits']} créditos")
-    if credits > cu["max_credits"]:
-        raise CatalogError(f"o máximo por compra avulsa é {cu['max_credits']} créditos")
-    if credits % cu["step_credits"]:
-        raise CatalogError(f"o avulso vai de {cu['step_credits']} em {cu['step_credits']} créditos")
-    return credits * cu["unit_price_cents"]
+        raise CatalogError("Escolha uma quantidade inteira de créditos.")
+    lo, hi = topup_limits()
+    if credits < lo:
+        raise CatalogError(f"O mínimo do avulso é {lo} créditos.")
+    if credits > hi:
+        raise CatalogError(f"O máximo por compra avulsa é {hi:,} créditos.".replace(",", "."))
+    t = load()["topup"]
+    per = int(t["credits_per_unit"])
+    if credits % per:
+        raise CatalogError(f"O avulso vai de {per} em {per} créditos.")
+    qty = credits // per
+    return {"credits": credits, "quantity": qty, "amount_cents": qty * int(t["unit_price_cents"]),
+            "unit_price_cents": int(t["unit_price_cents"])}
 
 
-def quote(package_code: str | None = None, credits=None) -> dict:
-    """O que será cobrado: {package_code, credits, amount_cents, label}. `package_code` OU `credits` (avulso)."""
-    if package_code:
-        p = package(str(package_code))
-        return {"package_code": p["code"], "credits": p["credits"], "amount_cents": p["price_cents"],
-                "label": f"Pacote {p['name']}"}
-    total = custom_total_cents(credits)
-    return {"package_code": "avulso", "credits": credits, "amount_cents": total, "label": "Créditos avulsos"}
-
-
+# ------------------------------------------------------------------ tela
 def public_view() -> dict:
-    """Catálogo para a tela "Comprar créditos" (o navegador só exibe; o preço cobrado sai de `quote`)."""
+    """Catálogo para a tela de Planos (o navegador só exibe; quem cobra é a Stripe). Itens `show: false` ficam fora."""
+    from .welcome import credits as welcome_credits
     c = load()
-    unit, per_video = c["unit_price_cents"], c["video_price_credits"]
+    per_video = c["video_price_credits"]
+    lo, hi = topup_limits()
+    t = c["topup"]
     return {
-        "currency": c.get("currency", "BRL"), "video_price_credits": per_video, "unit_price_cents": unit,
-        "packages": [{"code": p["code"], "name": p["name"], "credits": p["credits"], "price_cents": p["price_cents"],
-                      "highlight": bool(p.get("highlight")), "videos": p["credits"] // per_video,
-                      "savings_pct": savings_pct(p["credits"], p["price_cents"], unit),
-                      "per_credit_cents": per_credit_cents(p["price_cents"], p["credits"]),
-                      "per_video_cents": p["price_cents"] * per_video // p["credits"],
-                      "features": [{"text": str(f.get("text") or ""), "strong": bool(f.get("strong"))}
-                                   for f in p.get("features") or []]} for p in c["packages"]],
-        "free": _free_view(c),
-        "custom": {k: c["custom"][k] for k in ("unit_price_cents", "min_credits", "step_credits", "max_credits")}
-        | {"shortcuts": list(c["custom"].get("shortcuts") or []),
-           "hint_from_credits": c["custom"].get("hint_from_credits"), "hint_package": c["custom"].get("hint_package")},
+        "currency": c.get("currency", "BRL"), "video_price_credits": per_video, "welcome_credits": welcome_credits(),
+        "annual_enabled": annual_enabled(),
+        "plans": [{"code": p["code"], "name": p["name"], "credits": p["credits"], "price_cents": p["price_cents"],
+                   "annual_price_cents": (p.get("annual") or {}).get("price_cents"),
+                   "highlight": bool(p.get("highlight")), "videos": p["credits"] // per_video,
+                   "tagline": p.get("tagline") or "", "note": p.get("note") or "", "contact_note": bool(p.get("contact_note")),
+                   "features_lead": p.get("features_lead") or "",
+                   "features": [{"text": str(f.get("text") or "")} for f in p.get("features") or [] if f.get("show", True)]}
+                  for p in c["plans"]],
+        "topup": {"unit_price_cents": int(t["unit_price_cents"]), "min_credits": lo, "max_credits": hi,
+                  "shortcuts": [n for n in t.get("shortcuts") or [] if isinstance(n, int) and lo <= n <= hi]},
     }
 
 
 def brl(cents: int) -> str:
-    """7990 -> 'R$ 79,90'."""
+    """3990 -> 'R$ 39,90'."""
     s = f"{cents / 100:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     return f"R$ {s}"

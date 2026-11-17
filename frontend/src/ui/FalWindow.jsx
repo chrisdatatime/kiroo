@@ -96,7 +96,9 @@ function Problems({ f }) {
   return (
     <>
       {f.error && <div role="alert" className="fm-err"><AlertCircle size={18} aria-hidden="true" style={{ flex: 'none', marginTop: 1 }} />{f.error}</div>}
-      {f.noFunds && <button type="button" className="fm-btn2" onClick={f.openBuy}>{SEE_PACKS}</button>}
+      {(f.noFunds || f.missing > 0) && (f.quickBuy
+        ? <button type="button" className="fm-btn2" onClick={f.buyNow} disabled={f.buying} aria-busy={f.buying || undefined}>{f.buying ? 'Abrindo o pagamento…' : f.quickBuy.label}</button>
+        : f.noFunds && <button type="button" className="fm-btn2" onClick={f.openBuy}>{SEE_PACKS}</button>)}
     </>
   );
 }
@@ -159,6 +161,7 @@ function PhoneSheet({ f }) {
           <button type="button" className="fm-primary" onClick={create} disabled={f.busy || f.reuseBlocked || (!!f.file && f.errors.length > 0)}>
             {f.busy ? 'Começando…' : f.reuseBlocked ? f.reuseLabel : f.file ? f.label : 'Escolher foto'}
           </button>
+          {f.costLine && <p className="fm-cost">{f.costLine}</p>}
           <p>{RECEIVE_SHORT}</p>
         </footer>
       </section>
@@ -212,6 +215,7 @@ export default function FalWindow({ v }) {
         <footer className="fm-foot">
           <p className="fm-foot-txt">Você recebe vídeo de ~15 s com narração, 1 foto, título e legenda para <strong>{plat}</strong>. Se falhar por erro técnico, não é cobrado.</p>
           <div className="fm-foot-act">
+            {f.costLine && <span className="fm-cost">{f.costLine}</span>}
             <button type="button" className="fm-primary" onClick={f.create} disabled={f.busy || f.reuseBlocked || f.errors.length > 0}>{f.busy ? 'Começando…' : ctaLabel(f, f.label)}</button>
           </div>
         </footer>

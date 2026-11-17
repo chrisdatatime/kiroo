@@ -1,10 +1,9 @@
 import React from 'react';
-import { Bot, GraduationCap, Info, Settings, Shield, ShoppingBag, X } from 'lucide-react';
+import { Bot, GraduationCap, Info, Settings, Shield, X } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { AccountContent } from './Account.jsx';
 import { PilotContent } from './Pilot.jsx';
 import { CreditsContent } from './Credits.jsx';
-import { BuyCreditsContent } from './BuyCredits.jsx';
 import { AboutContent } from './About.jsx';
 import { SupportLinks } from './SupportLinks.jsx';
 import { adminTabVisible } from './admin.js';
@@ -23,18 +22,16 @@ const GROUPS = [
   ] },
   // Minha conta e Créditos e extrato viraram a tela Configurações (shell/Settings.jsx): saem daqui.
   { label: 'Estúdio', items: [
-    { id: 'buy', label: 'Comprar créditos', icon: ShoppingBag, buy: true },
     { id: 'about', label: 'Sobre', icon: Info },
     { id: 'admin', label: 'Administrador', icon: Shield, admin: true },
   ] },
 ];
-const TITLES = { prefs: 'Geral', pilot: 'Piloto do estúdio', account: 'Minha conta', credits: 'Créditos e extrato', buy: 'Comprar créditos', about: 'Sobre', admin: 'Administrador' };
+const TITLES = { prefs: 'Geral', pilot: 'Piloto do estúdio', account: 'Minha conta', credits: 'Créditos e extrato', about: 'Sobre', admin: 'Administrador' };
 const DESCS = {
   prefs: 'Aparência e visual da sede.',
   pilot: 'Quanto os agentes decidem sozinhos.',
   account: 'Seu perfil, plano e dados para nota fiscal.',
   credits: 'Saldo, extrato e créditos por vídeo.',
-  buy: 'Pacotes e créditos avulsos, por Pix ou cartão.',
   about: 'Versão, ajuda e documentos do Kiroo.',
   admin: 'Contas, créditos, convites, métricas e auditoria da plataforma.',
 };
@@ -83,8 +80,7 @@ function General({ v }) {
 
 export default function Preferences({ v }) {
   const isAdmin = adminTabVisible(v.account);
-  const canBuy = !!(v.account && v.account.payments && v.account.payments.online);
-  const tab = TITLES[v.win] && (v.win !== 'admin' || isAdmin) && (v.win !== 'buy' || canBuy) ? v.win : 'prefs';
+  const tab = TITLES[v.win] && (v.win !== 'admin' || isAdmin) ? v.win : 'prefs';
   const onOpenChange = (open) => { if (!open) v.closeWin(); };
   // teclas digitadas no modal não chegam aos atalhos do jogo (só Esc, que o Radix usa para fechar)
   const stopKeys = (e) => { if (e.key !== 'Escape') e.stopPropagation(); };
@@ -93,17 +89,7 @@ export default function Preferences({ v }) {
     const t = setTimeout(() => { const el = document.querySelector('.pref-item[aria-current="page"]'); if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest', inline: 'center' }); }, 60);
     return () => clearTimeout(t);
   }, [tab]);
-  // "Comprar créditos" é largo (4 cards lado a lado): modal próprio, sem a navegação das Preferências
-  if (tab === 'buy') {
-    return (
-      <Dialog open onOpenChange={onOpenChange}>
-        <DialogContent showCloseButton={false} className="bvd pw-theme duration-200" onKeyDown={stopKeys}>
-          <DialogDescription className="sr-only">{DESCS.buy}</DialogDescription>
-          <div className="bvd-body"><BuyCreditsContent v={v} Title={DialogTitle} /></div>
-        </DialogContent>
-      </Dialog>
-    );
-  }
+  // Comprar créditos virou a tela de Planos (/pricing, shell/Pricing.jsx, Fase 6): saiu daqui.
   return (
     <Dialog open onOpenChange={onOpenChange}>
       <DialogContent showCloseButton={false} className="pref pw-theme duration-200" onKeyDown={stopKeys}>
@@ -111,7 +97,7 @@ export default function Preferences({ v }) {
           {GROUPS.map((g) => (
             <div key={g.label} className="pref-group">
               <div className="pref-group-label">{g.label}</div>
-              {g.items.filter((it) => (!it.admin || isAdmin) && (!it.buy || canBuy)).map((it) => (
+              {g.items.filter((it) => !it.admin || isAdmin).map((it) => (
                 <button key={it.id} type="button" className="pref-item" aria-current={tab === it.id ? 'page' : undefined} onClick={() => v.openPrefs(it.id)}>
                   <it.icon size={16} aria-hidden="true" />{it.label}
                 </button>
@@ -132,7 +118,6 @@ export default function Preferences({ v }) {
             {tab === 'pilot' && <PilotContent v={v} />}
             {tab === 'account' && <AccountContent v={v} />}
             {tab === 'credits' && <CreditsContent v={v} />}
-            {tab === 'buy' && <BuyCreditsContent v={v} />}
             {tab === 'about' && <AboutContent v={v} />}
             {tab === 'admin' && isAdmin && <React.Suspense fallback={null}><AdminContent v={v} /></React.Suspense>}
           </div>

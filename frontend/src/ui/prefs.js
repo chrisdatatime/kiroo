@@ -28,20 +28,20 @@ export function reservedText(d) {
   return n === 1 ? '1 reservado para um vídeo em andamento' : `${d.held} reservados para vídeos em andamento`;
 }
 
-// Nome do plano em destaque, MAIÚSCULO: FREE, INICIAL, PRO, ESCALA.
+// Nome do plano em destaque, MAIÚSCULO: FREE, BÁSICO, PRO, ESTÚDIO.
 export function planName(plan) {
   return String((plan && (plan.plan_label || plan.plan)) || 'Free').toUpperCase();
 }
 
-// Vantagens reais do plano (Free e Inicial: nenhuma na lista).
+// Vantagens reais do plano (Free e Básico: nenhuma na lista).
 export function planPerks(plan) {
   if (!plan || !plan.priority_queue) return [];
   const perks = ['Fila prioritária', 'Suporte por WhatsApp'];
-  if (plan.early_access) perks.push('Novos estilos antes de todos');
+  if (plan.early_access) perks.push('Acesso antecipado a novidades');
   return perks;
 }
 
-// "Precisa de ajuda?": Pro/Escala com WhatsApp configurado → WhatsApp; senão e-mail/contato (STUDIO_SUPPORT_CONTACT);
+// "Precisa de ajuda?": Pro/Estúdio com WhatsApp configurado → WhatsApp; senão e-mail/contato (STUDIO_SUPPORT_CONTACT);
 // sem nenhum dos dois → null (o card some).
 export function helpCard(plan, site) {
   const wa = plan && plan.support && plan.support.whatsapp;

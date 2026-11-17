@@ -69,7 +69,7 @@ Fluxo no jogo: Nina (ficha e fotos) → Theo (direção) → Iris (imagens, com 
 
   Músicas virais têm direitos autorais e só são licenciadas dentro de cada plataforma. Por isso o Beto entrega também `final_sem_musica.mp4`, para o som em alta ser escolhido no editor da Shopee Vídeo. Trocar o estilo depois de pronto só remonta (sem custo de geração).
 
-Roteiro comercial (contas, créditos, Mercado Pago, hospedagem): [docs/ROADMAP_SAAS.md](docs/ROADMAP_SAAS.md).
+Roteiro comercial (contas, créditos, planos pela Stripe, hospedagem): [docs/ROADMAP_SAAS.md](docs/ROADMAP_SAAS.md).
 
 ## Treinamento dos agentes e trilhas
 

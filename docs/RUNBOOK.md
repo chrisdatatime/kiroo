@@ -152,7 +152,7 @@ Os dois primeiros ignoram a lista de hosts (sondas de contêiner usam IP interno
 
 ## Logs
 
-JSON, uma linha por evento no stdout (`STUDIO_LOG_FORMAT=text` volta ao texto). Campos da requisição: `ts, level, logger, msg:"request", request_id, method, route (sem query), status, duration_ms, workspace_id`. Nunca entram e-mail, senha, código, token, query string nem texto de mensagens do chat. Os valores de `Settings.secret_values()` (chave do Gemini, Mercado Pago) são trocados por `***` em qualquer linha. Exceções registram só o tipo. `/healthz` e `/readyz` logam em nível DEBUG. O arquivo `data/logs/studio.log` continua existindo (texto) e deve ir para o volume de dados.
+JSON, uma linha por evento no stdout (`STUDIO_LOG_FORMAT=text` volta ao texto). Campos da requisição: `ts, level, logger, msg:"request", request_id, method, route (sem query), status, duration_ms, workspace_id`. Nunca entram e-mail, senha, código, token, query string nem texto de mensagens do chat. Os valores de `Settings.secret_values()` (chave do Gemini, Stripe) são trocados por `***` em qualquer linha. Exceções registram só o tipo. `/healthz` e `/readyz` logam em nível DEBUG. O arquivo `data/logs/studio.log` continua existindo (texto) e deve ir para o volume de dados.
 
 ## Verificações de ponta a ponta (rodar antes de cada deploy relevante)
 

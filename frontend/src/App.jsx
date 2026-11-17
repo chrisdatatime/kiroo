@@ -20,9 +20,10 @@ import AuthScreen from './ui/Auth.jsx';
 const Landing = lazyChunk(() => import('./landing/Landing.jsx'));
 // Conta, Piloto, Créditos e Sobre vivem no modal de Preferências (carregado ao abrir)
 const Preferences = lazyChunk(() => import('./ui/Preferences.jsx'));
+const Pricing = lazyChunk(() => import('./shell/Pricing.jsx'));
 // Conversa com os agentes (Fase 6, mundo Phaser): chunk próprio, carrega no primeiro clique num agente
 const AgentChat = lazyChunk(() => import('./ui/world/AgentChat.jsx'));
-const PREF_WINS = ['prefs', 'account', 'pilot', 'credits', 'buy', 'about', 'admin'];
+const PREF_WINS = ['prefs', 'account', 'pilot', 'credits', 'about', 'admin'];
 // Kit de onboarding (Fase 5): chunk próprio, só carrega quando o tour abre (onboarding_done_at nulo ou "Rever tutorial")
 const Onboarding = lazyChunk(() => import('./onboarding/Onboarding.jsx'));
 // se o tour falhar, ele some (e o passo fica salvo); o estúdio continua funcionando
@@ -36,6 +37,7 @@ import { deriveStage, sceneView, toCredits, creditsToUsd, endedOf, stoppedAt } f
 import { adjustmentGate, pauseKind } from './ui/pause.js';
 import { balanceLabel, needsConfirmation, usedLabel } from './ui/nextVideo.js';
 import { NO_BALANCE_CREATE, emptyMissionsCopy, firstVideoCopy } from './ui/welcome.js';
+import { missingFor, oneClickTopup, videoCostLine } from './shell/pricing.js';
 import { falActive, falStatus, falStations, falAgentStatus, startFal, continueFal, offerFor, createLabel, endedLabel as falEndedLabel, availableScenes, availablePlatforms, effectiveScene, effectivePlatform, sceneLabel, platformLabel, receiveLine, gallery as falGallery, draftErrors as falDraftErrors, createPayload as falCreatePayload, newRequestId, IMAGE_EXT, canCancelFal, reuseDraft, reuseBlocked, reuseFileName, REUSE_LABEL } from './ui/falFlow.js';
 import { adjustFunds, noBalanceFromError, noBalanceNotice } from './ui/credits.js';
 import Shell, { VIEWS } from './shell/Shell.jsx';
@@ -114,7 +116,7 @@ export default class App extends React.Component {
     const pid = LS.get('bc.pid', null);
     const view0 = LS.get('bc.view', 'central');
     this.state = {
-      view: VIEWS.some((x) => x.id === view0) || view0 === 'config' ? view0 : 'central',
+      view: VIEWS.some((x) => x.id === view0) || view0 === 'config' ? view0 : 'central',   // 'planos' só pela URL /pricing
       cfgTab: LS.get('bc.cfgTab', 'perfil') === 'creditos' ? 'creditos' : 'perfil',   // Configurações: Perfil | Créditos
       vw: window.innerWidth, vh: window.innerHeight,
       player: { i: SPAWN[0], j: SPAWN[1], path: [], dir: 'down', moving: false, seat: null }, pending: null, dest: null, agents,
@@ -146,8 +148,12 @@ export default class App extends React.Component {
     // sessão expirou com o estúdio aberto: volta direto ao login (no primeiro /api/me sem sessão, fica a home)
     setLoggedOutHandler(() => this.setState((s) => ({ authState: 'out', account: null, entry: s.authState === 'in' ? 'login' : s.entry })));
     this.checkSession();
-    // voltar do navegador saindo de /pricing fecha a tela de compra
-    this.onPop = () => { if (window.location.pathname !== PRICING_PATH && this.state.ui.win === 'buy') this.setUI({ win: null }); };
+    // voltar/avançar do navegador: /pricing é a tela de Planos; sair dela volta ao Início
+    this.onPop = () => {
+      const on = window.location.pathname === PRICING_PATH;
+      if (on && this.state.view !== 'planos') this.setState({ view: 'planos' });
+      else if (!on && this.state.view === 'planos') this.setState({ view: 'central' });
+    };
     window.addEventListener('popstate', this.onPop);
     authConfig().then((c) => this.setState({ signup: c.signup || 'closed', landing: c.landing_url || '' })).catch(() => this.setState({ landing: '' }));  // cadastro: quem decide é o servidor
     this.later(() => this.rootEl && this.rootEl.focus({ preventScroll: true }), 80);
@@ -158,7 +164,12 @@ export default class App extends React.Component {
     if (prev.setup !== this.state.setup) LS.set('bc.setup', this.state.setup);
     if (prev.draft !== this.state.draft) LS.set('bc.draft', this.state.draft);
     if (prev.pid !== this.state.pid) LS.set('bc.pid', this.state.pid);
-    if (prev.view !== this.state.view) { LS.set('bc.view', this.state.view); this.measure && this.measure(); }
+    if (prev.view !== this.state.view) {
+      if (this.state.view !== 'planos') LS.set('bc.view', this.state.view);
+      // saiu de Planos por dentro do app: a URL volta para "/" (Planos tem a própria URL, /pricing)
+      if (prev.view === 'planos' && window.location.pathname === PRICING_PATH) { try { window.history.pushState(null, '', '/'); } catch { /* sem history */ } }
+      this.measure && this.measure();
+    }
     if (prev.cfgTab !== this.state.cfgTab) LS.set('bc.cfgTab', this.state.cfgTab);
   }
   later(fn, ms) { this.timers.push(setTimeout(fn, ms)); }
@@ -172,12 +183,10 @@ export default class App extends React.Component {
         LS.set('bc.ws', account.workspace.id);
         this.setState({ pid: null, draftMode: false });
       }
-      // voltou da fatura do cartão (?compra=kpay_...): abre "Comprar créditos", que acompanha a compra
-      const back = /[?&]compra=kpay_[0-9a-f]{10}/.test(window.location.search) && account.payments && account.payments.online;
-      // /pricing (Planos e créditos): até a Fase 6, abre a tela de compra que já existe
-      const pricing = !back && window.location.pathname === PRICING_PATH;
-      this.setState({ authState: 'in', account }, () => { this.refresh(); if (back) this.setUI({ win: 'buy' }); else if (pricing) this.openPricing(); });
-      if (!back && !pricing) this.maybeStartTour(account);
+      // /pricing (Planos): a tela própria. A volta do checkout da Stripe também cai aqui (?compra=kpay_... ou ?cancelado=1)
+      const pricing = window.location.pathname === PRICING_PATH;
+      this.setState({ authState: 'in', account, ...(pricing ? { view: 'planos' } : {}) }, () => { this.refresh(); });
+      if (!pricing) this.maybeStartTour(account);
     } catch (e) {
       this.setState({ authState: 'out', conn: e instanceof AuthRequired ? 'ok' : 'erro', err: e instanceof AuthRequired ? null : e.message });
     }
@@ -575,15 +584,20 @@ export default class App extends React.Component {
   // ---------- helpers de estado ----------
   setUI(patch) { this.setState((s) => ({ ui: Object.assign({}, s.ui, patch) })); }
   setDraft(patch) { this.setState((s) => ({ draft: Object.assign({}, s.draft, patch) })); }
-  // Planos e créditos: a URL vira /pricing (link compartilhável); fechar volta para "/".
+  // Planos (Fase 6): uma tela (view `planos`) com URL própria /pricing (link compartilhável). Com a compra desligada
+  // (PAYMENTS_ENABLED=false) a tela mostra os planos e o contato, sem botão de pagar.
   openPricing() {
-    const a = this.state.account;
-    if (!(a && a.payments && a.payments.online)) {   // sem compra online: o saldo e o extrato
-      if (window.location.pathname === PRICING_PATH) { try { window.history.replaceState(null, '', '/'); } catch { /* sem history */ } }
-      this.openSettings('creditos'); return;
-    }
+    if (this.state.ui.win) this.closeWin();
     if (window.location.pathname !== PRICING_PATH) { try { window.history.pushState(null, '', PRICING_PATH); } catch { /* sem history */ } }
-    this.setUI({ win: 'buy' });
+    this.setState({ view: 'planos' });
+  }
+  // Recibos: Portal do cliente da Stripe. Sem compra pela Stripe ainda (ou compra desligada): a aba Créditos, que explica.
+  async openReceipts() {
+    try {
+      const r = await post('/api/payments/portal', {});
+      if (r.redirect_url) { window.location.assign(r.redirect_url); return; }
+    } catch (e) { this.toast(e.message); }
+    this.openSettings('creditos');
   }
   // Configurações (Perfil | Créditos) é uma tela, não um modal: fecha janelas abertas e troca a view.
   openSettings(tab) {
@@ -591,7 +605,6 @@ export default class App extends React.Component {
     this.setState({ view: 'config', cfgTab: tab === 'creditos' ? 'creditos' : 'perfil' });
   }
   closeWin() {
-    if (window.location.pathname === PRICING_PATH) { try { window.history.replaceState(null, '', '/'); } catch { /* sem history */ } }
     this.setUI({ win: null, adjust: false, playing: false }); this.later(() => this.rootEl && this.rootEl.focus({ preventScroll: true }), 30); }
   dismissTut() { if (this.state.ui.tut) { this.setUI({ tut: false }); LS.set('bc.tutDone', true); } }
   toast(text) { const id = Date.now() + Math.random(); this.setUI({ toast: { text, id } }); this.later(() => { if (this.state.ui.toast && this.state.ui.toast.id === id) this.setUI({ toast: null }); }, 3800); }
@@ -801,6 +814,16 @@ export default class App extends React.Component {
   }
   // ---------- fluxo foto + estilo (motor novo) ----------
   setFal(patch) { this.setState((s) => ({ fal: { ...s.fal, ...patch } })); }
+  // Sem saldo para o vídeo: compra avulsa em um clique (Checkout da Stripe). O servidor valida a quantidade de novo.
+  async buyTopup(credits) {
+    if (this.state.fal.buying) return;
+    this.setFal({ buying: true, error: null });
+    try {
+      const r = await post('/api/payments/checkout', { kind: 'topup', credits });
+      if (r.redirect_url) { window.location.assign(r.redirect_url); return; }
+      this.setFal({ buying: false });
+    } catch (e) { this.setFal({ buying: false, error: e.message }); }
+  }
   async falPick(e) {
     const f = e.target.files && e.target.files[0]; e.target.value = '';
     if (f) await this.falPickFile(f);
@@ -839,6 +862,16 @@ export default class App extends React.Component {
     this.setFal({ busy: false, error: r.ok ? null : r.error });
     await this.refresh();
   }
+  // "Este vídeo usa 20 créditos · saldo N" antes de cada vídeo; sem saldo, o avulso em um clique (só com a compra ligada).
+  costModel() {
+    const s = this.state;
+    const offer = offerFor(s.S), wallet = s.S ? s.S.credits : null;
+    const missing = missingFor(offer, wallet);
+    const pay = s.account && s.account.payments;
+    const quick = missing > 0 && pay && pay.online ? oneClickTopup(missing, pay.topup) : null;
+    return { costLine: videoCostLine(offer, wallet), missing, quickBuy: quick, buying: !!s.fal.buying,
+      buyNow: () => { if (quick) this.buyTopup(quick.credits); } };
+  }
   // Modal "Nova produção" (só envio).
   falModel(P, forceDraft = false) {
     const s = this.state;
@@ -854,6 +887,7 @@ export default class App extends React.Component {
       clearFile: () => this.setFal({ file: null, reqId: null }), pick: (e) => this.falPick(e), pickFile: (file) => this.falPickFile(file),
       errors: falDraftErrors({ ...f, scene, platform }), error: f.error || null, noFunds: !!f.noFunds, busy: f.busy, demo,
       openBuy: () => { this.setFal({ error: null, noFunds: false }); this.openPricing(); },
+      ...this.costModel(),
       reuse: f.reuse ? { kind: f.reuse.kind } : null,
       reuseBlocked, reuseLabel: reuseBlocked ? REUSE_LABEL[f.reuse.kind] : null,
       label: createLabel(offerFor(s.S), demo), create: () => this.falCreate(),
@@ -1210,6 +1244,7 @@ export default class App extends React.Component {
       openPrefs: (tab) => { this.dismissTut(); if (tab === 'account' || tab === 'credits') { this.openSettings(tab === 'credits' ? 'creditos' : 'perfil'); return; } this.setUI({ win: tab || 'prefs' }); },
       openSettings: (tab) => { this.dismissTut(); this.openSettings(tab); }, cfgTab: s.cfgTab, setCfgTab: (t) => this.setState({ cfgTab: t }),
       openPricing: () => { this.dismissTut(); this.openPricing(); }, landingUrl: s.landing || '',
+      openReceipts: () => { this.dismissTut(); this.openReceipts(); },
       nearAlt: ch && near && near.type !== 'stand' ? { label: 'Levantar', go: () => this.standUp() } : null,
       openSectors: () => { this.dismissTut(); this.setUI({ win: 'sectors' }); },
       openMusic: () => this.setUI({ win: 'music' }), trainAgent: ui.trainAgent, team: AGENTS, openTraining: (id) => this.setUI({ win: 'training', trainAgent: id, learn: null }),
@@ -1323,6 +1358,7 @@ export default class App extends React.Component {
         {v.view === 'missao' && <MissionView v={v} />}
         {v.view === 'equipe' && <TeamView v={v} />}
         {v.view === 'config' && <Settings v={v} />}
+        {v.view === 'planos' && <React.Suspense fallback={null}><Pricing v={v} /></React.Suspense>}
         {v.view === 'escritorio' && (<Office v={v}>
           <React.Suspense fallback={null}><WorldPhaser v={v} /></React.Suspense>
           <Hud v={v} />

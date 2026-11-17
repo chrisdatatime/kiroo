@@ -76,9 +76,10 @@ def test_statement_texts():
 def _seed(settings):
     db, wid = ws_db(settings)
     led = Ledger(db)
+    # compra (antes pelo Asaas, via payment_entry; agora a entrada vira um lote ligado ao pagamento)
     db.conn.execute("INSERT INTO payments(id, account_id, method, package_code, credits, amount_cents, status, created_at)"
                     " VALUES ('kpay_0000000001',?, 'pix','pro',200,7990,'paid','2026-11-01T10:00:00')", (wid,))
-    led.payment_entry(wid, "kpay_0000000001", 20000, note="compra")
+    led.add(wid, 20000, kind="purchase", payment_id="kpay_0000000001", ext_ref="topup:kpay_0000000001", note="compra")
     led.add(wid, 2000, kind="welcome_bonus", note="boas-vindas", ext_ref="wb:1")
     for pid, prod, scene, platform in (("prod_ok", "Tênis", "home_light", "shopee_video"),
                                        ("prod_fail", "Mochila", "dark_premium", "tiktok_shop")):
@@ -94,7 +95,8 @@ def _seed(settings):
                 stage="prebudget", ext_ref="pool:prod_fail:base")
     led._insert(workspace_id=wid, kind="release", amount_cc=2000, hold_id="pool:prod_fail", production_id="prod_fail",
                 stage="prebudget", ext_ref="release:pool:prod_fail")
-    led.payment_entry(wid, "kpay_0000000001", 0, note="estorno")
+    lot = db.conn.execute("SELECT id, amount_cc FROM credit_lots WHERE payment_id='kpay_0000000001'").fetchone()
+    led.revoke_lot(lot["id"], lot["amount_cc"], note="estorno", close=True)   # reembolso: tira o que não foi usado
     return db, wid, led
 
 
@@ -187,15 +189,16 @@ def test_delete_account_asks_for_the_email(app):
 
 
 # ------------------------------------------------------------------ plano: vantagens, WhatsApp e e-mail
-def test_whatsapp_only_for_pro_and_escala_and_only_with_env(monkeypatch, settings):
+def test_whatsapp_only_for_pro_and_estudio_and_only_with_env(monkeypatch, settings):
     db, wid = ws_db(settings)
     monkeypatch.setenv("STUDIO_SUPPORT_CONTACT", "ajuda@exemplo.com")
     free = plans.view(db, wid)
     assert free["plan"] == "free" and free["support"]["whatsapp"] is None and free["support"]["email"] == "ajuda@exemplo.com"
     assert free["priority_queue"] is False and free["early_access"] is False
     monkeypatch.setenv("STUDIO_SUPPORT_WHATSAPP", "5511999990000")
-    db.conn.execute("INSERT INTO payments(id, account_id, method, package_code, credits, amount_cents, status, created_at, paid_at)"
-                    " VALUES ('kpay_0000000002',?, 'pix','pro',200,7990,'paid','2026-11-01','2026-11-01')", (wid,))
+    # plano = assinatura da Stripe que vale agora (antes: o maior pacote pago no Asaas)
+    db.conn.execute("INSERT INTO subscriptions(id, workspace_id, plan, interval, status, created_at, updated_at)"
+                    " VALUES ('sub_0000000002',?, 'pro','month','active','2026-11-01','2026-11-01')", (wid,))
     pro = plans.view(db, wid)
     assert pro["plan"] == "pro" and pro["support"]["whatsapp"] == "https://wa.me/5511999990000"
     assert pro["priority_queue"] is True and pro["early_access"] is False

@@ -76,8 +76,7 @@ function CreateCard({ v, phone }) {
   }
   const pickAny = () => galleryRef.current && galleryRef.current.click();
   const drop = (e) => { e.preventDefault(); setOver(false); const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; if (file && !f.busy) f.pickFile(file); };
-  const cost = v.offer && v.offer.cc > 0 ? `Custa ${v.offer.credits} ${v.offer.credits === '1' ? 'crédito' : 'créditos'}` : (f.demo ? 'Demonstração: nada é cobrado' : '');
-  const bal = v.wallet && !v.wallet.exempt && v.offer && v.offer.cc > 0 ? ` · saldo ${v.wallet.balance}` : '';
+  const cost = f.costLine || (f.demo ? 'Demonstração: nada é cobrado' : '');   // "Este vídeo usa 20 créditos · saldo N"
   return (
     <section className="in-card in-create" aria-labelledby="in-create-h" data-tour="new-mission-card">
       <h2 id="in-create-h">Criar novo vídeo</h2>
@@ -129,9 +128,15 @@ function CreateCard({ v, phone }) {
           </div>
         </div>
       </div>
-      {f.error && <div role="alert" className="in-err"><AlertCircle size={18} aria-hidden="true" />{f.error}{f.noFunds && <button type="button" className="in-link" onClick={f.openBuy}>Ver pacotes</button>}</div>}
+      {f.error && <div role="alert" className="in-err"><AlertCircle size={18} aria-hidden="true" />{f.error}{f.noFunds && !f.quickBuy && <button type="button" className="in-link" onClick={f.openBuy}>Ver planos</button>}</div>}
+      {f.missing > 0 && f.quickBuy && (
+        <div className="in-quickbuy" role="note">
+          <span>Falta saldo para este vídeo.</span>
+          <button type="button" className="in-btn in-btn-ink" onClick={f.buyNow} disabled={f.buying} aria-busy={f.buying || undefined}>{f.buying ? 'Abrindo o pagamento…' : f.quickBuy.label}</button>
+        </div>
+      )}
       <footer className="in-create-foot">
-        <p className="in-muted"><Clock3 size={15} aria-hidden="true" />{`Fica pronto em ${estimateLabel()}`}{cost ? ` · ${cost}` : ''}{bal}</p>
+        <p className="in-muted"><Clock3 size={15} aria-hidden="true" />{`Fica pronto em ${estimateLabel()}`}{cost ? ` · ${cost}` : ''}</p>
         <button type="button" className="in-btn in-btn-ink in-btn-lg" onClick={f.create} disabled={f.busy || !f.file || f.errors.length > 0 || f.reuseBlocked}>
           {f.busy ? <Loader2 className="in-spin" size={16} aria-hidden="true" /> : <ArrowRight size={16} aria-hidden="true" />}{f.busy ? 'Começando…' : 'Criar vídeo'}
         </button>

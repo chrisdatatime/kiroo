@@ -21,7 +21,8 @@ try {
     productions: [], team, statuses: {}, setView: noop, newProd: noop, openPrefs: noop, openBuy: noop, view: 'central', win: null, P: null, falMission: null,
     account: { user: { name: 'Christian Silva', email: 'c@x.io', email_verified: true }, workspace: { name: 'Estúdio de Christian' }, plan: { plan_label: 'avulso', support: { email: 'suporte@kiroo.io' } }, welcome: null },
     wallet: { balance: '80', balance_cc: 8000, exempt: false }, offer: { cc: 2000, credits: '20' },
-    falNew: { scenes, platforms, scene: 'home_light', platform: 'shopee_video', file: null, errors: ['a foto do produto'], error: null, busy: false, demo: false, pick: noop, pickFile: noop, setScene: noop, setPlatform: noop, create: noop, openBuy: noop, reuseBlocked: false },
+    falNew: { scenes, platforms, scene: 'home_light', platform: 'shopee_video', file: null, errors: ['a foto do produto'], error: null, busy: false, demo: false, pick: noop, pickFile: noop, setScene: noop, setPlatform: noop, create: noop, openBuy: noop, reuseBlocked: false,
+      costLine: 'Este vídeo usa 20 créditos · saldo 80', missing: 0, quickBuy: null, buyNow: noop },
     ...over });
   const render = (v, phone = false) => renderToStaticMarkup(React.createElement(Inicio, { v, phone }));
   const has = (html, s) => html.includes(s);
@@ -46,8 +47,14 @@ try {
   assert.ok(has(html, '<th scope="col">Produto</th>') && has(html, '<th scope="col">Status</th>'));
   assert.ok(has(html, 'aria-pressed="true"'));                          // cenário e plataforma escolhidos
   assert.ok(has(html, 'Fica pronto em cerca de'));
-  assert.ok(has(html, 'Custa 20 créditos'));
+  assert.ok(has(html, 'Este vídeo usa 20 créditos · saldo 80'));   // Fase 6: custo e saldo antes de cada vídeo (antes: "Custa 20 créditos · saldo")
   assert.ok(has(html, 'Garrafa Térmica') && has(html, 'Pronto') && has(html, 'Gerando'));
+  {   // sem saldo: avulso em um clique (Fase 6)
+    const b = base();
+    const poor = render({ ...b, falNew: { ...b.falNew, missing: 500, quickBuy: { credits: 50, amount_cents: 2200, label: 'Comprar 50 créditos · R$ 22,00' } } });
+    assert.ok(has(poor, 'Falta saldo para este vídeo.') && has(poor, '>Comprar 50 créditos · R$ 22,00</button>'));
+    assert.ok(!has(html, 'Falta saldo para este vídeo.'));
+  }
 
   // 2) "+N aguardando": duas pendências → mostra a mais antiga e o link
   html = render(base({ productions: [aprov, prod('prod_9', 'awaiting_final_review', { name: 'Outro' })] }));

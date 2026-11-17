@@ -225,32 +225,26 @@ que falta, e escolhe **Manter meu vídeo como está** (nada muda, nada é cobrad
 pagamento, "Adicionar créditos" mostra o contato de `STUDIO_SUPPORT_CONTACT` e o passo a passo; você libera com o comando
 abaixo. Um vídeo já pago (pré-orçamento reservado) é entregue mesmo com o saldo livre zerado.
 
-### Compra de créditos (Asaas)
+### Planos e créditos (Stripe)
 
-Com `PAYMENTS_ENABLED=true` (variáveis em [ENVS.md](ENVS.md)), o cliente compra em **Comprar créditos**: pacotes
-(Inicial 200 = R$ 79,90; Pro 600 = R$ 199,90; Escala 2.000 = R$ 549,90) ou avulso (R$ 0,50/crédito, mínimo 40, de 20 em 20,
-até 1.000). Um vídeo custa **20 créditos fixos**. Catálogo em `profiles/billing/catalog.json`; o navegador nunca envia valor.
+Com `PAYMENTS_ENABLED=true` (variáveis em [ENVS.md](ENVS.md)), o cliente usa a tela **Planos** (`/pricing`): assinatura
+mensal (Básico 120 créditos, Pro 320, Estúdio 800 por ciclo) ou créditos avulsos de 50 a 1.000 (R$ 0,44 por crédito). Um
+vídeo custa **20 créditos fixos**. Valores exibidos em `profiles/billing/catalog.json`; quem cobra é o preço da Stripe
+(`STRIPE_PRICE_*`); o navegador nunca envia valor e o servidor valida a quantidade do avulso.
 
-- **Pix** credita em `RECEIVED`; **cartão** (fatura hospedada do Asaas) em `CONFIRMED` (ou `RECEIVED`). Pix `CONFIRMED`
-  não credita (pode ser bloqueio cautelar temporário).
-- **Webhook** `POST /api/payments/asaas/webhook`: token no cabeçalho `asaas-access-token`; grava o evento (id único) e
-  responde 200 na hora. A decisão NUNCA vem do payload: o servidor busca a cobrança na API pelo id e confere valor,
-  cliente, meio e `externalReference`. Divergência = status `mismatch`, nada creditado, log `payment_mismatch`.
-- Crédito por **pagamento**: o mesmo pagamento nunca credita duas vezes (evento repetido, fora de ordem, `CONFIRMED` e
-  depois `RECEIVED`). Estorno (`REFUNDED`, `REFUND_*`) e contestação (`CHARGEBACK_*`) debitam os créditos da compra; o
-  saldo pode ficar **negativo**, e aí novas produções ficam bloqueadas com mensagem clara até o cliente regularizar.
-  Contestação ganha (volta a `CONFIRMED`/`RECEIVED`) devolve os créditos uma vez. **Estorno parcial** não mexe no saldo
-  sozinho: a compra fica com nota "revisar"; ajuste com `studio admin adjust-credits`.
-- **Cartão:** conta nova (< 7 dias ou sem compra Pix paga) = 1 compra no cartão por 24 h e no máximo o pacote Pro;
-  toda conta = até R$ 600 no cartão por 24 h; conta com contestação = só Pix. IP e user agent ficam na compra.
-- CPF/CNPJ só na primeira compra; vai para o Asaas e **não** é guardado no Kiroo (só o id do cliente).
+- **Livro por origem** (lotes): bônus → plano → avulso. Créditos do plano vencem no fim do ciclo (lançamento `expire`);
+  avulso e bônus não vencem. Falha técnica devolve para o mesmo lote de onde saiu.
+- **Webhook** `POST /api/payments/stripe/webhook`: assinatura `Stripe-Signature` conferida; cada evento uma vez só
+  (`stripe_events`) e cada fatura uma vez só. Erro no processamento responde 500 e a Stripe reenvia.
+- **Plano:** `invoice.paid` concede o ciclo; upgrade concede a diferença na hora; downgrade vale no próximo ciclo.
+- **Reembolso/contestação:** tiram só os créditos ainda não usados daquela compra (o saldo não fica negativo) e marcam a
+  conta (`workspaces.billing_flag` = `refund` ou `dispute`, com data). Decida manualmente o que fazer com a conta.
 
 | O que | Comando |
 |---|---|
 | Compras (todas ou de um e-mail) | `python -m studio payments list [--email cliente@exemplo.com]` |
-| Webhook perdido: confere no Asaas eventos pendentes e cobranças abertas | `python -m studio payments reconcile` |
-| Também reconfere as pagas dos últimos N dias (estorno/contestação perdidos) | `python -m studio payments reconcile --paid-days 40` |
-| Receita bruta do mês, compras por meio, créditos vendidos × consumidos | `python -m studio admin metrics` |
+| Webhook perdido: reprocessa eventos pendentes (relidos na API) e confere checkouts abertos | `python -m studio payments reconcile` |
+| Receita bruta do mês (ciclos de plano e avulso), créditos vendidos × consumidos | `python -m studio admin metrics` |
 
 
 | O que | Comando |

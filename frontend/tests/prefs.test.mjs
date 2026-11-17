@@ -33,13 +33,13 @@ try {
 
   // plano e vantagens reais
   const free = { plan: 'free', plan_label: 'Free', priority_queue: false, early_access: false, support: { whatsapp: null, email: 'a@b.com' } };
-  const ini = { ...free, plan: 'inicial', plan_label: 'Inicial' };
+  const ini = { ...free, plan: 'basico', plan_label: 'Básico' };   // Fase 6: Básico/Pro/Estúdio (antes Inicial/Pro/Escala)
   const pro = { plan: 'pro', plan_label: 'Pro', priority_queue: true, early_access: false, support: { whatsapp: 'https://wa.me/5511999990000', email: 'a@b.com' } };
-  const esc = { ...pro, plan: 'escala', plan_label: 'Escala', early_access: true };
-  assert.deepEqual([free, ini, pro, esc].map(P.planName), ['FREE', 'INICIAL', 'PRO', 'ESCALA']);
+  const esc = { ...pro, plan: 'estudio', plan_label: 'Estúdio', early_access: true };
+  assert.deepEqual([free, ini, pro, esc].map(P.planName), ['FREE', 'BÁSICO', 'PRO', 'ESTÚDIO']);
   assert.deepEqual(P.planPerks(free), []); assert.deepEqual(P.planPerks(ini), []);
   assert.deepEqual(P.planPerks(pro), ['Fila prioritária', 'Suporte por WhatsApp']);
-  assert.deepEqual(P.planPerks(esc), ['Fila prioritária', 'Suporte por WhatsApp', 'Novos estilos antes de todos']);
+  assert.deepEqual(P.planPerks(esc), ['Fila prioritária', 'Suporte por WhatsApp', 'Acesso antecipado a novidades']);
 
   // ajuda: WhatsApp só Pro/Escala com env; sem env cai no e-mail; Free/Inicial sempre e-mail
   const site = { contact: { label: 'ajuda@exemplo.com', href: 'mailto:ajuda@exemplo.com' } };
@@ -92,11 +92,11 @@ try {
   const av = (a, props = {}) => renderToStaticMarkup(h(AccountView, { a, site, edit: null, setEdit() {}, onSave() {}, onVerify() {}, onCode() {}, onLogout() {}, onDelete() {}, openPackages() {}, del: false, setDel() {}, ...props }));
   html = av(acct(pro));
   assert.match(html, />A</); assert.match(html, /Verificado/); assert.match(html, /Editar perfil/);
-  assert.match(html, /Fila prioritária/); assert.match(html, /Suporte por WhatsApp/); assert.ok(!/Novos estilos antes de todos/.test(html));
+  assert.match(html, /Fila prioritária/); assert.match(html, /Suporte por WhatsApp/); assert.ok(!/Acesso antecipado a novidades/.test(html));
   assert.match(html, /Falar no WhatsApp/); assert.match(html, /href="https:\/\/wa\.me\/5511999990000"/);
   assert.match(html, /••••••••••/); assert.match(html, /Não informado/); assert.match(html, />Adicionar</);
   assert.match(html, />Sair</); assert.match(html, /Excluir conta/);
-  assert.match(av(acct(esc)), /Novos estilos antes de todos/);
+  assert.match(av(acct(esc)), /Acesso antecipado a novidades/);
   html = av(acct(free, { email_verified: false, tax_doc: '•••.•••.•••-25' }));
   assert.ok(!/Fila prioritária|Falar no WhatsApp/.test(html)); assert.match(html, /Fale com a gente por e-mail/); assert.match(html, /ajuda@exemplo\.com/);
   assert.match(html, /Confirmar e-mail/); assert.ok(!/Verificado/.test(html)); assert.match(html, /•••\.•••\.•••-25/); assert.ok(!/Não informado/.test(html));

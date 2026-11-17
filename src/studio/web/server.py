@@ -37,7 +37,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, parse_qsl, unquote, urlencode, urlparse
 
-from .. import agent_config, asaas as asaas_mod, creative_options, fal_contract, mailer, paid_gate, payments, plans, site_info, welcome
+from .. import agent_config, creative_options, fal_contract, mailer, paid_gate, payments, plans, site_info, welcome
 from ..prompts import production as prompts
 from ..agent_chat import AgentChat
 from ..accounts import (LOGIN_WINDOW_MIN, RESET_MINUTES, TERMS_VERSION, VERIFY_MINUTES, Accounts, AuthError, GoogleAuthError, mask_tax_doc,
@@ -80,7 +80,8 @@ BRAND_FILES = {"favicon.ico": "image/x-icon", "favicon.svg": "image/svg+xml", "a
                "og-image.png": "image/png", "manifest.webmanifest": "application/manifest+json"}
 MAX_BODY = 150 * 1024 * 1024  # uploads em base64
 MAX_AUTH_BODY = 64 * 1024  # rotas sem sessão não recebem envio grande
-WEBHOOK_PATH = "/api/payments/asaas/webhook"   # pública: autenticada pelo token do Asaas, não por sessão
+WEBHOOK_PATH = "/api/payments/stripe/webhook"   # pública: autenticada pela assinatura da Stripe, não por sessão
+MAX_WEBHOOK_BODY = 1024 * 1024   # eventos da Stripe são JSON pequenos; fatura com muitas linhas passa de 64 KB
 SECURITY_HEADERS = {"X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer",
                     "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()"}
 # CSP do app (React + Phaser, tudo servido pela própria origem). Phaser decodifica texturas/áudio de blob:/data:.
@@ -272,7 +273,6 @@ class App:
         self.lock = threading.Lock()
         self.chat = AgentChat()  # conversa com os agentes (Fase 6); testes trocam o caller por um mock
         self.limiter = RateLimiter(rate_limits)   # memória do processo: vale porque há uma instância só
-        self.payments_sync = False   # testes: processa o evento do webhook na mesma thread
         # Login com Google: só aparece com as duas variáveis definidas. Testes trocam google_http por um mock.
         try:  # carrega o .env antes de ler as variáveis do Google e do SMTP
             self.load_settings()
@@ -707,8 +707,8 @@ class App:
             return self.health(path)
         if headers.get("Host", "").lower() not in self.allowed_hosts:
             return _json(403, {"error": "host não permitido"})
-        if path == WEBHOOK_PATH:   # antes do limite por IP: 429 conta como falha e o Asaas pausa a fila
-            return self._asaas_webhook(method, headers, body)
+        if path == WEBHOOK_PATH:   # antes do limite por IP: 429 conta como falha e a Stripe atrasa a fila
+            return self._stripe_webhook(method, headers, body)
         if path.startswith("/api/"):   # limite por IP antes de abrir o banco
             ip = self._client_ip(headers)
             limited = self._limited("api_ip", ip)
@@ -945,8 +945,11 @@ class App:
                 me = Accounts(db).user(ctx["sess"]["user_id"])
                 if path == "/api/credits":  # extrato e consumo por produção/cena/operação (Fase C)
                     # visão do cliente: extrato e "por vídeo". O detalhe por chamada/etapa (`led.usage`) é só do admin.
+                    has_cus = bool(ws["stripe_customer_id"]) if "stripe_customer_id" in ws.keys() else False
                     return _json(200, {**credits, "statement": led.statement(ws["id"]), "videos": led.videos(ws["id"]),
-                                       "origins": led.origins(ws["id"]), "topup": payments.topup_options()})
+                                       "origins": led.origins(ws["id"]), "topup": payments.topup_options(), "plan": plan,
+                                       "billing": {"online": payments.enabled() and not ws["credits_exempt"],
+                                                   "has_customer": has_cus}})
                 avatar = Accounts(db).avatar_of(ctx["sess"]["user_id"])
             finally:
                 db.close()
@@ -962,11 +965,11 @@ class App:
                                              "credits": credits},
                                "workspaces": [{"id": w["id"], "name": w["name"], "role": w["role"]} for w in ctx["workspaces"]],
                                "paid_calls": {k: v for k, v in paid_gate.status().items() if k in ("blocked", "message")},
-                               "payments": {"online": payments.enabled() and not ws["credits_exempt"]},
+                               "payments": {"online": payments.enabled() and not ws["credits_exempt"], "topup": payments.topup_view()},
                                "plan": plan, "welcome": bonus, "site": site_info.view()})
         if path == "/api/payments/catalog" or re.fullmatch(r"/api/payments/kpay_[0-9a-f]{10}", path):
             return self._payments_get(path, ctx)
-        if path == "/api/credits/topup":   # "Adicionar créditos": manual (desligado) ou compra pelo site (Asaas)
+        if path == "/api/credits/topup":   # "Adicionar créditos": manual (desligado) ou compra pelo site (Stripe)
             try:
                 missing = int(parse_qs(url.query).get("missing_cc", ["0"])[0])
             except ValueError:
@@ -1082,6 +1085,8 @@ class App:
             return self._chat(payload, ctx)
         if path == "/api/payments/checkout":
             return self._checkout(payload, ctx, headers or {})
+        if path == "/api/payments/portal":
+            return self._portal(payload, ctx)
         if path == "/api/productions":
             return self._create(payload, ctx)
         if path == "/api/creative/preview":
@@ -1424,82 +1429,90 @@ class App:
                                "topup": payments.topup_options()})
         return None
 
-    # --- compra de créditos (Asaas)
-    def _asaas_webhook(self, method: str, headers: dict, body: bytes) -> Response:
-        """POST /api/payments/asaas/webhook: token do painel do Asaas no cabeçalho asaas-access-token (comparação em
-        tempo constante). Grava o evento uma vez só e responde 200 na hora; a conferência na API do Asaas (e o
-        crédito/débito) roda em segundo plano. Desligado (PAYMENTS_ENABLED=false): a rota não existe."""
+    # --- planos e créditos (Stripe)
+    def _stripe_webhook(self, method: str, headers: dict, body: bytes) -> Response:
+        """POST /api/payments/stripe/webhook: assinatura `Stripe-Signature` conferida com STRIPE_WEBHOOK_SECRET (tempo
+        constante, até 5 min). Cada evento uma vez só; o processamento roda na hora e, se falhar, responde 500 para a
+        Stripe reenviar. Desligado (PAYMENTS_ENABLED=false): a rota não existe."""
         if not payments.enabled():
             return _json(404, {"error": "não encontrado"})
         if method != "POST":
             return _json(405, {"error": "método não permitido"})
-        if not payments.webhook_token_ok(headers.get(asaas_mod.WEBHOOK_HEADER)):
-            log.warning("webhook do Asaas com token inválido", extra={"event": "payment_webhook_unauthorized"})
-            return _json(401, {"error": "token inválido"})
-        try:
-            data = json.loads(body or b"{}")
-        except ValueError:
-            return _json(400, {"error": "json inválido"})
         db = Database(self.settings().db_path)
         try:
-            status, out, eid = payments.receive_event(db, data)
+            status, out = payments.provider().receive_webhook(db, body or b"", headers)
         finally:
             db.close()
-        if eid:
-            if self.payments_sync:
-                self._process_payment_event(eid)
-            else:
-                threading.Thread(target=self._process_payment_event, args=(eid,), name="studio-asaas-event",
-                                 daemon=True).start()
         return _json(status, out)
 
-    def _process_payment_event(self, eid: str) -> None:
-        db = Database(self.settings().db_path)
-        try:
-            payments.process_event(db, payments.make_client(), eid)
-        except Exception:  # noqa: BLE001 — fica sem processed_at: o reconcile tenta de novo
-            log.error("falha ao processar evento do Asaas", exc_info=True)
-        finally:
-            db.close()
-
     def _payments_get(self, path: str, ctx) -> Response:
-        if not payments.enabled():
-            return _json(404, {"error": "a compra pelo site não está disponível"})
         db = Database(ctx["s"].db_path)
         try:
-            if path == "/api/payments/catalog":
+            if path == "/api/payments/catalog":   # a tela de Planos abre mesmo com a compra desligada (só exibe)
                 from .. import catalog
-                return _json(200, {**catalog.public_view(), **payments.account_state(db, ctx["wid"], ctx["sess"]["user_id"]),
-                                   "plan": plans.view(db, ctx["wid"])})
+                online = payments.enabled() and not ctx["ws"]["credits_exempt"]
+                return _json(200, {**catalog.public_view(), "online": online, "plan": plans.view(db, ctx["wid"]),
+                                   "has_customer": bool(ctx["ws"]["stripe_customer_id"]) if "stripe_customer_id" in ctx["ws"].keys() else False,
+                                   "contact": payments.topup_options()["contact"]})
+            if not payments.enabled():
+                return _json(404, {"error": "a compra pelo site não está disponível"})
             row = payments.get(db, path.rsplit("/", 1)[1])
             if row is None or row["account_id"] != ctx["wid"]:
                 return _json(404, {"error": "compra não encontrada"})
-            return _json(200, payments.poll(db, payments.make_client(), row))
+            return _json(200, payments.poll(db, payments.provider(), row))
         finally:
             db.close()
 
+    @staticmethod
+    def _provider_down(exc) -> Response:
+        log.warning("Stripe recusou/indisponível", extra={"event": "payment_checkout_error", "detail": str(exc)})
+        return _json(502, {"error": "Não foi possível falar com o meio de pagamento agora. Nada foi cobrado; tente "
+                                    "de novo em instantes.", "code": "provider_error"})
+
     def _checkout(self, payload: dict, ctx, headers: dict) -> Response:
-        """Cria a compra. O preço sai do catálogo no servidor: qualquer valor enviado pelo navegador é ignorado.
-        IP e user agent ficam registrados na compra (disputa de cartão)."""
+        """Abre o Checkout da Stripe. `kind`: plan (com `plan`) ou topup (com `credits`). O preço é o da Stripe, escolhido
+        no servidor; a quantidade do avulso é validada aqui (inteiro, limites). Qualquer valor enviado é ignorado.
+        IP e user agent ficam registrados na compra (contestação de cartão)."""
         if not payments.enabled():
             return _json(404, {"error": "a compra pelo site não está disponível"})
         if ctx["ws"]["credits_exempt"]:
             return _json(400, {"error": "Esta conta é isenta: não precisa comprar créditos."})
-        pkg = payload.get("package") or None
+        kind = str(payload.get("kind") or "")
+        sess = ctx["sess"]
+        who = dict(wid=ctx["wid"], user_id=sess["user_id"], email=sess["email"],
+                   name=sess["name"] or sess["email"].split("@")[0], base_url=self.base_url())
         db = Database(ctx["s"].db_path)
         try:
-            out = payments.checkout(db, payments.make_client(), wid=ctx["wid"], user_id=ctx["sess"]["user_id"],
-                                    user_name=ctx["sess"]["name"] or ctx["sess"]["email"].split("@")[0],
-                                    method=str(payload.get("method") or ""), package_code=pkg,
-                                    credits=None if pkg else payload.get("credits"), document=payload.get("document"),
-                                    ip=self._client_ip(headers), user_agent=headers.get("User-Agent") or "",
-                                    return_url=self.base_url())
+            prov = payments.provider()
+            if kind == "plan":
+                out = prov.checkout_plan(db, plan_code=str(payload.get("plan") or ""),
+                                         interval=str(payload.get("interval") or "month"), **who)
+            elif kind == "topup":
+                out = prov.checkout_topup(db, credits=payload.get("credits"), **who)
+            else:
+                return _json(400, {"error": "Escolha um plano ou uma quantidade de créditos.", "code": "invalid_kind"})
+            db.conn.execute("UPDATE payments SET ip=?, user_agent=? WHERE id=?",
+                            (self._client_ip(headers)[:64], (headers.get("User-Agent") or "")[:300], out["payment"]["id"]))
         except payments.PaymentRefused as exc:
             return _json(400, {"error": str(exc), "code": exc.code})
-        except asaas_mod.AsaasError as exc:
-            log.warning("Asaas recusou/indisponível na compra", extra={"event": "payment_checkout_error", "detail": str(exc)})
-            return _json(502, {"error": "Não foi possível falar com o meio de pagamento agora. Nada foi cobrado; tente "
-                                        "de novo em instantes.", "code": "provider_error"})
+        except payments.ProviderError as exc:
+            return self._provider_down(exc)
+        finally:
+            db.close()
+        return _json(200, out)
+
+    def _portal(self, payload: dict, ctx) -> Response:
+        """Portal do cliente da Stripe (trocar plano, cancelar, trocar cartão, recibos). `plan`: abre já na troca."""
+        if not payments.enabled():
+            return _json(404, {"error": "a compra pelo site não está disponível"})
+        db = Database(ctx["s"].db_path)
+        try:
+            out = payments.provider().portal(db, wid=ctx["wid"], base_url=self.base_url(),
+                                             plan_code=(str(payload.get("plan")) if payload.get("plan") else None))
+        except payments.PaymentRefused as exc:
+            return _json(400, {"error": str(exc), "code": exc.code})
+        except payments.ProviderError as exc:
+            return self._provider_down(exc)
         finally:
             db.close()
         return _json(200, out)
@@ -1810,7 +1823,9 @@ def make_handler(app: App):
                         body = b""
                         if method == "POST":
                             length = int(self.headers.get("Content-Length") or 0)
-                            if self.path.startswith(("/api/auth/", WEBHOOK_PATH)) and length > MAX_AUTH_BODY:
+                            if self.path.startswith(WEBHOOK_PATH) and length > MAX_WEBHOOK_BODY:
+                                resp = _json(413, {"error": "envio grande demais"})
+                            elif self.path.startswith("/api/auth/") and length > MAX_AUTH_BODY:
                                 resp = _json(413, {"error": "envio grande demais"})
                             elif length > MAX_BODY:
                                 resp = _json(413, {"error": "envio grande demais (máx. 150 MB por vez)"})
@@ -1880,7 +1895,7 @@ def serve(port: int | None = None, open_browser: bool = True, public_host: str |
           host: str | None = None, trust_proxy: str | None = None) -> None:
     try:
         cfg = ServerConfig.from_env()
-        err = backup_start_error() or cfg.shutdown_budget_error() or asaas_mod.config_error()
+        err = backup_start_error() or cfg.shutdown_budget_error() or payments.config_error()
     except ValueError as exc:
         err = str(exc)
     if err:

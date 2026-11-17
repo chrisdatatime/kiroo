@@ -600,6 +600,97 @@ def _m015_avatar_kiroo(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE users ADD COLUMN avatar_kiroo TEXT")
 
 
+def _m016_stripe_ledger_origins(conn: sqlite3.Connection) -> None:
+    """Stripe (planos mensais + avulso) e livro de créditos por ORIGEM.
+
+    * `credit_lots`: cada entrada de créditos vira um lote com origem (`bonus`, `subscription`, `topup`) e, no plano,
+      validade (fim do ciclo). `remaining_cc` é o que ainda resta do lote; o saldo continua sendo a soma do livro
+      (`credit_entries`), menos o que restou de lotes vencidos e ainda não baixados.
+    * `credit_lot_moves`: de qual lote saiu (−) ou para qual voltou (+) cada lançamento. A devolução de uma reserva
+      (erro técnico) volta para os MESMOS lotes de onde saiu. `lot_id` NULL = consumo sem lote (conta isenta/legado).
+    * `subscriptions`: assinatura da Stripe por conta (plano, status, ciclo e o nível de créditos já concedido no ciclo,
+      para o upgrade conceder só a diferença).
+    * `stripe_events`: cada evento do webhook uma vez só (id do evento); sem dado sensível.
+    * `payments` ganha as colunas da Stripe (sessão, fatura, pagamento, assinatura); fatura e sessão são únicas.
+    * Conversão: o saldo positivo de cada conta vira UM lote `topup` sem validade (créditos de antes não expiram).
+    """
+    conn.execute("""CREATE TABLE IF NOT EXISTS credit_lots (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        origin TEXT NOT NULL,                 -- bonus | subscription | topup
+        amount_cc INTEGER NOT NULL,           -- quanto entrou (centésimos)
+        remaining_cc INTEGER NOT NULL,        -- quanto ainda resta (centésimos)
+        expires_at TEXT,                      -- NULL = não expira (bônus, avulso); plano = fim do ciclo
+        entry_id TEXT,                        -- lançamento que criou o lote
+        source TEXT,                          -- referência externa (invoice:in_..., topup:kpay_..., welcome:..., migration:16)
+        payment_id TEXT,
+        created_at TEXT NOT NULL,
+        closed_at TEXT                        -- baixado (vencido ou estornado)
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_lots_ws ON credit_lots(workspace_id, closed_at, origin)")
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_lots_payment ON credit_lots(payment_id)")
+    conn.execute("""CREATE TABLE IF NOT EXISTS credit_lot_moves (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        workspace_id TEXT NOT NULL,
+        lot_id TEXT,
+        entry_id TEXT NOT NULL,
+        hold_id TEXT,
+        amount_cc INTEGER NOT NULL,           -- negativo = saiu do lote; positivo = voltou
+        created_at TEXT NOT NULL
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_moves_hold ON credit_lot_moves(hold_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_moves_lot ON credit_lot_moves(lot_id)")
+    if "origin" not in _columns(conn, "credit_entries"):
+        conn.execute("ALTER TABLE credit_entries ADD COLUMN origin TEXT")
+    conn.execute("""CREATE TABLE IF NOT EXISTS subscriptions (
+        id TEXT PRIMARY KEY,                  -- sub_... da Stripe
+        workspace_id TEXT NOT NULL,
+        customer_id TEXT,
+        item_id TEXT,
+        price_id TEXT,
+        plan TEXT,                            -- basico | pro | estudio
+        interval TEXT,                        -- month | year
+        status TEXT NOT NULL,                 -- active | trialing | past_due | canceled | incomplete | unpaid...
+        cancel_at_period_end INTEGER NOT NULL DEFAULT 0,
+        current_period_end TEXT,
+        cycle_end TEXT,                       -- ciclo a que cycle_credits se refere
+        cycle_credits INTEGER NOT NULL DEFAULT 0,   -- maior nível de créditos já concedido neste ciclo
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_sub_ws ON subscriptions(workspace_id, status)")
+    conn.execute("""CREATE TABLE IF NOT EXISTS stripe_events (
+        id TEXT PRIMARY KEY,                  -- evt_...: o mesmo evento repetido não é processado de novo
+        type TEXT NOT NULL,
+        object_id TEXT,
+        livemode INTEGER NOT NULL DEFAULT 0,
+        received_at TEXT NOT NULL,
+        processed_at TEXT,
+        outcome TEXT
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_stripe_events_pending ON stripe_events(processed_at)")
+    for col, decl in (("provider", "TEXT"), ("kind", "TEXT"), ("stripe_session_id", "TEXT"), ("stripe_invoice_id", "TEXT"),
+                      ("stripe_payment_intent", "TEXT"), ("stripe_charge_id", "TEXT"), ("stripe_subscription_id", "TEXT")):
+        if col not in _columns(conn, "payments"):
+            conn.execute(f"ALTER TABLE payments ADD COLUMN {col} {decl}")
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_pay_session ON payments(stripe_session_id) WHERE stripe_session_id IS NOT NULL")
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_pay_invoice ON payments(stripe_invoice_id) WHERE stripe_invoice_id IS NOT NULL")
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_pay_intent ON payments(stripe_payment_intent)")
+    for col in ("stripe_customer_id", "billing_flag", "billing_flag_at"):
+        if col not in _columns(conn, "workspaces"):
+            conn.execute(f"ALTER TABLE workspaces ADD COLUMN {col} TEXT")
+    # saldo atual -> um lote `topup` sem validade (só contas com saldo positivo e ainda sem lote)
+    stamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    rows = conn.execute("SELECT workspace_id, SUM(amount_cc) FROM credit_entries GROUP BY workspace_id").fetchall()
+    for wid, bal in rows:
+        if not bal or bal <= 0:
+            continue
+        if conn.execute("SELECT 1 FROM credit_lots WHERE workspace_id=?", (wid,)).fetchone():
+            continue
+        conn.execute("INSERT INTO credit_lots(id, workspace_id, origin, amount_cc, remaining_cc, expires_at, source, created_at)"
+                     " VALUES (?,?,?,?,?,NULL,?,?)", (f"lot_m16_{wid}"[:64], wid, "topup", int(bal), int(bal), "migration:16", stamp))
+
+
 MIGRATIONS: list[Migration] = [
     Migration(1, "schema completo", _m001_baseline),
     Migration(2, "convites de uso único e consentimento", _m002_invites_consent),
@@ -616,6 +707,7 @@ MIGRATIONS: list[Migration] = [
     Migration(13, "workflow único fal.ai: cenário e plataforma por produção", _m013_scene_platform),
     Migration(14, "cadastro aberto: sem teto individual, eventos da plataforma e backfill do DEMO padrão", _m014_open_signup),
     Migration(15, "avatar da conta: kiroo sorteado na criação", _m015_avatar_kiroo),
+    Migration(16, "Stripe e livro de créditos por origem: lotes, assinaturas, eventos; saldo atual vira avulso", _m016_stripe_ledger_origins),
 ]
 LATEST = MIGRATIONS[-1].version
 assert [m.version for m in MIGRATIONS] == list(range(1, LATEST + 1)), "migrações devem ser 1..N em ordem"

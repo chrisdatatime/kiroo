@@ -1,4 +1,4 @@
-"""Segredos: secret_values() cobre Gemini, Anthropic, Google OAuth, SMTP e MP_*; nenhum aparece em log (inclusive
+"""Segredos: secret_values() cobre Gemini, Anthropic, Google OAuth, SMTP e Stripe; nenhum aparece em log (inclusive
 traceback), /readyz, resposta de erro ou erro mostrado na interface; stack trace nunca vai ao cliente."""
 
 from __future__ import annotations
@@ -23,9 +23,8 @@ SECRETS = {
     "ANTHROPIC_API_KEY": "sk-ant-FAKE-anthropic-0123456789",
     "STUDIO_GOOGLE_CLIENT_SECRET": "GOCSPX-FAKE-google-secret-0123",
     "STUDIO_SMTP_PASSWORD": "re_FAKE_smtp_password_0123456789",
-    "MP_ACCESS_TOKEN": "APP_USR-FAKE-mercadopago-0123456789",
-    "MP_WEBHOOK_SECRET": "whsec-FAKE-mercadopago-0123456789",
-    "MP_CLIENT_SECRET": "mpcs-FAKE-client-secret-0123456789",
+    "STRIPE_SECRET_KEY": "sk_test_FAKE_stripe_secret_0123456789",
+    "STRIPE_WEBHOOK_SECRET": "whsec_FAKE_stripe_webhook_0123456789",
     "BACKUP_R2_SECRET_ACCESS_KEY": "r2-FAKE-secret-access-key-0123456789",
 }
 ALL = [FAKE_KEY, *SECRETS.values()]
@@ -55,8 +54,8 @@ def leaked(text) -> list[str]:
 def test_secret_values_covers_every_provider(secrets_env, monkeypatch):
     values = secrets_env.secret_values()
     assert set(ALL) <= set(values)
-    monkeypatch.setenv("MP_PUBLIC_KEY_NOVO", "APP_USR-qualquer-coisa-nova")   # qualquer MP_* novo entra sozinho
-    assert "APP_USR-qualquer-coisa-nova" in secret_values()
+    monkeypatch.setenv("STRIPE_PRICE_PRO_M", "price_FAKE_nao_e_segredo")      # id de preço não é segredo
+    assert "price_FAKE_nao_e_segredo" not in secret_values()
     assert "STUDIO_SMTP_USER" not in "".join(values)
 
 
@@ -79,7 +78,7 @@ def test_log_file_and_traceback_are_masked(secrets_env, tmp_path):
 
 
 def test_json_logs_are_masked(secrets_env):
-    rec = logging.LogRecord("studio", logging.ERROR, __file__, 1, "x %s", (SECRETS["MP_ACCESS_TOKEN"],), None)
+    rec = logging.LogRecord("studio", logging.ERROR, __file__, 1, "x %s", (SECRETS["STRIPE_SECRET_KEY"],), None)
     try:
         raise ValueError(FAKE_KEY)
     except ValueError:
@@ -118,7 +117,7 @@ def test_production_error_shown_in_ui_is_masked(app, monkeypatch):
 def test_provider_error_saved_on_attempt_is_masked(secrets_env):
     err = _classify(RuntimeError(f"400 Bad Request for url ...?key={FAKE_KEY}"))
     assert not leaked(str(err)) and "***" in str(err)
-    assert redact("x " + SECRETS["MP_WEBHOOK_SECRET"]) == "x ***"
+    assert redact("x " + SECRETS["STRIPE_WEBHOOK_SECRET"]) == "x ***"
 
 
 def test_google_login_failure_logs_no_secret(app, caplog):

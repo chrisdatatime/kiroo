@@ -39,8 +39,8 @@ export const availablePlatforms = (S) => {
     return { id: x.id, label: x.label || base.label, sub: x.subtitle || x.sub || base.sub };
   });
 };
-// "Disponível no plano Escala" (cadeado): só para cenário de acesso antecipado que este plano ainda não vê.
-export const lockText = (sc) => (sc && sc.locked ? `Disponível no plano ${sc.requiredPlan || 'Escala'}` : null);
+// "Disponível no plano Estúdio" (cadeado): só para cenário de acesso antecipado que este plano ainda não vê.
+export const lockText = (sc) => (sc && sc.locked ? `Disponível no plano ${sc.requiredPlan || 'Estúdio'}` : null);
 // Escolha efetiva: a feita pelo cliente se existir e estiver liberada; senão o padrão (Casa Clara + Shopee Vídeo).
 export const effectiveScene = (S, chosen) => {
   const av = availableScenes(S);

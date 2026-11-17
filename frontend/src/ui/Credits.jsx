@@ -127,7 +127,7 @@ export function CreditsContent({ v }) {
       {d && (
         <>
           <CreditsView d={d} plan={v.account && v.account.plan} tab={tab} setTab={setTab} adding={online ? undefined : adding}
-            onBuy={() => (online ? v.openPrefs('buy') : setAdding((a) => !a))} onPackages={() => (online ? v.openPrefs('buy') : setAdding(true))} />
+            onBuy={() => (online ? v.openPricing() : setAdding((a) => !a))} onPackages={() => (online ? v.openPricing() : setAdding(true))} />
           {adding && !online && <div className="pf"><TopUp topup={d.topup} onClose={() => setAdding(false)} /></div>}
         </>
       )}

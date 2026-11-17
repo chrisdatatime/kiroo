@@ -101,7 +101,7 @@ RAILWAY_DEPLOYMENT_DRAINING_SECONDS=40
 RAILWAY_RUN_UID=0
 ```
 
-`staging.kiroo.app` continua em `STUDIO_ALLOWED_HOSTS` só enquanto o webhook do Asaas apontar para ele (passo 8);
+`staging.kiroo.app` continua em `STUDIO_ALLOWED_HOSTS` só enquanto o webhook da Stripe apontar para ele (passo 8);
 o remetente `@kiroo.io` exige o domínio `kiroo.io` verificado no Resend (SPF, DKIM e DMARC no DNS do `kiroo.io`).
 
 Três avisos que valem o tempo de ler:
@@ -194,7 +194,7 @@ curl -fsS https://app.kiroo.io/readyz
 Arquitetura: `kiroo.io` = landing e páginas legais; `app.kiroo.io` = o app (login em `https://app.kiroo.io/login`).
 Os dois saem do **mesmo serviço**: quem separa é o host (`STUDIO_LANDING_HOST=kiroo.io` e
 `STUDIO_APP_URL=https://app.kiroo.io`; ver "Raiz `kiroo.io`" abaixo). O `kiroo.app` vira domínio **secundário**: tudo nele responde 301 para
-`app.kiroo.io`, **exceto** o caminho do webhook do Asaas, até o webhook ser trocado no painel do Asaas e confirmado.
+`app.kiroo.io`, **exceto** o caminho do webhook da Stripe, até o webhook ser trocado no painel da Stripe e confirmado.
 
 **No Railway:**
 
@@ -202,7 +202,7 @@ Os dois saem do **mesmo serviço**: quem separa é o host (`STUDIO_LANDING_HOST=
 2. Digite `app.kiroo.io`.
 3. O Railway mostra **dois** registros: um `CNAME` (algo como `abc123.up.railway.app`) e um `TXT` de
    verificação. **Anote os dois exatamente como aparecem.**
-4. **Não remova** o domínio `staging.kiroo.app` do serviço por enquanto: é por ele que o webhook do Asaas ainda chega.
+4. **Não remova** o domínio `staging.kiroo.app` do serviço por enquanto: é por ele que o webhook da Stripe ainda chega.
 
 **Na Cloudflare** (zona do `kiroo.io`):
 
@@ -216,11 +216,11 @@ Os dois saem do **mesmo serviço**: quem separa é o host (`STUDIO_LANDING_HOST=
 
 **`kiroo.app` como secundário (301)**, na zona do `kiroo.app`:
 
-8. Deixe o `CNAME` `staging` como está (proxied, apontando para o Railway): o webhook do Asaas precisa continuar
+8. Deixe o `CNAME` `staging` como está (proxied, apontando para o Railway): o webhook da Stripe precisa continuar
    chegando ao serviço por ele, e o host segue em `STUDIO_ALLOWED_HOSTS`.
 9. **Rules** → **Redirect Rules** → **Create rule**:
    - Nome: `kiroo-app-para-io`.
-   - Condição (expressão): `not (http.request.uri.path eq "/api/payments/asaas/webhook")`.
+   - Condição (expressão): `not (http.request.uri.path eq "/api/payments/stripe/webhook")`.
    - Ação: **Dynamic**, expressão `concat("https://app.kiroo.io", http.request.uri.path)`, código **301**,
      **Preserve query string** ligado (links de `?reset=` e `?compra=` já enviados continuam valendo).
    - **Deploy**.
@@ -230,7 +230,7 @@ Os dois saem do **mesmo serviço**: quem separa é o host (`STUDIO_LANDING_HOST=
 **Deu certo quando:** `curl -sI https://staging.kiroo.app/login` responde `301` com
 `location: https://app.kiroo.io/login`, e um `POST` no caminho do webhook **não** é redirecionado.
 
-**Depois que o webhook do Asaas apontar para `https://app.kiroo.io/api/payments/asaas/webhook` e você
+**Depois que o webhook da Stripe apontar para `https://app.kiroo.io/api/payments/stripe/webhook` e você
 confirmar** (um evento real ou de teste chegando pelo `.io`): tire a exceção da regra (o 301 passa a valer para
 todos os caminhos), tire `staging.kiroo.app` de `STUDIO_ALLOWED_HOSTS` e só então remova o domínio antigo do Railway.
 
@@ -252,7 +252,7 @@ No serviço (Variables):
 
 - `STUDIO_LANDING_HOST=kiroo.io` e `STUDIO_APP_URL=https://app.kiroo.io` (as duas juntas).
 - `STUDIO_ALLOWED_HOSTS=kiroo.io,www.kiroo.io,app.kiroo.io,staging.kiroo.app` (tire `staging.kiroo.app` quando o
-  webhook do Asaas tiver migrado, como descrito acima).
+  webhook da Stripe tiver migrado, como descrito acima).
 - `STUDIO_TERMS_URL=https://kiroo.io/termos` e `STUDIO_PRIVACY_URL=https://kiroo.io/privacidade`.
 
 No Railway: **+ Custom Domain** → `kiroo.io`, e anote o `CNAME` e o `TXT` como no passo 3.

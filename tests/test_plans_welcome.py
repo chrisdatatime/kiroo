@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from studio import catalog, fal_contract, payments, plans, welcome
+from studio import fal_contract, payments, plans, welcome
 from studio.accounts import Accounts
 from studio.credits import Ledger, fmt_balance
 from studio.db import Database, new_id, now
@@ -32,22 +32,22 @@ def user(db, email, verified=True):
     return uid, wid
 
 
-def pay(db, wid, code, status="paid", method="pix"):
-    """Compra já criada no Asaas (como payments.checkout deixaria), no estado pedido."""
-    q = catalog.quote(code) if code != "avulso" else catalog.quote(None, 100)
+def pay(db, wid, code, status="paid"):
+    """Compra paga (ciclo de plano ou avulso), como o webhook da Stripe deixaria."""
     pid = new_id("kpay")
-    db.conn.execute("INSERT INTO payments(id, account_id, asaas_payment_id, asaas_customer_id, method, package_code, credits, "
-                    "amount_cents, status, created_at, paid_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-                    (pid, wid, "pay_" + pid, "cus_1", method, q["package_code"], q["credits"], q["amount_cents"], status,
-                     now(), now() if status == "paid" else None))
+    kind = "topup" if code == "avulso" else "invoice"
+    db.conn.execute("INSERT INTO payments(id, account_id, method, package_code, credits, amount_cents, status, created_at,"
+                    " paid_at, provider, kind) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                    (pid, wid, "stripe", code, 100, 4400, status, now(), now() if status == "paid" else None, "stripe", kind))
     return pid
 
 
-def remote(db, pid, status):
-    row = payments.get(db, pid)
-    return payments.apply_remote(db, row, {"id": row["asaas_payment_id"], "customer": "cus_1",
-                                           "value": row["amount_cents"] / 100, "billingType": "PIX", "status": status,
-                                           "externalReference": pid}, source="teste")
+def subscribe(db, wid, plan, status="active"):
+    """Assinatura da Stripe no estado pedido (como customer.subscription.* deixaria)."""
+    sid = new_id("sub")
+    db.conn.execute("INSERT INTO subscriptions(id, workspace_id, plan, interval, status, created_at, updated_at)"
+                    " VALUES (?,?,?,?,?,?,?)", (sid, wid, plan, "month", status, now(), now()))
+    return sid
 
 
 # ================================================================= saldo inteiro (só a exibição)
@@ -61,52 +61,48 @@ def test_balance_is_shown_as_an_integer_rounded_down_and_the_ledger_keeps_decima
 
 
 # ================================================================= plano
-def test_plan_is_the_biggest_paid_package_and_avulso_or_bonus_never_count(db):
+def test_plan_is_the_live_subscription_and_avulso_or_bonus_never_count(db):
+    # Fase 6: plano = assinatura da Stripe que vale agora (antes: o maior pacote pago no Asaas)
     _, wid = user(db, "plano@x.com")
     assert plans.plan_of(db, wid) == "free" and not plans.has_paid_purchase(db, wid)
     pay(db, wid, "avulso")
-    assert plans.plan_of(db, wid) == "free" and plans.has_paid_purchase(db, wid)   # avulso esconde o Free, não dá plano
-    pay(db, wid, "inicial")
-    pay(db, wid, "pro", status="pending")                                             # não pago: não conta
-    assert plans.plan_of(db, wid) == "inicial"
-    pay(db, wid, "escala")
-    pay(db, wid, "pro")
-    assert plans.plan_of(db, wid) == "escala"
-
-
-def test_refund_or_chargeback_of_the_plan_package_recalculates_the_plan(db):
-    _, wid = user(db, "estorno@x.com")
-    pro = pay(db, wid, "pro", status="pending")
-    esc = pay(db, wid, "escala", status="pending")
-    assert remote(db, pro, "RECEIVED")["status"] == "paid"
-    assert remote(db, esc, "RECEIVED")["status"] == "paid"
-    assert plans.plan_of(db, wid) == "escala"
-    assert remote(db, esc, "REFUNDED")["status"] == "refunded"
+    assert plans.plan_of(db, wid) == "free" and plans.has_paid_purchase(db, wid)   # avulso não dá plano
+    subscribe(db, wid, "basico", status="incomplete")                                 # não pago: não conta
+    assert plans.plan_of(db, wid) == "free"
+    subscribe(db, wid, "pro")
     assert plans.plan_of(db, wid) == "pro"
-    assert remote(db, pro, "CHARGEBACK_REQUESTED")["status"] == "chargeback"
-    assert plans.plan_of(db, wid) == "free" and not plans.has_paid_purchase(db, wid)
 
 
-def test_whatsapp_only_for_pro_and_escala_and_only_with_the_env(db, monkeypatch):
+def test_canceled_subscription_falls_back_to_free_and_past_due_keeps_the_plan(db):
+    _, wid = user(db, "estorno@x.com")
+    sid = subscribe(db, wid, "estudio")
+    assert plans.plan_of(db, wid) == "estudio" and plans.view(db, wid)["early_access"]
+    db.conn.execute("UPDATE subscriptions SET status='past_due' WHERE id=?", (sid,))
+    assert plans.plan_of(db, wid) == "estudio"                                        # a Stripe ainda tenta cobrar
+    db.conn.execute("UPDATE subscriptions SET status='canceled' WHERE id=?", (sid,))
+    assert plans.plan_of(db, wid) == "free" and plans.view(db, wid)["subscription"] is None
+
+
+def test_whatsapp_only_for_pro_and_estudio_and_only_with_the_env(db, monkeypatch):
     _, wid = user(db, "zap@x.com")
     monkeypatch.setenv("STUDIO_SUPPORT_WHATSAPP", "+55 (11) 98888-7777")
     assert plans.view(db, wid)["support"]["whatsapp"] is None                         # free: e-mail
-    pay(db, wid, "inicial")
+    sid = subscribe(db, wid, "basico")
     assert plans.view(db, wid)["support"]["whatsapp"] is None
-    pay(db, wid, "pro")
+    db.conn.execute("UPDATE subscriptions SET plan='pro' WHERE id=?", (sid,))
     v = plans.view(db, wid)
     assert v["plan"] == "pro" and v["priority_queue"] and v["support"]["whatsapp"] == "https://wa.me/5511988887777"
     monkeypatch.delenv("STUDIO_SUPPORT_WHATSAPP")
     assert plans.view(db, wid)["support"]["whatsapp"] is None                         # sem a variável, sem botão
 
 
-def test_early_access_scene_only_shows_for_escala(monkeypatch):
+def test_early_access_scene_only_shows_for_estudio(monkeypatch):
     from studio.prompts import production as pp
-    monkeypatch.setitem(pp.SCENES["dark_premium"], "early_access_plan", "escala")
+    monkeypatch.setitem(pp.SCENES["dark_premium"], "early_access_plan", "estudio")
     assert "dark_premium" not in pp.scenes_for_plan("free") and "dark_premium" not in pp.scenes_for_plan("pro")
-    assert "dark_premium" in pp.scenes_for_plan("escala")
+    assert "dark_premium" in pp.scenes_for_plan("estudio")
     assert {"home_light", "studio", "natural"} <= set(pp.scenes_for_plan("free"))      # os demais seguem liberados
-    assert pp.scene_early_access("dark_premium") == "escala" and pp.scene_early_access("studio") is None
+    assert pp.scene_early_access("dark_premium") == "estudio" and pp.scene_early_access("studio") is None
 
 
 def test_no_scene_is_early_access_today():
@@ -146,7 +142,7 @@ def test_fal_queue_sends_pro_before_an_earlier_free_production(settings, tmp_pat
     _, pro_wid = acc.create_user("pro@example.com", "senha-forte-123")
     acc.set_workspace(pro_wid, allow_real=1, mode="real", monthly_cap_usd=100, credits_exempt=0)
     Ledger(o.db).add(pro_wid, 50_000, note="teste")
-    pay(o.db, pro_wid, "pro")
+    subscribe(o.db, pro_wid, "pro")
 
     busy = new(o, photo_product, crid="busy-0001", wid=free_wid)
     o.run(busy, wait=False)

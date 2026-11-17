@@ -214,8 +214,8 @@ def format_text(m: dict) -> str:
         from .catalog import brl
         lines += ["", f"[compras de créditos — mês {pm['month']} (horário de Brasília)]",
                   f"  receita bruta: {brl(pm['gross_revenue_cents'])}",
-                  "  compras por meio: " + " | ".join(f"{'Pix' if k == 'pix' else 'cartão'}: {v['purchases']} "
-                                                      f"({brl(v['revenue_cents'])})" for k, v in pm["by_method"].items()),
+                  "  compras por tipo: " + " | ".join(f"{'ciclos de plano' if k == 'invoice' else 'avulso'}: {v['purchases']} "
+                                                      f"({brl(v['revenue_cents'])})" for k, v in pm["by_kind"].items()),
                   f"  créditos vendidos: {pm['credits_sold']} | créditos consumidos: {pm['credits_consumed']:g}"]
     wm = m.get("welcome")
     if wm:

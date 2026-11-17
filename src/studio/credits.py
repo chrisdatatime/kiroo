@@ -8,7 +8,16 @@ Ciclo de cada chamada paga:
 O custo debitado segue a mesma regra do orçamento da produção: custo confirmado quando o provedor informa, senão o
 estimado. Workspaces isentos (dono da plataforma) registram tudo, mas não precisam de saldo.
 Entradas não são apagadas nem editadas; correções viram lançamentos de ajuste. `ext_ref` único torna cada lançamento
-idempotente (base para os webhooks do Mercado Pago na Fase D).
+idempotente (os webhooks da Stripe repetem eventos).
+
+Origem dos créditos (Fase 6, migração 16): toda entrada vira um LOTE (`credit_lots`) com origem
+  bonus        bônus de boas-vindas (não expira)
+  subscription créditos do plano (expiram no fim do ciclo; não acumulam)
+  topup        avulso, liberações da equipe, ajustes e o saldo convertido na migração (não expiram)
+O consumo segue a ordem bônus → plano → avulso (no plano, o que vence antes sai antes). Cada saída/volta fica em
+`credit_lot_moves`; a devolução de uma reserva (erro técnico, `refund` no extrato) volta para os MESMOS lotes de onde
+saiu. Saldo = soma do livro menos o que restou de lotes de plano já vencidos (a baixa vira o lançamento `expire` na
+próxima escrita da conta).
 """
 
 from __future__ import annotations
@@ -27,14 +36,18 @@ _LOCK = threading.RLock()
 
 # O schema vive em migrations.py (PRAGMA user_version).
 
-KINDS_IN = {"grant", "purchase", "adjust", "welcome_bonus"}  # entradas manuais/compras/bônus de boas-vindas
+KINDS_IN = {"grant", "purchase", "adjust", "welcome_bonus", "subscription"}  # entradas (cada uma cria um lote)
 # "welcome_bonus": 20 créditos uma vez por pessoa (welcome.py). Não é compra: não dá plano nem entra na receita, e
 # nada o estorna (não reembolsável).
-# Compras pelo Asaas: "purchase" (crédito) e "reversal" (estorno/contestação; negativo, pode deixar o saldo negativo).
-# Os dois levam payment_id e são escritos só por payments.py (Ledger.payment_entry).
+# Stripe (payments_stripe.py): "subscription" (créditos do ciclo do plano, com validade), "purchase" (avulso) e
+# "reversal" (reembolso/contestação: tira só o que ainda não foi usado do lote daquela compra; o saldo não fica negativo).
 LABELS = {"grant": "Créditos liberados", "purchase": "Compra", "adjust": "Ajuste", "reserve": "Reserva",
           "release": "Reserva devolvida", "debit": "Uso", "reversal": "Estorno de compra",
-          "welcome_bonus": "Bônus de boas-vindas"}
+          "welcome_bonus": "Bônus de boas-vindas", "subscription": "Créditos do plano", "expire": "Créditos do plano expirados"}
+LOT_ORIGINS = ("bonus", "subscription", "topup")             # ordem de consumo
+ORIGIN_OF_KIND = {"welcome_bonus": "bonus", "subscription": "subscription", "purchase": "topup", "grant": "topup",
+                  "adjust": "topup"}
+ORIGIN_LABELS = {"bonus": "Bônus de boas-vindas", "subscription": "Créditos do plano", "topup": "Créditos avulsos"}
 STAGES = {"image": "Imagens", "video": "Vídeos", "review_image": "Conferência das imagens",
           "review_video": "Conferência dos takes", "plan": "Direção (roteiro)",
           "workflow": "Pacote de vídeo e fotos"}
@@ -73,32 +86,32 @@ def fmt(cc: int) -> str:
 
 
 # ------------------------------------------------------------------ saldo por origem (tela Configurações › Créditos)
-# O livro de hoje guarda um saldo único; a divisão por origem é uma LEITURA: quanto entrou de cada origem e quanto
-# ainda resta dela, supondo o consumo na ordem bônus → liberados → comprados (a mesma ordem do ledger por origem da
-# Fase 6: bônus → plano → avulso). Ordem de consumo: primeiro da lista é gasto primeiro.
-ORIGINS = (("bonus", "Bônus de boas-vindas", ("welcome_bonus",)),
-           ("granted", "Créditos liberados", ("grant", "adjust")),
-           ("purchased", "Créditos comprados", ("purchase", "reversal")))
-
-
-def split_by_origin(received_cc: dict[str, int], balance_cc: int) -> list[dict]:
-    """Pura (testada): `received_cc` = total que entrou por origem (centésimos). O saldo atual é atribuído de trás
-    para frente (o último a ser gasto fica cheio primeiro). Origens sem entrada não aparecem."""
-    left = max(int(balance_cc), 0)
+def origin_rows(lots: list[dict]) -> list[dict]:
+    """Pura (testada): barras por origem a partir dos lotes (`origin`, `received_cc` = o que entrou menos estornos,
+    `left_cc` = o que resta se o lote ainda vale, `expires_at`). Plano: só o ciclo que vale agora. Na ordem de consumo;
+    origens sem lote não aparecem."""
+    by: dict[str, dict] = {}
+    for lot in lots:
+        o = lot["origin"]
+        d = by.setdefault(o, {"received_cc": 0, "left_cc": 0, "expires_at": None})
+        d["received_cc"] += max(int(lot["received_cc"]), 0)
+        d["left_cc"] += max(int(lot["left_cc"]), 0)
+        if lot.get("expires_at") and (d["expires_at"] is None or lot["expires_at"] < d["expires_at"]):
+            d["expires_at"] = lot["expires_at"]
     out = []
-    for key, label, _ in reversed(ORIGINS):
-        got = max(int(received_cc.get(key, 0)), 0)
-        if got <= 0:
+    for key in LOT_ORIGINS:
+        d = by.get(key)
+        if not d or d["received_cc"] <= 0:
             continue
-        rest = min(left, got)
-        left -= rest
-        out.append({"key": key, "label": label, "received_cc": got, "left_cc": rest,
-                    "received": fmt_balance(got), "left": fmt_balance(rest)})
-    return list(reversed(out))
+        out.append({"key": key, "label": ORIGIN_LABELS[key], "received_cc": d["received_cc"], "left_cc": d["left_cc"],
+                    "received": fmt_balance(d["received_cc"]), "left": fmt_balance(d["left_cc"]),
+                    "expires_at": d["expires_at"]})
+    return out
 
 
 # ------------------------------------------------------------------ extrato do cliente (texto, status, CSV)
-STATUS = {"paid": "Pago", "done": "Concluído", "not_charged": "Não cobrado", "gift": "Presente", "reversed": "Estornado"}
+STATUS = {"paid": "Pago", "done": "Concluído", "not_charged": "Não cobrado", "gift": "Presente", "reversed": "Estornado",
+          "expired": "Expirado"}
 CRLF = chr(13) + chr(10)
 
 
@@ -118,8 +131,8 @@ def fmt_charge(cc: int) -> str:
 def entry_status(kind: str, amount_cc: int) -> tuple[str, str]:
     """Selo do extrato: (código, rótulo). Compra → Pago; vídeo → Concluído; devolução sem débito → Não cobrado;
     bônus/liberação → Presente; estorno de compra → Estornado; ajuste → Concluído."""
-    code = {"purchase": "paid", "reversal": "reversed", "welcome_bonus": "gift", "grant": "gift",
-            "refund": "not_charged", "release": "not_charged"}.get(kind, "done")
+    code = {"purchase": "paid", "subscription": "paid", "reversal": "reversed", "welcome_bonus": "gift", "grant": "gift",
+            "refund": "not_charged", "release": "not_charged", "expire": "expired"}.get(kind, "done")
     return code, STATUS[code]
 
 
@@ -139,6 +152,11 @@ def entry_texts(kind: str, *, product: str = "", scene: str | None = None, platf
         how = {"pix": "Pix", "card": "Cartão"}.get(method or "", "")
         head = "Compra" if kind == "purchase" else "Estorno de compra"
         return (f"{head} · {plan}" if plan else head), how
+    if kind == "subscription":
+        plan = PLAN_LABELS.get(package or "", "")
+        return (f"Plano · {plan}" if plan else "Plano"), note or "Créditos do ciclo"
+    if kind == "expire":
+        return "Créditos do plano expirados", "Os créditos do plano não passam para o ciclo seguinte"
     if kind == "welcome_bonus":
         return "Bônus de boas-vindas", "Seu primeiro vídeo"
     if kind == "grant":
@@ -195,8 +213,33 @@ class Ledger:
 
     # ------------------------------------------------------------- leitura
     def balance(self, wid: str) -> int:
-        return self.db.conn.execute("SELECT COALESCE(SUM(amount_cc),0) FROM credit_entries WHERE workspace_id=?",
-                                    (wid,)).fetchone()[0]
+        """Soma do livro VÁLIDO: tudo o que foi lançado, menos o que restou de lotes de plano já vencidos e ainda não
+        baixados (a baixa vira lançamento `expire` na próxima escrita da conta)."""
+        total = self.db.conn.execute("SELECT COALESCE(SUM(amount_cc),0) FROM credit_entries WHERE workspace_id=?",
+                                     (wid,)).fetchone()[0]
+        return total - self._pending_expired(wid)
+
+    def _pending_expired(self, wid: str, at: str | None = None) -> int:
+        return self.db.conn.execute(
+            "SELECT COALESCE(SUM(remaining_cc),0) FROM credit_lots WHERE workspace_id=? AND closed_at IS NULL"
+            " AND expires_at IS NOT NULL AND expires_at<=? AND remaining_cc>0", (wid, at or now())).fetchone()[0]
+
+    def lots(self, wid: str, *, valid_only: bool = False) -> list[dict]:
+        """Lotes da conta com o que entrou (menos estornos) e o que resta; `valid` = ainda não venceu nem foi baixado."""
+        t = now()
+        rows = self.db.conn.execute(
+            "SELECT l.*, COALESCE((SELECT -SUM(m.amount_cc) FROM credit_lot_moves m JOIN credit_entries e ON e.id=m.entry_id"
+            " WHERE m.lot_id=l.id AND e.kind='reversal'),0) revoked_cc FROM credit_lots l WHERE l.workspace_id=?"
+            " ORDER BY l.created_at, l.rowid", (wid,)).fetchall()
+        out = []
+        for r in rows:
+            valid = r["closed_at"] is None and (r["expires_at"] is None or r["expires_at"] > t)
+            if valid_only and not valid:
+                continue
+            out.append({"id": r["id"], "origin": r["origin"], "amount_cc": r["amount_cc"], "remaining_cc": r["remaining_cc"],
+                        "received_cc": r["amount_cc"] - r["revoked_cc"], "left_cc": r["remaining_cc"] if valid else 0,
+                        "expires_at": r["expires_at"], "valid": valid, "source": r["source"], "payment_id": r["payment_id"]})
+        return out
 
     def held(self, wid: str) -> int:
         """Reservas ainda abertas (positivo). No pré-orçamento, o que já virou uso (drawdown) sai da reserva."""
@@ -216,15 +259,8 @@ class Ledger:
                 "balance": fmt_balance(bal), "balance_exact": fmt(bal), "held": fmt_balance(held), "held_exact": fmt(held)}
 
     def origins(self, wid: str) -> list[dict]:
-        """Saldo por origem (bônus, liberados, comprados) para as barras da tela de Créditos."""
-        kinds = {k: key for key, _, ks in ORIGINS for k in ks}
-        marks = ",".join("?" * len(kinds))
-        rows = self.db.conn.execute(f"SELECT kind, COALESCE(SUM(amount_cc),0) cc FROM credit_entries"
-                                    f" WHERE workspace_id=? AND kind IN ({marks}) GROUP BY kind", (wid, *kinds)).fetchall()
-        got: dict[str, int] = {}
-        for r in rows:
-            got[kinds[r["kind"]]] = got.get(kinds[r["kind"]], 0) + int(r["cc"])
-        return split_by_origin(got, self.balance(wid))
+        """Saldo por origem (bônus, plano, avulso) para as barras da tela de Créditos. Plano: só o ciclo que vale."""
+        return origin_rows([lot for lot in self.lots(wid) if lot["origin"] != "subscription" or lot["valid"]])
 
     def statement(self, wid: str, limit: int = 60) -> list[dict]:
         """Extrato do CLIENTE: o que entrou e o uso por vídeo (reserva+liberação+débito viram uma linha), com título,
@@ -233,7 +269,8 @@ class Ledger:
             "SELECT e.*, p.product_json, CASE WHEN p.engine='fal' THEN p.scene END scene, CASE WHEN p.engine='fal' THEN p.platform END platform, pay.package_code pay_pkg, pay.method pay_method"
             " FROM credit_entries e LEFT JOIN productions p ON p.id=e.production_id"
             " LEFT JOIN payments pay ON pay.id=e.payment_id"
-            " WHERE e.workspace_id=? AND e.kind IN ('grant','purchase','adjust','debit','release','reversal','welcome_bonus')"
+            " WHERE e.workspace_id=? AND e.kind IN ('grant','purchase','adjust','debit','release','reversal','welcome_bonus',"
+            "'subscription','expire')"
             " ORDER BY e.created_at DESC, e.rowid DESC LIMIT ?", (wid, limit * 3)).fetchall()
         debited = {r["hold_id"] for r in rows if r["kind"] == "debit"}
         out = []
@@ -306,48 +343,176 @@ class Ledger:
         return out
 
     # ------------------------------------------------------------- escrita
-    def _insert(self, **f) -> str:
+    def _insert(self, *, lots: str = "auto", lot_id: str | None = None, expires_at: str | None = None,
+                source: str | None = None, **f) -> str:
+        """Grava o lançamento e o movimento dos lotes. `lots`: auto (pela espécie), new (cria lote), consume (ordem
+        bônus → plano → avulso), return (volta aos lotes da reserva `hold_id`), lot (sai do lote `lot_id`), neutral."""
         eid = new_id("cre")
         f.setdefault("created_at", now())
+        kind, amount, wid = f.get("kind"), int(f.get("amount_cc") or 0), f["workspace_id"]
+        mode = self._lot_mode(kind, amount, f.get("hold_id"), lot_id) if lots == "auto" else lots
+        if mode == "new":
+            f.setdefault("origin", f.pop("origin", None) or ORIGIN_OF_KIND.get(kind, "topup"))
         cols = ", ".join(["id", *f])
         self.db.conn.execute(f"INSERT INTO credit_entries({cols}) VALUES ({', '.join('?' * (len(f) + 1))})",
                              (eid, *f.values()))
+        if amount == 0 or mode == "neutral":
+            return eid
+        if mode == "new":
+            self.db.conn.execute(
+                "INSERT INTO credit_lots(id, workspace_id, origin, amount_cc, remaining_cc, expires_at, entry_id, source,"
+                " payment_id, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (new_id("lot"), wid, f["origin"], amount, amount, expires_at, eid, source or f.get("ext_ref"),
+                 f.get("payment_id"), f["created_at"]))
+        elif mode == "consume":
+            self._consume(wid, eid, f.get("hold_id"), -amount)
+        elif mode == "return":
+            self._return(wid, eid, f.get("hold_id"), amount)
+        elif mode == "lot":
+            self._move(wid, lot_id, eid, f.get("hold_id"), amount)
         return eid
 
+    def _lot_mode(self, kind: str, amount: int, hold_id: str | None, lot_id: str | None) -> str:
+        if lot_id:
+            return "lot"
+        if kind == "drawdown":
+            return "neutral"          # parte da reserva virou uso: o saldo não muda, os lotes também não
+        if kind == "debit" and hold_id and self._hold_open(hold_id):
+            return "neutral"          # débito pago pela reserva ainda aberta (pré-orçamento): já saiu dos lotes na reserva
+        if amount > 0:
+            return "return" if kind == "release" else "new"
+        return "consume"
+
+    def _hold_open(self, hold_id: str) -> bool:
+        return self.db.conn.execute(
+            "SELECT 1 FROM credit_entries r WHERE r.hold_id=? AND r.kind='reserve' AND NOT EXISTS"
+            " (SELECT 1 FROM credit_entries x WHERE x.hold_id=r.hold_id AND x.kind='release') LIMIT 1", (hold_id,)).fetchone() is not None
+
+    def _move(self, wid: str, lot_id: str | None, entry_id: str, hold_id: str | None, cc: int) -> None:
+        self.db.conn.execute("INSERT INTO credit_lot_moves(workspace_id, lot_id, entry_id, hold_id, amount_cc, created_at)"
+                             " VALUES (?,?,?,?,?,?)", (wid, lot_id, entry_id, hold_id, int(cc), now()))
+        if lot_id:
+            self.db.conn.execute("UPDATE credit_lots SET remaining_cc=remaining_cc+? WHERE id=?", (int(cc), lot_id))
+
+    def _consume(self, wid: str, entry_id: str, hold_id: str | None, cc: int) -> None:
+        """Tira `cc` dos lotes válidos na ordem bônus → plano → avulso (no plano, o que vence antes). O que faltar
+        (conta isenta, saldo de antes da migração) fica registrado sem lote."""
+        self._expire_due(wid)
+        left = int(cc)
+        rows = self.db.conn.execute(
+            "SELECT id, remaining_cc FROM credit_lots WHERE workspace_id=? AND closed_at IS NULL AND remaining_cc>0"
+            " AND (expires_at IS NULL OR expires_at>?) ORDER BY CASE origin WHEN 'bonus' THEN 0 WHEN 'subscription' THEN 1"
+            " ELSE 2 END, COALESCE(expires_at,'9999'), created_at, rowid", (wid, now())).fetchall()
+        for r in rows:
+            if left <= 0:
+                break
+            take = min(left, int(r["remaining_cc"]))
+            self._move(wid, r["id"], entry_id, hold_id, -take)
+            left -= take
+        if left > 0:
+            self._move(wid, None, entry_id, hold_id, -left)
+
+    def _return(self, wid: str, entry_id: str, hold_id: str | None, cc: int) -> None:
+        """Devolve `cc` aos lotes de onde a reserva saiu, do último consumido para o primeiro (o uso efetivo fica nos
+        primeiros da ordem). Lote vencido ou baixado recebe e já baixa de novo. Sem histórico (reserva de antes da
+        migração): vira um lote avulso sem validade."""
+        left = int(cc)
+        if hold_id:
+            taken: dict = {}
+            for m in self.db.conn.execute("SELECT lot_id, amount_cc, id FROM credit_lot_moves WHERE hold_id=? ORDER BY id",
+                                          (hold_id,)).fetchall():
+                t = taken.setdefault(m["lot_id"], [0, 0])
+                t[0] -= m["amount_cc"]                    # consumido líquido (saída − volta)
+                if m["amount_cc"] < 0:
+                    t[1] = m["id"]                        # último consumo deste lote
+            for lot_id, (net, _) in sorted(taken.items(), key=lambda kv: -kv[1][1]):
+                if left <= 0:
+                    break
+                give = min(left, net)
+                if give <= 0:
+                    continue
+                self._move(wid, lot_id, entry_id, hold_id, give)
+                left -= give
+                if lot_id:
+                    self._reclose(wid, lot_id)
+        if left > 0:
+            lid = new_id("lot")
+            self.db.conn.execute(
+                "INSERT INTO credit_lots(id, workspace_id, origin, amount_cc, remaining_cc, expires_at, entry_id, source,"
+                " created_at) VALUES (?,?,?,?,0,NULL,?,?,?)", (lid, wid, "topup", left, entry_id, "return:legacy", now()))
+            self._move(wid, lid, entry_id, hold_id, left)
+
+    def _reclose(self, wid: str, lot_id: str) -> None:
+        """Devolução caiu num lote que já venceu ou foi estornado: baixa o que voltou na hora."""
+        lot = self.db.conn.execute("SELECT * FROM credit_lots WHERE id=?", (lot_id,)).fetchone()
+        if lot is None or lot["remaining_cc"] <= 0:
+            return
+        expired = lot["expires_at"] is not None and lot["expires_at"] <= now()
+        if expired or lot["closed_at"]:
+            kind = "expire" if expired else "reversal"
+            self._insert(workspace_id=wid, kind=kind, amount_cc=-int(lot["remaining_cc"]), lot_id=lot_id,
+                         origin=lot["origin"], payment_id=lot["payment_id"],
+                         note="devolução de lote vencido" if expired else "devolução de lote estornado")
+
+    def _expire_due(self, wid: str) -> int:
+        """Baixa os lotes de plano vencidos (lançamento `expire` com o que restou). Idempotente; devolve centésimos."""
+        t = now()
+        total = 0
+        for lot in self.db.conn.execute("SELECT * FROM credit_lots WHERE workspace_id=? AND closed_at IS NULL"
+                                        " AND expires_at IS NOT NULL AND expires_at<=?", (wid, t)).fetchall():
+            if lot["remaining_cc"] > 0:
+                self._insert(workspace_id=wid, kind="expire", amount_cc=-int(lot["remaining_cc"]), lot_id=lot["id"],
+                             origin=lot["origin"], note="créditos do plano não usados no ciclo")
+                total += int(lot["remaining_cc"])
+            self.db.conn.execute("UPDATE credit_lots SET closed_at=? WHERE id=?", (t, lot["id"]))
+        return total
+
+    def expire_due(self, wid: str) -> int:
+        with self._txn():
+            return self._expire_due(wid)
+
     def add(self, wid: str, credits_cc: int, *, kind: str = "grant", note: str = "", ext_ref: str | None = None,
-            by: str | None = None) -> str:
-        """Entrada manual (liberação, compra, ajuste). Mesmo ext_ref = mesmo lançamento (idempotente)."""
+            by: str | None = None, origin: str | None = None, expires_at: str | None = None,
+            payment_id: str | None = None) -> str:
+        """Entrada (liberação, compra avulsa, crédito do plano, bônus, ajuste). Cada entrada positiva vira um lote da
+        origem da espécie (ou `origin`); plano leva `expires_at`. Mesmo ext_ref = mesmo lançamento (idempotente)."""
         if kind not in KINDS_IN:
             raise ValueError("tipo de lançamento inválido")
         if kind != "adjust" and credits_cc <= 0:
             raise ValueError("a quantidade precisa ser positiva")
+        if origin is not None and origin not in LOT_ORIGINS:
+            raise ValueError("origem inválida")
         with self._txn():
             if ext_ref:
                 row = self.db.conn.execute("SELECT id FROM credit_entries WHERE ext_ref=?", (ext_ref,)).fetchone()
                 if row:
                     return row[0]
-            return self._insert(workspace_id=wid, kind=kind, amount_cc=int(credits_cc), note=note[:300],
-                                ext_ref=ext_ref, created_by=by)
+            self._expire_due(wid)
+            f = dict(workspace_id=wid, kind=kind, amount_cc=int(credits_cc), note=note[:300], ext_ref=ext_ref, created_by=by)
+            if payment_id:
+                f["payment_id"] = payment_id
+            if credits_cc > 0:
+                f["origin"] = origin or ORIGIN_OF_KIND.get(kind, "topup")
+            return self._insert(expires_at=expires_at, **f)
 
-    def payment_net(self, payment_id: str) -> int:
-        """Quanto a compra `payment_id` soma hoje no saldo (créditos menos estornos)."""
-        return self.db.conn.execute("SELECT COALESCE(SUM(amount_cc),0) FROM credit_entries WHERE payment_id=?",
-                                    (payment_id,)).fetchone()[0]
-
-    def payment_entry(self, wid: str, payment_id: str, target_cc: int, note: str = "") -> int:
-        """Leva o que a compra soma no saldo até `target_cc` (créditos da compra quando paga; 0 depois de estorno ou
-        contestação). Escreve só a diferença, sob o lock: o mesmo pagamento nunca credita duas vezes, por mais que o
-        webhook repita ou chegue fora de ordem. O débito de estorno pode deixar o saldo NEGATIVO (de propósito).
-        Devolve o lançamento feito em centésimos (0 = nada mudou)."""
+    def revoke_lot(self, lot_id: str, target_cc: int, *, note: str, close: bool = False) -> int:
+        """Reembolso/contestação: leva o total já estornado deste lote até `target_cc`, tirando SÓ o que ainda não foi
+        usado (o saldo não fica negativo). Idempotente (evento repetido não tira de novo). `close` baixa o lote (o que
+        voltar depois para ele também sai). Devolve os centésimos tirados agora."""
         with self._txn():
-            net = self.payment_net(payment_id)
-            delta = int(target_cc) - net
-            if delta == 0:
+            lot = self.db.conn.execute("SELECT * FROM credit_lots WHERE id=?", (lot_id,)).fetchone()
+            if lot is None:
                 return 0
-            seq = self.db.conn.execute("SELECT COUNT(*) FROM credit_entries WHERE payment_id=?", (payment_id,)).fetchone()[0]
-            self._insert(workspace_id=wid, kind="purchase" if delta > 0 else "reversal", amount_cc=delta,
-                         payment_id=payment_id, note=note[:300], ext_ref=f"payment:{payment_id}:{seq + 1}")
-        return delta
+            done = self.db.conn.execute(
+                "SELECT COALESCE(-SUM(m.amount_cc),0) FROM credit_lot_moves m JOIN credit_entries e ON e.id=m.entry_id"
+                " WHERE m.lot_id=? AND e.kind='reversal'", (lot_id,)).fetchone()[0]
+            take = max(min(int(target_cc) - int(done), int(lot["remaining_cc"])), 0)
+            if take:
+                self._insert(workspace_id=lot["workspace_id"], kind="reversal", amount_cc=-take, lot_id=lot_id,
+                             origin=lot["origin"], payment_id=lot["payment_id"], note=note[:300])
+            if close and lot["closed_at"] is None:
+                self.db.conn.execute("UPDATE credit_lots SET closed_at=? WHERE id=?", (now(), lot_id))
+        return take
 
     def hold(self, wid: str, pid: str, usd: float, stage: str) -> str | None:
         """Reserva antes de uma chamada paga. Sem saldo → InsufficientCredits (nada é reservado)."""

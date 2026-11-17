@@ -58,7 +58,7 @@ Variáveis: [.env.example](../.env.example) e [RUNBOOK.md](RUNBOOK.md).
   bytes e texto sem NUL. Trilhas: ffprobe precisa achar áudio. — `src/studio/web/uploads.py`, `src/studio/storage.py`
 
 ### 5. Segredos
-- `secret_values()` cobre Gemini, Anthropic, Google OAuth (segredo), SMTP, qualquer `MP_*`, backup R2/Litestream e
+- `secret_values()` cobre Gemini, Anthropic, Google OAuth (segredo), SMTP, Stripe (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`), backup R2/Litestream e
   códigos de convite antigos. — `src/studio/config.py`
 - Redação no log em arquivo (inclusive traceback), no log JSON (só o tipo da exceção), nas respostas 400, no erro de
   produção mostrado na interface e na mensagem do provedor gravada na tentativa. `/readyz` só diz ok/falha.

@@ -99,22 +99,22 @@ class Settings:
 # Modelo de texto padrão do projeto (Direção/Conferência e conversa com os agentes).
 DEFAULT_TEXT_MODEL = "gemini-3.8-flash"
 
-# Variáveis cujo VALOR é segredo (o nome pode aparecer; o valor nunca). MP_* entra inteiro (Mercado Pago).
+# Variáveis cujo VALOR é segredo (o nome pode aparecer; o valor nunca).
 SECRET_VARS = ("GEMINI_API_KEY", "GOOGLE_API_KEY", "FAL_KEY", "FAL_BILLING_KEY", "ANTHROPIC_API_KEY", "STUDIO_GOOGLE_CLIENT_SECRET", "STUDIO_TURNSTILE_SECRET_KEY",
-               "STUDIO_SMTP_PASSWORD", "ASAAS_API_KEY", "ASAAS_WEBHOOK_TOKEN", "BACKUP_R2_ACCESS_KEY_ID", "BACKUP_R2_SECRET_ACCESS_KEY",
+               "STUDIO_SMTP_PASSWORD", "STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "BACKUP_R2_ACCESS_KEY_ID", "BACKUP_R2_SECRET_ACCESS_KEY",
                "LITESTREAM_ACCESS_KEY_ID", "LITESTREAM_SECRET_ACCESS_KEY", "AWS_SECRET_ACCESS_KEY", "R2_SECRET_ACCESS_KEY")
-SECRET_PREFIXES = ("MP_",)
+SECRET_PREFIXES: tuple[str, ...] = ()   # prefixo cujo valor é sempre segredo (nenhum hoje)
 SECRET_LISTS = ("STUDIO_INVITE_CODES",)   # vários valores separados por vírgula (legado)
 
 
 def secret_values(env=None, extra=None) -> list[str]:
-    """Todos os valores secretos conhecidos do ambiente: Gemini, Anthropic, Google OAuth, SMTP, Mercado Pago (MP_*),
+    """Todos os valores secretos conhecidos do ambiente: Gemini, Anthropic, Google OAuth, SMTP, Stripe (chave e segredo do webhook),
     backup R2/Litestream e códigos de convite antigos. Mais longos primeiro (um segredo que contém outro é mascarado
     inteiro)."""
     e = os.environ if env is None else env
     out = {v for v in (extra or []) if v}
     out |= {e.get(k) for k in SECRET_VARS if e.get(k)}
-    out |= {v for k, v in e.items() if k.startswith(SECRET_PREFIXES) and v}
+    out |= {v for k, v in e.items() if SECRET_PREFIXES and k.startswith(SECRET_PREFIXES) and v}
     for k in SECRET_LISTS:
         out |= {c.strip() for c in (e.get(k) or "").split(",") if c.strip()}
     return sorted((v.strip() for v in out if v and v.strip()), key=len, reverse=True)

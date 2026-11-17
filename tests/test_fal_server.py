@@ -187,13 +187,13 @@ def test_product_name_is_cleaned_and_limited_to_80_chars(app):
 
 
 def test_scenes_in_early_access_are_locked_for_lower_plans(app, monkeypatch):
-    monkeypatch.setitem(SCENES["studio"], "early_access_plan", "escala")
+    monkeypatch.setitem(SCENES["studio"], "early_access_plan", "estudio")
     scenes = {x["id"]: x for x in state(app, "prod_0000000000")["settings"]["fal_scenes"]}
-    assert scenes["studio"]["locked"] is True and scenes["studio"]["required_plan"] == "escala"
-    assert scenes["studio"]["required_plan_label"] == "Escala"
+    assert scenes["studio"]["locked"] is True and scenes["studio"]["required_plan"] == "estudio"
+    assert scenes["studio"]["required_plan_label"] == "Estúdio"
     assert all(scenes[k]["locked"] is False and "required_plan" not in scenes[k] for k in scenes if k != "studio")
     code, d = post(app, "/api/productions", {**BODY, "scene": "studio", "client_request_id": "cliente-early01"})
-    assert code == 403 and d["code"] == "early_access" and "Escala" in d["error"]
+    assert code == 403 and d["code"] == "early_access" and "Estúdio" in d["error"]
     assert state(app, "prod_0000000000")["productions"] == []             # nada foi criado
     code, d = post(app, "/api/productions", {**BODY, "scene": "natural", "client_request_id": "cliente-early02"})
     assert code == 200                                                    # os demais seguem liberados
@@ -201,10 +201,10 @@ def test_scenes_in_early_access_are_locked_for_lower_plans(app, monkeypatch):
 
 def test_a_plan_with_early_access_gets_the_scene_unlocked():
     from studio.prompts.production import scenes_for_plan
-    SCENES["studio"]["early_access_plan"] = "escala"
+    SCENES["studio"]["early_access_plan"] = "estudio"
     try:
         assert "studio" not in scenes_for_plan("free") and "studio" not in scenes_for_plan("pro")
-        assert "studio" in scenes_for_plan("escala")
+        assert "studio" in scenes_for_plan("estudio")
     finally:
         SCENES["studio"]["early_access_plan"] = None
 

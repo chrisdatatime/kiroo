@@ -34,7 +34,7 @@ NARRATION_WORDS_MIN, NARRATION_WORDS_MAX, NARRATION_WORDS_HARD = 22, 26, 28
 NARRATION_MAX_S = 14.5                    # acima disso: aviso estruturado `narration_too_long` (sem cobrar nem refazer)
 NARRATION_WORDS_PER_S = 2.0               # ritmo medido no ElevenLabs pt (25-32 palavras deram ~14-16 s nos exports reais)
 
-# Cenarios. `early_access_plan`: plano minimo que ve o cenario ("escala" = vantagem "Novos estilos antes de todos").
+# Cenarios. `early_access_plan`: plano minimo que ve o cenario ("estudio" = vantagem "Acesso antecipado a novidades").
 # None = liberado para todos (hoje, os quatro).
 SCENES: dict[str, dict] = {
     "home_light": {"label": "Casa Clara", "subtitle": "Sala iluminada, tons neutros", "early_access_plan": None},

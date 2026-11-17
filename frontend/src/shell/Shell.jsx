@@ -137,8 +137,9 @@ function PhoneMe({ v, onOpen }) {
   );
 }
 
-const PHONE_TITLE = { central: 'Início', equipe: 'Equipe', escritorio: 'Escritório', config: 'Configurações' };
-const DESK_TITLE = { central: 'Início', escritorio: 'Escritório', config: 'Configurações' };
+const PHONE_TITLE = { central: 'Início', equipe: 'Equipe', escritorio: 'Escritório', config: 'Configurações', planos: 'Planos' };
+const DESK_TITLE = { central: 'Início', escritorio: 'Escritório', config: 'Configurações', planos: 'Planos' };
+const EXTRA_VIEWS = { config: { id: 'config', label: 'Configurações', title: 'Configurações' }, planos: { id: 'planos', label: 'Planos', title: 'Planos' } };
 // telas cujo cabeçalho no celular é o da marca (logo, saldo, avisos e conta), como no design do Início e do Escritório
 const PHONE_HOME = { central: true, escritorio: true };
 
@@ -151,7 +152,7 @@ export default function Shell({ v, rootRef, stageRef, onKeyDown, onKeyUp, onBlur
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
   }, []);
-  const cur = VIEWS.find((x) => x.id === v.view) || (v.view === 'config' ? { id: 'config', label: 'Configurações', title: 'Configurações' } : VIEWS[0]);
+  const cur = VIEWS.find((x) => x.id === v.view) || EXTRA_VIEWS[v.view] || VIEWS[0];
   React.useEffect(() => { document.title = `Kiroo — ${cur.label}`; }, [cur.label]);
   const bal = v.wallet ? (v.wallet.exempt ? 'Isento' : `${v.wallet.balance} créditos`) : '';
   const newMission = () => { v.setView('missao'); v.newProd(); };
@@ -175,7 +176,7 @@ export default function Shell({ v, rootRef, stageRef, onKeyDown, onKeyUp, onBlur
             </header>
           ) : phone ? (
             <header className="pv-top pv-top-phone">
-              {(v.view === 'missao' || v.view === 'config') && <button type="button" className="pv-back" onClick={() => v.setView('central')} aria-label="Voltar para o início"><ArrowLeft size={22} aria-hidden="true" /></button>}
+              {(v.view === 'missao' || v.view === 'config' || v.view === 'planos') && <button type="button" className="pv-back" onClick={() => v.setView('central')} aria-label="Voltar para o início"><ArrowLeft size={22} aria-hidden="true" /></button>}
               <h1>{v.view === 'missao' ? (v.hasProd && v.prodName ? v.prodName : 'Produção') : (PHONE_TITLE[v.view] || cur.title)}</h1>
               {v.conn === 'erro' && <span role="alert" className="pv-status pv-status-error">Sem conexão</span>}
               {v.mode === 'simulated' && <span className="pv-status pv-status-demo">DEMO</span>}

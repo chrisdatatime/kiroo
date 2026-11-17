@@ -3,7 +3,7 @@ import { getJSON } from '../engine/api.js';
 import { safeHref } from './credits.js';
 
 // "Adicionar créditos". Hoje é contato/instrução manual (ainda não há pagamento pelo site). Ponto de integração do
-// Mercado Pago: quando `topup.online` vier verdadeiro com uma `checkout_url`, é aqui que o botão de pagar entra.
+// Compra pela Stripe ligada (`topup.online`): o botão leva à tela de Planos (/pricing), que abre o Checkout da Stripe.
 // Sem `topup` pronto (ex.: abertura pela tela de Créditos), busca em /api/credits/topup.
 export function TopUp({ topup, missingCc = 0, onClose, onBuy }) {
   const [t, setT] = React.useState(topup || null);

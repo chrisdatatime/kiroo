@@ -7,7 +7,7 @@ import { FEATURES, PRIVACY_EMAIL } from '../config/appConfig.js';
 import KirooAvatar from './KirooAvatar.jsx';
 import { Spark } from './AccountMenu.jsx';
 import { displayName } from './accountMenu.js';
-import { SETTINGS_TABS, balanceSentence, originRows, profileChanges, statementLine } from './settings.js';
+import { SETTINGS_TABS, balanceSentence, billingActions, originRows, profileChanges, statementLine } from './settings.js';
 import '../ui/prefs.css';
 import './settings.css';
 
@@ -144,8 +144,9 @@ export function ProfileView({ a, busy, msg, onSave, onVerify, onCode, codeSent, 
 }
 
 // ------------------------------------------------------------------ Créditos
-export function CreditsTabView({ d, onPricing }) {
+export function CreditsTabView({ d, onPricing, onPortal, portalBusy, portalErr }) {
   const s = balanceSentence(d);
+  const pay = billingActions(d);
   const rows = d.exempt ? [] : originRows(d.origins);
   const lines = (d.statement || []).map(statementLine);
   return (
@@ -176,10 +177,14 @@ export function CreditsTabView({ d, onPricing }) {
           <div className="st-refund"><RotateCcw size={16} aria-hidden="true" />Se uma produção falhar por erro técnico, os créditos voltam automaticamente.</div>
         </div>
         <div className="st-pay">
-          <div><div className="st-t1">Pagamentos</div><div className="st-t2">Pix ou cartão.</div></div>
-          {FEATURES.receipts ? <button type="button" className="st-btn st-btn-sm">Recibos</button>
-            : <span className="st-row-act"><button type="button" className="st-btn st-btn-sm" disabled>Recibos</button><Soon /></span>}
+          <div><div className="st-t1">Pagamentos</div><div className="st-t2">Pix ou cartão, pela Stripe.</div></div>
+          <span className="st-row-act">
+            {pay.manage && <button type="button" className="st-btn st-btn-sm" onClick={onPortal} disabled={portalBusy}>Gerenciar assinatura</button>}
+            {FEATURES.receipts && pay.receipts ? <button type="button" className="st-btn st-btn-sm" onClick={onPortal} disabled={portalBusy}>Recibos</button>
+              : <><button type="button" className="st-btn st-btn-sm" disabled>Recibos</button>{!FEATURES.receipts && <Soon />}</>}
+          </span>
         </div>
+        {portalErr && <div role="alert" className="st-err">{portalErr}</div>}
       </section>
 
       <section className="st-card" aria-labelledby="st-ext">
@@ -210,10 +215,18 @@ export function CreditsTabView({ d, onPricing }) {
 function CreditsTab({ v }) {
   const [d, setD] = React.useState(null);
   const [err, setErr] = React.useState(null);
+  const [busy, setBusy] = React.useState(false);
+  const [pErr, setPErr] = React.useState(null);
   React.useEffect(() => { getJSON('/api/credits').then(setD).catch((e) => setErr(e.message)); }, []);
   if (err) return <div role="alert" className="st-err">{err}</div>;
   if (!d) return <div className="st-load" aria-busy="true"><Spinner /></div>;
-  return <CreditsTabView d={d} onPricing={v.openPricing} />;
+  const portal = async () => {
+    setBusy(true); setPErr(null);
+    try { const r = await post('/api/payments/portal', {}); if (r.redirect_url) { window.location.assign(r.redirect_url); return; } }
+    catch (e) { setPErr(e.message); }
+    setBusy(false);
+  };
+  return <CreditsTabView d={d} onPricing={v.openPricing} onPortal={portal} portalBusy={busy} portalErr={pErr} />;
 }
 
 function ProfileTab({ v }) {

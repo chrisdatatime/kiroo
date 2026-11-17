@@ -24,7 +24,7 @@ O produto abre na **Central**, não no mundo. `src/shell/`: `Shell.jsx` (lateral
 WASD/E só valem na view `escritorio`. Estilo novo = classes `pv-*`; as `g-*` ficam no mundo e nas janelas antigas.
 Layout: barra lateral nova (`Sidebar.jsx`) em todas as telas e a área de trabalho num cartão (o trilho de ícones e o painel `bc.panel` da Fase 4b
 saíram na Fase 2 do novo layout; Atividade continua como Popover no sino da barra superior). Conta, Piloto,
-Créditos e Sobre vivem no modal `ui/Preferences.jsx` (`v.openPrefs(tab)`; `win` = prefs | account | pilot | credits | about); as janelas
+Créditos e Sobre vivem no modal `ui/Preferences.jsx` (`v.openPrefs(tab)`; `win` = prefs | account | pilot | credits | about; a antiga aba "Comprar créditos" saiu na Fase 6); as janelas
 antigas exportam só o conteúdo (`AccountContent`, `PilotContent`, `CreditsContent`, `AboutContent`).
 
 ## Escritório (Fase 2 do novo layout)
@@ -39,7 +39,7 @@ no celular a placa da sala também anda (sem diálogo). Perto de algo, balão "E
 `ui/FalWindow.jsx` (+ `falModal.css`): desktop = modal horizontal (prévia 4:5 à esquerda, nome, cenário e plataforma à direita, rodapé com o botão);
 celular = bottom sheet. Cenário (`home_light`, `studio`, `natural`, `dark_premium`) e plataforma (`shopee_video`, `tiktok_shop`, `mercado_livre`) vêm de
 `settings.fal_scenes`/`fal_platforms` (o servidor marca `locked` + `required_plan_label` em cenário de acesso antecipado: cartão com cadeado e
-"Disponível no plano Escala"); o preço único vem de `settings.fal_offer`. O front manda SÓ os ids `scene`/`platform` (nunca texto de prompt; o servidor
+"Disponível no plano Estúdio"); o preço único vem de `settings.fal_offer`. Acima do botão: "Este vídeo usa 20 créditos · saldo N" (`f.costLine`); sem saldo e com a compra ligada, "Comprar N créditos · R$ X" abre o Checkout da Stripe em um clique (`App.costModel`/`buyTopup`, regras em `shell/pricing.js`). O front manda SÓ os ids `scene`/`platform` (nunca texto de prompt; o servidor
 monta tudo em `src/studio/prompts/production.py`). Miniaturas/prévia: `public/assets/scenes/<id>.jpg` (+ `-thumb.jpg`); logos: `public/assets/platforms/<id>.png`
 (sumindo graciosamente se faltarem). Lógica pura em `ui/falFlow.js`, testada em `tests/falflow.test.mjs`.
 
@@ -50,6 +50,15 @@ Produções) para todas as telas, inclusive o Escritório (Fase 2: trilho e pain
 `falModel(null, true)`); o botão "Nova produção" continua abrindo o modal. Status mostrados (`statusOf`): Aguardando aprovação, Gerando, Pronto, Baixado
 (só se o servidor um dia mandar `downloaded`), Cancelado, Erro; o nome nunca é o id (nome → título da IA → "Produção de DD/MM, HH:mm"). Custo, saldo, bônus e
 "≈ N vídeos" vêm de `settings.fal_offer`, `wallet` e `account.welcome` (no DEMO `fal_offer.cc` é 0 e a frase some). Tempo: `EST_WORKFLOW_S` (falBelt.js).
+
+## Planos e créditos (Fase 6, Stripe)
+`shell/Pricing.jsx` (+ `pricing.css`, escopo `.pr`; lógica pura em `shell/pricing.js`, `tests/pricing.test.mjs`) é a view `planos`, com URL própria
+`/pricing` (`v.openPricing()`; sair da view volta a URL para "/"). Dados de `GET /api/payments/catalog` (planos, avulso, assinatura atual, `online`).
+Sem assinatura: "Assinar X" → `POST /api/payments/checkout {kind:'plan', plan}`; com assinatura: "Plano atual" e "Mudar para X" → `POST /api/payments/portal {plan}`
+(Portal do cliente da Stripe já na troca). Avulso: atalhos 100/200/500, "outra quantidade" (inteiro, limites do servidor) e "Você paga R$ X" →
+`{kind:'topup', credits}`; o navegador nunca manda preço. Volta do checkout: `?compra=kpay_...` (acompanha até pagar) ou `?cancelado=1`. Sem chave
+mensal/anual na v1 (`ANNUAL_TOGGLE`); textos e perguntas em `config/appConfig.js` (`PRICING_COPY`, `PRICING_FAQ`; `show:false` = [confirmar]).
+Configurações › Créditos: barras por origem (bônus, plano com validade, avulso) e "Gerenciar assinatura"/"Recibos" pelo Portal.
 
 ## Celular (< 768 px)
 `usePhone()` (`src/hooks/use-phone.js`, limite `PHONE_MQ` de `ui/mobile.js`) troca o layout no próprio componente; nada muda a partir de 768 px.
@@ -184,4 +193,4 @@ pequeno laranja sobre claro). Fontes Instrument Sans e Geist Mono auto-hospedada
 `POST /api/productions/{id}/music` (motor em `../src/studio/music.py`). A Lia guarda a escolha; só o `_edit` do Beto aplica a trilha.
 
 ## Próximos passos (ver `../docs/ROADMAP_SAAS.md`)
-Planos e Mercado Pago (sandbox), hospedagem; versão mobile do escritório.
+Plano anual (código pronto, chave escondida), hospedagem; versão mobile do escritório.

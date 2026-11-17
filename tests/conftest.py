@@ -24,8 +24,10 @@ def _rate_limit_off_by_default(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _payments_off_by_default(monkeypatch):
-    """Compra pelo Asaas desligada em todo teste, salvo nos que ligam de propósito (tests/test_payments_asaas.py)."""
-    for var in ("PAYMENTS_ENABLED", "ASAAS_ENV", "ASAAS_API_KEY", "ASAAS_WEBHOOK_TOKEN", "STUDIO_CREDIT_CATALOG_FILE"):
+    """Compra pela Stripe desligada em todo teste, salvo nos que ligam de propósito (tests/test_payments_stripe.py)."""
+    for var in ("PAYMENTS_ENABLED", "STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "STRIPE_PUBLISHABLE_KEY", "STRIPE_API_VERSION",
+                "STRIPE_PRICE_BASICO_M", "STRIPE_PRICE_PRO_M", "STRIPE_PRICE_ESTUDIO_M", "STRIPE_PRICE_AVULSO",
+                "TOPUP_MIN_CREDITS", "TOPUP_MAX_CREDITS", "STUDIO_CREDIT_CATALOG_FILE"):
         monkeypatch.delenv(var, raising=False)
 
 

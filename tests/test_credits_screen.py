@@ -1,5 +1,5 @@
 """Tela Créditos e extrato (saldo, reservado, consumo por produção/cena/operação), saldo insuficiente para ajuste extra
-(conta à vista, vídeo preservado, "Adicionar créditos" manual com ponto de integração do Mercado Pago) e a regra de
+(conta à vista, vídeo preservado, "Adicionar créditos" manual quando a compra pela Stripe está desligada) e a regra de
 que um vídeo já pago nunca deixa de ser entregue por falta de saldo."""
 
 from __future__ import annotations
@@ -114,7 +114,7 @@ def test_payload_helper_is_exact_and_never_negative():
     assert d["missing_cc"] == 2100
 
 
-# ------------------------------------------------------------------ adicionar créditos: manual hoje, Mercado Pago depois
+# ------------------------------------------------------------------ adicionar créditos: manual com a compra desligada
 def test_topup_is_manual_with_contact_from_env(monkeypatch):
     t = payments.topup_options()
     assert t["provider"] == "manual" and not t["online"] and t["contact"] is None and t["steps"]
@@ -136,12 +136,12 @@ def test_payments_off_by_default_keeps_manual_topup(monkeypatch):
 
 
 def test_webhook_credit_is_idempotent_by_ext_ref(settings):
-    """O ponto de integração do Mercado Pago: o mesmo pagamento repetido credita uma vez só."""
+    """Webhook repetido (Stripe): o mesmo pagamento credita uma vez só."""
     from .test_credits import ws_db
     db, wid = ws_db(settings)
     led = Ledger(db)
-    a = led.add(wid, 3000, kind="purchase", ext_ref="mp:pay_42")
-    b = led.add(wid, 3000, kind="purchase", ext_ref="mp:pay_42")
+    a = led.add(wid, 3000, kind="purchase", ext_ref="topup:kpay_42")
+    b = led.add(wid, 3000, kind="purchase", ext_ref="topup:kpay_42")
     assert a == b and led.balance(wid) == 3000
 
 

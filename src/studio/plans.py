@@ -1,15 +1,16 @@
-"""Plano da conta e as vantagens que ele dá (tela "Comprar créditos" v2).
+"""Plano da conta e as vantagens que ele dá (tela de Planos, Fase 6).
 
-Plano = o MAIOR pacote já comprado e PAGO pela conta (escala > pro > inicial > free). É calculado na hora a partir de
-`payments` (status 'paid'): quando a compra que deu o plano é estornada ou contestada, o status dela muda e o plano cai
-sozinho para o próximo pacote pago (ou free). Avulso e bônus de boas-vindas não dão plano.
+Plano = a ASSINATURA da Stripe que vale agora (`subscriptions`, status active/trialing/past_due): basico, pro ou estudio.
+Sem assinatura valendo: free. Cancelou: o plano continua até o fim do período pago (a Stripe só manda
+`customer.subscription.deleted` no fim); depois volta para free sozinho. Avulso e bônus de boas-vindas não dão plano.
 
 Vantagens (precisam existir de verdade, não só no texto):
-  * fila prioritária (pro, escala): com produções esperando vaga no motor fal.ai (STUDIO_FAL_MAX_INFLIGHT), saem antes;
+  * fila prioritária (pro, estudio): com produções esperando vaga no motor fal.ai (STUDIO_FAL_MAX_INFLIGHT), saem antes;
     ordem de chegada dentro do mesmo nível; o teto nunca é ultrapassado (`SlotQueue`, usado por fal_pipeline).
-  * suporte por WhatsApp (pro, escala): link wa.me de STUDIO_SUPPORT_WHATSAPP (sem a variável, o botão não aparece).
-  * novos estilos antes (escala): cenário com `early_access_plan` em `prompts.production.SCENES` só é liberado para quem tem o plano (hoje nenhum cenário
-    tem: todos liberados; o servidor recusa com 403 e a tela mostra o cadeado).
+  * suporte por WhatsApp (pro, estudio): link wa.me de STUDIO_SUPPORT_WHATSAPP (sem a variável, o botão não aparece).
+  * acesso antecipado a novidades (estudio): cenário com `early_access_plan` em `prompts.production.SCENES` só é
+    liberado para quem tem o plano (hoje nenhum cenário tem: todos liberados; o servidor recusa com 403 e a tela mostra
+    o cadeado).
 """
 
 from __future__ import annotations
@@ -21,40 +22,45 @@ import time
 
 from .db import Database
 
-TIERS = ("free", "inicial", "pro", "escala")
+TIERS = ("free", "basico", "pro", "estudio")
 RANK = {t: i for i, t in enumerate(TIERS)}
-LABELS = {"free": "Free", "inicial": "Inicial", "pro": "Pro", "escala": "Escala"}
-PRIORITY_TIERS = {"pro", "escala"}
-WHATSAPP_TIERS = {"pro", "escala"}
+LABELS = {"free": "Free", "basico": "Básico", "pro": "Pro", "estudio": "Estúdio"}
+PRIORITY_TIERS = {"pro", "estudio"}
+WHATSAPP_TIERS = {"pro", "estudio"}
+EARLY_ACCESS_TIER = "estudio"
+LIVE_STATUSES = ("active", "trialing", "past_due")   # past_due: a Stripe ainda tenta cobrar; o plano segue até cancelar
 
 
-def _paid_codes(db: Database, wid: str) -> list[str]:
+def subscription(db: Database, wid: str | None):
+    """Assinatura que vale agora (a mais recente), ou None."""
+    if not wid:
+        return None
     try:
-        rows = db.conn.execute("SELECT DISTINCT package_code FROM payments WHERE account_id=? AND status='paid'",
-                               (wid,)).fetchall()
-    except Exception:  # noqa: BLE001 — banco antes da migração 10 (sem a tabela): ninguém comprou
-        return []
-    return [r[0] for r in rows]
+        return db.conn.execute(
+            f"SELECT * FROM subscriptions WHERE workspace_id=? AND status IN ({','.join('?' * len(LIVE_STATUSES))})"
+            " ORDER BY updated_at DESC LIMIT 1", (wid, *LIVE_STATUSES)).fetchone()
+    except Exception:  # noqa: BLE001 — banco antes da migração 16: ninguém assina
+        return None
 
 
 def plan_of(db: Database, wid: str | None) -> str:
-    """Maior pacote pago da conta (free se nenhum)."""
-    if not wid:
-        return "free"
-    best = "free"
-    for code in _paid_codes(db, wid):
-        if code in RANK and RANK[code] > RANK[best]:
-            best = code
-    return best
+    """Plano da assinatura que vale agora (free se nenhuma)."""
+    sub = subscription(db, wid)
+    return sub["plan"] if sub is not None and sub["plan"] in RANK else "free"
 
 
 def has_paid_purchase(db: Database, wid: str | None) -> bool:
-    """Alguma compra paga (pacote OU avulso) ainda valendo. Esconde o card Free da tela de compra."""
-    return bool(wid) and bool(_paid_codes(db, wid))
+    """Alguma compra paga (assinatura ou avulso)."""
+    if not wid:
+        return False
+    try:
+        return db.conn.execute("SELECT 1 FROM payments WHERE account_id=? AND status='paid' LIMIT 1", (wid,)).fetchone() is not None
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def priority(plan: str) -> int:
-    """Nível na fila do motor fal.ai: 1 = prioritária (pro/escala), 0 = normal."""
+    """Nível na fila do motor fal.ai: 1 = prioritária (pro/estudio), 0 = normal."""
     return 1 if plan in PRIORITY_TIERS else 0
 
 
@@ -80,11 +86,15 @@ def support_email() -> str | None:
 
 
 def view(db: Database, wid: str | None) -> dict:
-    """O que a interface recebe em /api/me e no catálogo: plano, se já comprou e o canal de suporte."""
-    plan = plan_of(db, wid)
+    """O que a interface recebe em /api/me e no catálogo: plano, assinatura, se já comprou e o canal de suporte."""
+    sub = subscription(db, wid)
+    plan = sub["plan"] if sub is not None and sub["plan"] in RANK else "free"
     wa = whatsapp_url() if plan in WHATSAPP_TIERS else None
     return {"plan": plan, "plan_label": LABELS[plan], "has_purchase": has_paid_purchase(db, wid),
-            "priority_queue": plan in PRIORITY_TIERS, "early_access": plan == "escala",
+            "priority_queue": plan in PRIORITY_TIERS, "early_access": plan == EARLY_ACCESS_TIER,
+            "subscription": None if sub is None else {
+                "status": sub["status"], "interval": sub["interval"] or "month",
+                "cancel_at_period_end": bool(sub["cancel_at_period_end"]), "current_period_end": sub["current_period_end"]},
             "support": {"whatsapp": wa, "email": support_email()}}
 
 
@@ -93,7 +103,7 @@ class SlotQueue:
     """Quem entra quando há vaga no motor fal.ai.
 
     Cada produção que acha o teto cheio (ou gente na frente) se registra aqui e volta a perguntar a cada volta do laço
-    (`admit`). A ordem é (nível desc, chegada asc): pro/escala primeiro, ordem de chegada dentro do nível. Quem parou de
+    (`admit`). A ordem é (nível desc, chegada asc): pro/estudio primeiro, ordem de chegada dentro do nível. Quem parou de
     perguntar (pausou, cancelou, processo caiu) some depois de `ttl` segundos e não trava a fila.
 
     O teto: `admit` só diz sim se `inflight < cap` E a produção está entre as `cap - inflight` primeiras da fila. Quem

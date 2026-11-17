@@ -55,7 +55,7 @@ try {
   assert.deepEqual(m.appearanceOptions(true).map((o) => o.label), ['Automático', 'Claro', 'Escuro']);
   assert.deepEqual(m.creditItems().map((c) => c.label), ['Saldo e extrato', 'Planos e créditos', 'Recibos']);
   assert.equal(m.creditItems()[1].href, '/pricing');
-  assert.equal(m.creditItems()[2].soon, true, 'Recibos sem backend: "em breve"');
+  assert.equal(m.creditItems()[2].soon, false, 'Recibos pelo Portal do cliente da Stripe (Fase 6; antes "em breve")');
 
   // ---- navegação: 4 destinos; celular com o "+" no meio
   const prod = (status, extra = {}) => ({ id: 'prod_' + status, status, engine: 'fal', created_at: new Date().toISOString(), ...extra });
@@ -112,21 +112,27 @@ try {
 
   const d = { balance: '80', balance_cc: 8000, exempt: false,
     origins: [{ key: 'bonus', label: 'Bônus de boas-vindas', received_cc: 2000, left_cc: 0, received: '20', left: '0' },
-      { key: 'purchased', label: 'Créditos comprados', received_cc: 20000, left_cc: 8000, received: '200', left: '80' }],
+      { key: 'subscription', label: 'Créditos do plano', received_cc: 12000, left_cc: 0, received: '120', left: '0', expires_at: '2026-12-16T12:00:00+00:00' },
+      { key: 'topup', label: 'Créditos avulsos', received_cc: 20000, left_cc: 8000, received: '200', left: '80' }],   // Fase 6: origens do livro por lotes
+    plan: { plan: 'pro', subscription: { status: 'active' } }, billing: { online: true, has_customer: true },
     statement: [{ id: 'e1', at: '2026-11-15T12:00:00', title: 'Uso', subtitle: 'Skate', credits: '−20', status: 'done' },
       { id: 'e2', at: '2026-11-14T12:00:00', title: 'Falha técnica', credits: '0', status: 'not_charged', status_label: 'Não cobrado' }] };
   html = renderToStaticMarkup(React.createElement(CreditsTabView, { d, onPricing: noop }));
-  ['Seus créditos', 'Planos e créditos', 'Cada vídeo usa 20 créditos', '≈ 4 vídeos', 'Bônus de boas-vindas', '0 / 20', 'Créditos comprados', '80 / 200',
+  ['Seus créditos', 'Planos e créditos', 'Cada vídeo usa 20 créditos', '≈ 4 vídeos', 'Bônus de boas-vindas', '0 / 20', 'Créditos do plano', 'Valem até 16/12; não acumulam', 'Créditos avulsos', '80 / 200', 'Gerenciar assinatura',
     'os créditos voltam automaticamente', 'Recibos', 'Extrato', 'Baixar CSV', '/api/credits/statement.csv', '15/11', 'Uso · Skate', '−20', 'Não cobrado']
     .forEach((t) => assert.ok(html.includes(t), t));
   assert.ok(!html.includes('Asaas'), 'sem nome de provedor de pagamento fixo');
   html = renderToStaticMarkup(React.createElement(CreditsTabView, { d: { balance: '0', exempt: true, origins: [], statement: [] }, onPricing: noop }));
   assert.ok(html.includes('Isento') && !html.includes('Planos e créditos') && html.includes('Sem lançamentos'));
 
-  // ---- bug do "Comprar créditos" no celular: o CSS da tela de compra vira celular no mesmo ponto que o JS (usePhone)
-  const css = fs.readFileSync(path.join(front, 'src/ui/buyv2.css'), 'utf8');
-  assert.ok(css.includes(`@media (max-width: ${PHONE_MAX}px)`), 'buyv2.css usa PHONE_MAX');
-  assert.ok(!/max-width:\s*640px/.test(css), 'sem o limite antigo de 640 px (a barra Comprar sumia entre 641 e 767 px)');
+  // sem compra pela Stripe: sem "Gerenciar assinatura"; Recibos desligado
+  html = renderToStaticMarkup(React.createElement(CreditsTabView, { d: { ...d, billing: { online: true, has_customer: false } }, onPricing: noop }));
+  assert.ok(!html.includes('Gerenciar assinatura') && /<button type="button" class="st-btn st-btn-sm" disabled="">Recibos/.test(html));
+
+  // ---- celular: o CSS da tela de Planos (antes "Comprar créditos", buyv2.css) vira celular no mesmo ponto que o JS (usePhone)
+  const css = fs.readFileSync(path.join(front, 'src/shell/pricing.css'), 'utf8');
+  assert.ok(css.includes(`@media (max-width: ${PHONE_MAX}px)`), 'pricing.css usa PHONE_MAX');
+  assert.ok(!/max-width:\s*640px/.test(css), 'sem o limite antigo de 640 px');
 
   console.log('account-menu.test ok');
 } finally { await vite.close(); }
