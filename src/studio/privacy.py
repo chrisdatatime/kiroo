@@ -7,8 +7,10 @@ guardado) e a lista de arquivos de mídia (baixáveis por /media enquanto a cont
 Apagar: remove usuário, sessões, códigos, workspaces de que é dono, produções, cenas, tentativas, revisões, eventos,
 treinamento, trilhas, conversas e os arquivos no disco (produções, uploads referenciados, trilhas, treinamento e
 referências do workspace). O livro de créditos fica, desvinculado da pessoa (o workspace some e as notas são
-substituídas), por possível obrigação fiscal/contábil — PARA REVISÃO JURÍDICA. Cópias de backup (Litestream/R2)
-expiram pela retenção do backup.
+substituídas), por possível obrigação fiscal/contábil — PARA REVISÃO JURÍDICA; os pagamentos ficam sem usuário, IP
+e navegador. O registro de acesso (IP, data) fica 6 meses e some pela rotina de retenção. A exclusão grava uma lápide
+(compliance.tombstone) para ser reaplicada depois de qualquer restauração de backup. Cópias de backup expiram em até
+30 dias (docs/BACKUP.md).
 """
 
 from __future__ import annotations
@@ -18,6 +20,7 @@ import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .compliance import tombstone
 from .db import Database
 
 USER_FIELDS = ("id", "email", "name", "created_at", "email_verified_at", "is_platform_admin", "onboarding_done_at",
@@ -89,6 +92,8 @@ def export_account(db: Database, data_dir: Path, uid: str) -> dict:
                                "FROM music_tracks WHERE workspace_id=?", (wid,)),
         })
     out["chat"] = _rows(db, "SELECT agent, source, at, input_tokens, output_tokens, cost_usd FROM chat_log WHERE user_id=? ORDER BY at", (uid,))
+    out["terms_acceptances"] = _rows(db, "SELECT version, accepted_at, ip, user_agent, via FROM terms_acceptances WHERE user_id=? ORDER BY id", (uid,))
+    out["access_log"] = _rows(db, "SELECT kind, ip, user_agent, at FROM access_log WHERE user_id=? ORDER BY id", (uid,))
     return out
 
 
@@ -110,7 +115,7 @@ def _rm(base: Path, p: Path) -> None:
         p.unlink(missing_ok=True)
 
 
-def delete_account(db: Database, data_dir: Path, uid: str, *, allow_admin: bool = False) -> dict:
+def delete_account(db: Database, data_dir: Path, uid: str, *, allow_admin: bool = False, record: bool = True) -> dict:
     """Apaga a conta. Recusa administrador da plataforma (só a CLI, com allow_admin) e workspace com outros membros."""
     u = db.conn.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
     if not u:
@@ -157,11 +162,17 @@ def delete_account(db: Database, data_dir: Path, uid: str, *, allow_admin: bool 
         for wid in wids:
             c.execute("DELETE FROM memberships WHERE workspace_id=?", (wid,))
             c.execute("DELETE FROM workspaces WHERE id=?", (wid,))
+        # pagamentos: ficam (obrigação fiscal), sem a pessoa, o IP e o navegador
+        c.execute("UPDATE payments SET user_id=NULL, ip=NULL, user_agent=NULL WHERE user_id=?", (uid,))
         c.execute("DELETE FROM users WHERE id=?", (uid,))
+        c.execute("DELETE FROM terms_acceptances WHERE user_id=?", (uid,))   # o trigger só deixa depois de a conta sumir
+        # `access_log` NÃO é apagado aqui: registro de acesso fica 6 meses e some pela rotina de retenção (Marco Civil)
         c.execute("COMMIT")
     except BaseException:
         c.execute("ROLLBACK")
         raise
+    if record:   # lápide (depois do COMMIT): uma restauração de backup não pode ressuscitar a conta
+        tombstone(db, data_dir, "user", uid)
     for f in files:   # depois do COMMIT: se o disco falhar, a conta já não existe e o arquivo fica órfão (sem dono)
         _rm(data_dir, f)
     return {"productions": len(pids), "workspaces": len(wids)}

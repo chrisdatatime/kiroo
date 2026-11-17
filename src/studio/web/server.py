@@ -40,7 +40,8 @@ from urllib.parse import parse_qs, parse_qsl, unquote, urlencode, urlparse
 from .. import agent_config, creative_options, fal_contract, mailer, paid_gate, payments, plans, site_info, welcome
 from ..prompts import production as prompts
 from ..agent_chat import AgentChat
-from ..accounts import (LOGIN_WINDOW_MIN, RESET_MINUTES, TERMS_VERSION, VERIFY_MINUTES, Accounts, AuthError, GoogleAuthError, mask_tax_doc,
+from .. import compliance
+from ..accounts import (LOGIN_WINDOW_MIN, RESET_MINUTES, TERMS_DATE, TERMS_VERSION, VERIFY_MINUTES, Accounts, AuthError, GoogleAuthError, mask_tax_doc,
                         verify_password)
 from ..config import load_settings
 from ..credits import InsufficientCredits as InsufficientCreditsError, Ledger
@@ -68,6 +69,21 @@ STATIC = Path(__file__).parent / "static"
 PID_RE = re.compile(r"^prod_[0-9a-f]{10}$")
 MEDIA_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".mp4", ".txt", ".md", ".json"}
 LEGAL_PAGES = {"/termos": "termos.html", "/privacidade": "privacidade.html"}
+# POSTs que seguem abertos mesmo sem aceite/estúdio suspenso: direitos do titular e preferências da própria conta
+ACCOUNT_OPEN_POSTS = {"/api/account/delete", "/api/account/name", "/api/account/password", "/api/account/tax-doc",
+                      "/api/account/terms/accept", "/api/onboarding", "/api/workspace/switch"}
+_MESES = ("janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro")
+
+
+def terms_date_pt(iso: str = TERMS_DATE) -> str:
+    y, m, d = (int(x) for x in iso.split("-"))
+    return f"{d} de {_MESES[m - 1]} de {y}"
+
+
+def render_legal(name: str) -> bytes:
+    """Página legal com a versão e a data vindas de accounts.TERMS_VERSION/TERMS_DATE (única fonte; nada digitado no HTML)."""
+    html = (STATIC / name).read_text(encoding="utf-8")
+    return html.replace("{{TERMS_VERSION}}", TERMS_VERSION).replace("{{TERMS_DATE}}", terms_date_pt()).encode("utf-8")
 # CSS, JS e logo das páginas legais (lista fechada; o logo fica num único ponto: static/legal/logo*.svg)
 LEGAL_ASSETS = {"/legal/legal.css": "text/css; charset=utf-8", "/legal/legal.js": "text/javascript; charset=utf-8",
                 "/legal/logo.svg": "image/svg+xml", "/legal/logo-claro.svg": "image/svg+xml"}
@@ -583,7 +599,8 @@ class App:
             try:
                 uid, _created = acc.google_user(str(info["sub"]), str(info["email"]), str(info.get("name") or ""),
                                                info.get("email_verified") is True, signup=self.signup,
-                                               invite=flow["invite"], terms_version=flow["terms"])
+                                               invite=flow["invite"], terms_version=flow["terms"],
+                                               ip=self._client_ip(headers), user_agent=headers.get("User-Agent") or "")
             except GoogleAuthError as exc:
                 if exc.code == "convite_invalido":
                     acc.record_fail(key)
@@ -592,6 +609,7 @@ class App:
                 return back("google_failed")
             wid = acc.workspaces_of(uid)[0]["id"]
             token, _ = acc.create_session(uid, wid)
+            compliance.record_access(db, uid, "google", ip=self._client_ip(headers), user_agent=headers.get("User-Agent") or "")
             self._welcome(db, uid, wid, headers)   # e-mail confirmado pelo Google: decide o bônus (uma vez)
         finally:
             db.close()
@@ -751,7 +769,7 @@ class App:
                                    "landing_url": f"https://{self.landing_host}" if self.landing_host else "",
                                    "terms_version": TERMS_VERSION})
             if method == "GET" and path in LEGAL_PAGES:   # rascunhos públicos (PARA REVISÃO JURÍDICA)
-                return Response(200, "text/html; charset=utf-8", (STATIC / LEGAL_PAGES[path]).read_bytes(),
+                return Response(200, "text/html; charset=utf-8", render_legal(LEGAL_PAGES[path]),
                                 headers={"Cache-Control": "no-cache"}, compress=True)
             if method == "GET" and path in LEGAL_ASSETS:
                 return Response(200, LEGAL_ASSETS[path], (STATIC / path.lstrip("/")).read_bytes(),
@@ -864,7 +882,8 @@ class App:
                         return _json(403, {"error": "código de convite inválido, já usado ou expirado"})
                 try:
                     uid, wid = acc.create_user(p.get("email", ""), p.get("password", ""), p.get("name", ""), admin=False,
-                                               workspace_name=p.get("workspace") or None, terms_version=TERMS_VERSION)
+                                               workspace_name=p.get("workspace") or None, terms_version=TERMS_VERSION,
+                                               ip=ip, user_agent=headers.get("User-Agent") or "")
                 except Exception:
                     if invite_id:
                         acc.finish_invite(invite_id, None)   # cadastro falhou (e-mail repetido, senha curta): devolve o convite
@@ -872,6 +891,7 @@ class App:
                 if invite_id:
                     acc.finish_invite(invite_id, uid)
                 token, info = acc.create_session(uid, wid)
+                compliance.record_access(db, uid, "signup", ip=ip, user_agent=headers.get("User-Agent") or "")
                 # a conta já entra (modo REAL, sem teto individual, saldo 0); o código de confirmação vai para o
                 # e-mail e o bônus de boas-vindas só vem depois de confirmar
                 sent = self._send_verification(acc, uid, acc.user(uid)["email"])
@@ -880,6 +900,7 @@ class App:
                              self._set_cookie(token, 30 * 86400, secure=secure))
             if path == "/api/auth/login":
                 token, info = acc.login(p.get("email", ""), p.get("password", ""), ip)
+                compliance.record_access(db, info["user_id"], "login", ip=ip, user_agent=headers.get("User-Agent") or "")
                 return _json(200, {"ok": True}, self._set_cookie(token, 30 * 86400, secure=secure))
             if path == "/api/auth/logout":
                 acc.logout(_cookie(headers))
@@ -951,9 +972,12 @@ class App:
                                        "billing": {"online": payments.enabled() and not ws["credits_exempt"],
                                                    "has_customer": has_cus}})
                 avatar = Accounts(db).avatar_of(ctx["sess"]["user_id"])
+                accepted = compliance.accepted_version(db, ctx["sess"]["user_id"])
+                terms = {"version": TERMS_VERSION, "accepted": accepted,
+                         "needs_accept": compliance.needs_acceptance(db, ctx["sess"]["user_id"], TERMS_VERSION, admin=ctx["admin"])}
             finally:
                 db.close()
-            return _json(200, {"csrf": ctx["sess"]["csrf"], "admin": ctx["admin"],
+            return _json(200, {"csrf": ctx["sess"]["csrf"], "admin": ctx["admin"], "terms": terms,
                                "user": {"email": ctx["sess"]["email"], "name": ctx["sess"]["name"],
                                         "email_verified": bool(ctx["sess"]["email_verified_at"]),
                                         "has_password": bool(me and me["pw_hash"] != "!"),
@@ -1049,6 +1073,10 @@ class App:
         s, wid = ctx["s"], ctx["wid"]
         if self.stopping.is_set() and (path.startswith("/api/productions") or path == "/api/demo"):
             return _json(503, {"error": "o servidor está reiniciando; tente de novo em instantes"}, {"Retry-After": "30"})
+        if path == "/api/account/terms/accept":
+            return self._accept_terms(payload, ctx, headers or {})
+        if (gate := self._account_gate(path, ctx)) is not None:
+            return gate
         if path == "/api/config":
             if not ctx["admin"]:
                 return _json(403, {"error": "configuração técnica restrita ao administrador"})
@@ -1156,6 +1184,42 @@ class App:
                 return _json(400, {"error": str(exc)})
         finally:
             db.close()
+
+    def _accept_terms(self, payload: dict, ctx, headers: dict) -> Response:
+        """Novo aceite dos Termos e da Política na versão vigente (histórico imutável). Exige a versão exibida na tela."""
+        if payload.get("accept") is not True or str(payload.get("version") or "") != TERMS_VERSION:
+            return _json(400, {"error": "Para continuar, aceite os Termos de Uso e a Política de Privacidade desta versão."})
+        _, db, _acc = self._db()
+        try:
+            uid = ctx["sess"]["user_id"]
+            if compliance.accepted_version(db, uid) != TERMS_VERSION:
+                compliance.record_acceptance(db, uid, TERMS_VERSION, ip=self._client_ip(headers),
+                                             user_agent=headers.get("User-Agent") or "", via="reaccept")
+        finally:
+            db.close()
+        return _json(200, {"ok": True, "terms": {"version": TERMS_VERSION, "accepted": TERMS_VERSION, "needs_accept": False}})
+
+    def _account_gate(self, path: str, ctx) -> Response | None:
+        """Sem aceitar a versão vigente dos Termos, ou com o estúdio suspenso/encerrado, nenhuma ação que gera vídeo ou
+        compra passa. Ficam abertas as da própria conta (exportar, apagar, nome, senha) para o titular exercer seus direitos."""
+        if path in ACCOUNT_OPEN_POSTS:
+            return None
+        ws = ctx["ws"]
+        keys = ws.keys() if ws is not None else ()
+        if "closed_at" in keys and ws["closed_at"]:
+            return _json(403, {"error": "Este estúdio foi encerrado. Fale com o suporte.", "code": "account_closed"})
+        if "suspended_at" in keys and ws["suspended_at"]:
+            return _json(403, {"error": "Este estúdio está suspenso. Seu saldo está preservado; fale com o suporte.",
+                               "code": "account_suspended"})
+        _, db, _acc = self._db()
+        try:
+            need = compliance.needs_acceptance(db, ctx["sess"]["user_id"], TERMS_VERSION, admin=ctx["admin"])
+        finally:
+            db.close()
+        if need:
+            return _json(403, {"error": "Aceite os Termos de Uso e a Política de Privacidade atualizados para continuar.",
+                               "code": "terms_required", "terms_version": TERMS_VERSION})
+        return None
 
     def _delete_account(self, payload: dict, ctx) -> Response:
         """LGPD: apaga a própria conta. Exige a senha (ou, conta só do Google, o e-mail) e a palavra APAGAR."""
@@ -1875,6 +1939,19 @@ def _checkpoint_loop(app) -> None:
             log.warning("checkpoint do WAL falhou (%s)", type(exc).__name__)
 
 
+def _retention_loop(app) -> None:
+    """Retenção de mídia e do registro de acesso, a cada 6 h, SÓ com STUDIO_RETENTION_ENABLED=true (padrão: desligada)."""
+    if not compliance.retention_enabled():
+        return
+    while not app.stopping.wait(6 * 3600):
+        try:
+            s = app.settings()
+            rep = compliance.run_retention_job(s.db_path, s.data_dir, dry_run=False)
+            log.info("retenção: avisadas=%s apagadas=%s", rep["notified"], rep["purged"], extra={"event": "retention_run"})
+        except Exception as exc:  # noqa: BLE001 — manutenção nunca derruba o servidor
+            log.warning("retenção falhou (%s)", type(exc).__name__)
+
+
 def _finish_shutdown(app, ckpt: threading.Thread | None, abort, *, clock=time.monotonic) -> dict:
     """Fim da drenagem, com o HTTP já fechado: espera as requisições em andamento e a thread do checkpoint periódico
     (juntas, até HTTP_CLOSE_S) e abre a janela de assentamento (studio.shutdown.settle). Devolve o resultado do settle."""
@@ -1931,6 +2008,7 @@ def serve(port: int | None = None, open_browser: bool = True, public_host: str |
         getattr(log, tw[0])(tw[1], extra={"event": "turnstile_config"})
     ckpt = threading.Thread(target=_checkpoint_loop, args=(app,), name="wal-checkpoint", daemon=True)
     ckpt.start()
+    threading.Thread(target=_retention_loop, args=(app,), name="retention", daemon=True).start()
     log.info("desligamento: grace %gs + settle %gs; a plataforma precisa dar pelo menos %gs (STUDIO_STOP_GRACE_S=%g)",
              cfg.shutdown_grace_s, cfg.shutdown_settle_s, minimum_platform_s(cfg.shutdown_grace_s, cfg.shutdown_settle_s),
              cfg.stop_grace_s, extra={"event": "shutdown_budget"})

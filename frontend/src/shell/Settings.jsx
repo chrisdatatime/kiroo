@@ -84,7 +84,7 @@ export function ProfileView({ a, busy, msg, onSave, onVerify, onCode, codeSent, 
           <label className="st-field"><span className="st-label">CPF ou CNPJ</span>
             <span className="st-input"><input value={form.tax} onChange={(e) => setForm({ ...form, tax: e.target.value })} inputMode="numeric" autoComplete="off"
               placeholder={u.tax_doc || 'Somente números'} aria-describedby="st-tax-help" /></span>
-            <span className="st-tiny" id="st-tax-help">Usado só para a cobrança. Apagado junto com a conta.{u.tax_doc ? ' Deixe vazio para manter o atual.' : ''}</span>
+            <span className="st-tiny" id="st-tax-help">Opcional. Usado só para a nota fiscal das suas compras. Sai do Kiroo junto com a conta; notas já emitidas seguem com a contabilidade pelo prazo legal.{u.tax_doc ? ' Deixe vazio para manter o atual.' : ''}</span>
           </label>
           <div><button type="submit" className="st-btn st-btn-dark" disabled={busy || !dirty}>Salvar alterações</button></div>
         </form>

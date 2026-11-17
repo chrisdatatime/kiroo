@@ -17,6 +17,8 @@ import { PILOT } from './ui/Pilot.jsx';
 import { accessScreen } from './ui/accessScreen.js';
 import { me, auth, authConfig, setLoggedOutHandler, AuthRequired, getJSON, post, readFile, deviceId } from './engine/api.js';
 import AuthScreen from './ui/Auth.jsx';
+import TermsGate from './ui/TermsGate.jsx';
+import { needsTerms } from './ui/termsGate.js';
 const Landing = lazyChunk(() => import('./landing/Landing.jsx'));
 // Conta, Piloto, Créditos e Sobre vivem no modal de Preferências (carregado ao abrir)
 const Preferences = lazyChunk(() => import('./ui/Preferences.jsx'));
@@ -1350,6 +1352,9 @@ export default class App extends React.Component {
       }
       return <AuthScreen key={screen.entry} signup={this.state.signup} resetToken={this.state.resetToken} initialMode={screen.entry} landingUrl={screen.landingUrl} onBack={() => this.setState({ entry: null })}
         onDone={() => this.setState({ resetToken: null, entry: null }, () => this.checkSession())} />;
+    }
+    if (needsTerms(this.state.account)) {   // Termos/Política mudaram de versão: aceite obrigatório antes de usar o app
+      return <TermsGate account={this.state.account} onLogout={() => this.logout()} onAccepted={async () => { const account = await me(); this.setState({ account }); }} />;
     }
     const v = this.viewModel();
     return (

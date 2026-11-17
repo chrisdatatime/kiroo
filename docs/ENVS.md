@@ -43,6 +43,8 @@ Como ler as colunas:
 | `STUDIO_LEGAL_NAME` | não | não | execução | `Kiroo Tecnologia Ltda` | Razão social no rodapé do Sobre: "© 2026 Kiroo · {razão} · CNPJ {cnpj}". Sem as duas variáveis, o rodapé mostra só "© 2026 Kiroo". |
 | `STUDIO_LEGAL_CNPJ` | não | não | execução | `11.222.333/0001-81` | CNPJ no rodapé do Sobre (texto, não é validado). |
 | `STUDIO_WELCOME_CREDITS` | não | não | execução | `20` *(padrão)* | Bônus de boas-vindas (1 vídeo = 20), concedido uma vez por pessoa depois de confirmar o e-mail. `0` desliga. Lançamento `welcome_bonus`: não é compra, não dá plano, não é estornado. |
+| `STUDIO_RETENTION_ENABLED` | não | não | execução | `false` *(padrão)* | Liga a retenção de mídia (60 dias, aviso por e-mail 7 dias antes) e a limpeza do registro de acesso (6 meses). Desligada, só `python -m studio retention --dry-run` funciona. **Recomendado em produção: `true`, depois de um dry-run conferido** (os textos legais prometem os 60 dias). |
+| `BACKUP_ARCHIVE_DAYS` | não | não | execução | `30` *(padrão)* | Dias que `scripts/backup_media.sh` guarda versões removidas em `archive/`. Máximo prometido nos textos legais: 30. |
 | `STUDIO_WELCOME_DAILY_CAP` | não | não | execução | `100` *(padrão)* | Teto global de bônus concedidos por dia (horário de Brasília). Ao atingir, as próximas confirmações ficam sem bônus, com aviso `welcome_denied`/`daily_cap` no log e em Administrador → Métricas. |
 | `STUDIO_PAYMENTS_PROVIDER` | não | não | execução | *(não definir)* | **Obsoleta**. A compra pelo site é a Stripe, ligada por `PAYMENTS_ENABLED` (abaixo). |
 | `STUDIO_KILL_SWITCH` | não | não | execução | *(não definir)* | `1` bloqueia qualquer chamada paga em qualquer ambiente. Trava de emergência; com `ALLOW_PAID_CALLS=0` já é redundante. |

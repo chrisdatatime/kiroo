@@ -17,6 +17,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 
 from . import avatars
+from . import compliance
 from .db import Database, new_id, now
 
 SESSION_DAYS = 30
@@ -28,7 +29,10 @@ NO_PASSWORD = "!"  # conta criada pelo Google: login por senha só depois de def
 INVITE_DAYS = 7
 INVITE_MAX_DAYS = 30
 INVITE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"   # sem 0/O/1/I: dá para ditar por telefone
-TERMS_VERSION = "2026-11-rascunho"   # muda quando /termos ou /privacidade mudarem (rascunho PARA REVISÃO JURÍDICA)
+# ÚNICA fonte da versão dos Termos e da Política (o servidor injeta nas duas páginas). Muda quando /termos ou /privacidade
+# mudarem de forma relevante: quem já tem conta vê a tela de novo aceite. Candidata a versão final, PENDENTE de revisão jurídica.
+TERMS_VERSION = "2026-11-rc1"
+TERMS_DATE = "2026-11-16"
 LOGIN_WINDOW_MIN = 15
 LOGIN_MAX_FAILS = 8
 EMAIL_RE = re.compile(r"^[^@\s]{1,64}@[^@\s]{1,190}\.[a-z]{2,24}$", re.I)
@@ -92,7 +96,8 @@ class Accounts:
     def create_user(self, email: str, password: str | None, name: str = "", *, admin: bool = False,
                     workspace_name: str | None = None, verified: bool = False,
                     google_sub: str | None = None, no_password: bool = False,
-                    terms_version: str | None = None, real: bool | None = None) -> tuple[str, str]:
+                    terms_version: str | None = None, real: bool | None = None,
+                    ip: str = "", user_agent: str = "", via: str = "signup") -> tuple[str, str]:
         """`real` (padrão: toda conta que não é administradora) cria o estúdio em modo REAL, liberado e sem teto
         individual. Saldo inicial 0: o bônus de boas-vindas só vem depois de confirmar o e-mail."""
         email = (email or "").strip().lower()
@@ -109,7 +114,7 @@ class Accounts:
                              (uid, email, name, hash_password(password) if password else NO_PASSWORD, int(admin), now(),
                               now() if verified else None, google_sub, avatars.random_kiroo()))
         if terms_version:   # consentimento dado no cadastro (Termos de Uso + Política de Privacidade)
-            self.db.conn.execute("UPDATE users SET terms_accepted_at=?, terms_version=? WHERE id=?", (now(), terms_version, uid))
+            compliance.record_acceptance(self.db, uid, terms_version, ip=ip, user_agent=user_agent, via=via)
         self.db.conn.execute("INSERT INTO workspaces(id, name, owner_id, created_at) VALUES (?,?,?,?)",
                              (wid, (workspace_name or f"Estúdio de {name}")[:80], uid, now()))
         if (not admin) if real is None else real:
@@ -303,7 +308,8 @@ class Accounts:
 
     # ----------------------------------------------------------- Google
     def google_user(self, sub: str, email: str, name: str, email_verified: bool, *, signup: str,
-                    invite: str | None = None, terms_version: str | None = None) -> tuple[str, bool]:
+                    invite: str | None = None, terms_version: str | None = None,
+                    ip: str = "", user_agent: str = "") -> tuple[str, bool]:
         """Conta ligada ao Google. Devolve (user_id, criada_agora). Erros têm `.code` (vai na URL de volta).
 
         - Só aceita e-mail que o Google confirmou (`email_verified is True`), inclusive para quem já está ligado.
@@ -339,7 +345,8 @@ class Accounts:
             if not invite_id:
                 raise GoogleAuthError("convite_invalido", "código de convite inválido, já usado, expirado ou de outro e-mail")
         try:
-            uid, _ = self.create_user(email, None, name, verified=True, google_sub=sub, terms_version=terms_version)
+            uid, _ = self.create_user(email, None, name, verified=True, google_sub=sub, terms_version=terms_version,
+                                      ip=ip, user_agent=user_agent, via="google")
         except Exception:
             if invite_id:
                 self.finish_invite(invite_id, None)

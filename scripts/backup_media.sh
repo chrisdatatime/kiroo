@@ -10,8 +10,9 @@
 #   <bucket>/<ambiente>/media/manifests/<AAAA-MM-DDTHHMMSSZ>.json   tamanhos/contagens desta execução
 #
 # Nunca apaga nada no destino sem guardar a versão: usa `rclone sync --backup-dir`, que MOVE o que seria
-# sobrescrito/apagado para archive/<data>. A retirada definitiva de versões antigas é uma decisão separada
-# (regra de ciclo de vida do bucket; ver docs/BACKUP.md), nunca deste script.
+# sobrescrito/apagado para archive/<data>. Versões com mais de BACKUP_ARCHIVE_DAYS (padrão 30) saem de archive/ ao fim
+# de uma execução SEM falha: é o que cumpre "backups com rotação máxima de 30 dias" (mídia apagada pela retenção de 60
+# dias ou pela exclusão de conta some do backup em até 30 dias). Em --dry-run nada é apagado. Ver docs/BACKUP.md.
 #
 # Credenciais (SÓ por variáveis de ambiente; nada é lido de arquivo nem impresso):
 #   BACKUP_R2_ENDPOINT  BACKUP_R2_ACCESS_KEY_ID  BACKUP_R2_SECRET_ACCESS_KEY   (BACKUP_BUCKET, padrão kiroo-backups)
@@ -63,6 +64,8 @@ fi
 
 # Pastas com dado do usuário (persistente e não regenerável). sound_cache, sim_ops, demo_inputs e logs ficam de fora.
 DIRS="productions uploads workspaces music training"
+ARCHIVE_DAYS="${BACKUP_ARCHIVE_DAYS:-30}"
+case "$ARCHIVE_DAYS" in ''|*[!0-9]*) die "BACKUP_ARCHIVE_DAYS deve ser um número de dias" 2 ;; esac
 # Sem flags extras para o R2: o rclone desta imagem (1.60.1, aws-sdk-go v1) não manda checksum em trailer nem
 # corpo "aws-chunked"; os PUTs têm Content-Length e Content-MD5 (verificado com S3 falso; ver docs/BACKUP.md).
 flags=(--fast-list --transfers 4 --checkers 8 --retries 3 --low-level-retries 5 --stats-one-line -v --exclude ".readyz-*" --exclude "*.tmp")
@@ -95,6 +98,16 @@ done
 if [ -f "$DATA_DIR/agents.json" ]; then       # configuração da interface (pequena)
   "$RC" copyto "$DATA_DIR/agents.json" "$ROOT/current/agents.json" --backup-dir "$ROOT/archive/$TS" $DRY \
     || { rc=$?; falhas="$falhas agents.json(rc=$rc)"; echo "backup_media: ERRO ao copiar agents.json (código $rc)" >&2; }
+fi
+
+if [ -f "$DATA_DIR/deletions.jsonl" ]; then   # lápides de exclusão (só tipo e id): a restauração as reaplica
+  "$RC" copyto "$DATA_DIR/deletions.jsonl" "$ROOT/current/deletions.jsonl" --backup-dir "$ROOT/archive/$TS" $DRY     || { rc=$?; falhas="$falhas deletions.jsonl(rc=$rc)"; echo "backup_media: ERRO ao copiar deletions.jsonl (código $rc)" >&2; }
+fi
+
+# Rotação do arquivo (versões removidas/substituídas): só depois de um backup completo, nunca em --dry-run.
+if [ -z "$DRY" ] && [ -z "$falhas" ]; then
+  "$RC" delete "$ROOT/archive" --min-age "${ARCHIVE_DAYS}d" --rmdirs --retries 3 --low-level-retries 5 2>"$WORK/prune.log"     || { rc=$?; [ "$rc" -eq 3 ] && rc=0   # 3 = pasta ainda não existe (primeira execução): nada a rotacionar
+         [ "$rc" -eq 0 ] || { falhas="$falhas rotacao-archive(rc=$rc)"; echo "backup_media: ERRO na rotação do archive (código $rc):" >&2; tail -n 5 "$WORK/prune.log" >&2; }; }
 fi
 
 manifesto="não gravado em --dry-run"

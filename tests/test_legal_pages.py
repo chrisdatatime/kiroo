@@ -7,21 +7,27 @@ from html.parser import HTMLParser
 
 import pytest
 
-from studio.accounts import TERMS_VERSION
+from studio.accounts import TERMS_DATE, TERMS_VERSION
 from studio.config import load_settings
-from studio.web.server import LEGAL_ASSETS, STATIC, App
+from studio.web.server import LEGAL_ASSETS, LEGAL_PAGES, STATIC, App, terms_date_pt
 
 BASE = {"Host": "127.0.0.1:8765"}
-SECTIONS = {"/termos": [f"s{i}" for i in range(1, 12)], "/privacidade": [f"p{i}" for i in range(1, 11)]}
-# Placeholders do conteúdo-base, na ordem em que aparecem (renderizados como <mark class="ph">, com os colchetes).
+SECTIONS = {"/termos": [f"s{i}" for i in range(1, 14)], "/privacidade": [f"p{i}" for i in range(1, 13)]}
+ADV = "REVISAR COM O ADVOGADO"
+PEND = "PENDENTE DE VERIFICAÇÃO DOCUMENTAL DOS FORNECEDORES"
+# Marcadores que ainda dependem de revisão jurídica ou documental, na ordem em que aparecem (renderizados como
+# <mark class="ph">, com os colchetes). Cada um vira pendência no relatório; nenhum texto afirma aprovação de advogado.
 PLACEHOLDERS = {
-    "/termos": ["CIDADE/UF DA SEDE — confirmar", "PRAZO — definir com o advogado",
-                "REGRA PARA CRÉDITOS JÁ USADOS — definir com o advogado", "LICENÇA E TITULARIDADE — revisar com o advogado",
-                "CIDADE/UF", "REVISAR FORO COM O ADVOGADO — o consumidor também pode acionar o foro do próprio domicílio"],
-    "/privacidade": ["CIDADE/UF DA SEDE — confirmar", "+ PRAZO após a exclusão", "PRAZO — definir", "PRAZO — definir",
-                     "PRAZO — definir", "BASE LEGAL DA TRANSFERÊNCIA INTERNACIONAL — revisar com o advogado",
-                     "PRAZO DE RESPOSTA — proposta: 15 dias", "PRAZOS E REGRAS DE BACKUP — definir com o advogado",
-                     "CONFIRMAR A LISTA DE COOKIES E ARMAZENAMENTO LOCAL"],
+    "/termos": ["CONFIRMAR COM A CONTABILIDADE",
+                f"{ADV} — regra comercial proposta: reembolso integral independentemente do consumo dos créditos; ainda sem revisão jurídica",
+                f"{ADV} — licença, titularidade e limites do conteúdo gerado por IA",
+                f"{ADV} — regras comerciais propostas de suspensão e encerramento (inclusive o ciclo de assinatura já pago e o saldo quando você mesmo encerra a conta); ainda sem revisão jurídica",
+                f"{ADV} — foro da sede e foro do consumidor"],
+    "/privacidade": [f"{ADV} — confirmar os prazos legais de guarda fiscal e contábil",
+                     f"{ADV} — prazo e base legal do registro antifraude",
+                     f"{PEND} — confirmar o país e a região de processamento de cada fornecedor e a política de uso de dados dos contratos",
+                     PEND, f"{ADV} — base legal da transferência internacional",
+                     f"{ADV} — prazos legais de guarda e regras de backup"],
 }
 PAGES = list(SECTIONS)
 
@@ -132,8 +138,30 @@ def test_placeholders_are_marked(app, path):
 
 @pytest.mark.parametrize("path", PAGES)
 def test_version_matches_terms_version(app, path):
-    _, d = parse(app, path)
+    html, d = parse(app, path)
     assert d.versions and set(d.versions) == {TERMS_VERSION}
+    assert "{{" not in html
+    assert terms_date_pt() in html
+
+
+@pytest.mark.parametrize("path", PAGES)
+def test_static_files_do_not_type_the_version(path):
+    """A versão e a data vêm só de accounts.TERMS_VERSION/TERMS_DATE: o HTML guarda apenas o marcador (só o histórico
+    de versões ANTERIORES pode citar um valor fixo)."""
+    raw = (STATIC / LEGAL_PAGES[path]).read_text(encoding="utf-8")
+    assert raw.count("{{TERMS_VERSION}}") >= 2 and "{{TERMS_DATE}}" in raw
+    assert TERMS_VERSION not in raw and TERMS_DATE not in raw
+    assert len(raw.splitlines()) > 150            # legível: seções em várias linhas, não numa linha só
+    assert max(len(ln) for ln in raw.splitlines()) < 2500
+
+
+def test_legal_cookie_list_matches_what_the_app_sets():
+    """A tabela de cookies da Política cita o que o código realmente grava (auditoria)."""
+    html = (STATIC / "privacidade.html").read_text(encoding="utf-8")
+    from studio.web.server import COOKIE, OAUTH_COOKIE
+    for name in (COOKIE, OAUTH_COOKIE, "kiroo_dev"):
+        assert name in html, name
+    assert "sidebar_state" not in html          # componente não usado: não listar o que não existe
 
 
 def test_legal_assets_served_and_small(app):
@@ -145,3 +173,13 @@ def test_legal_assets_served_and_small(app):
     css = (STATIC / "legal/legal.css").read_text(encoding="utf-8")
     assert "@import" not in css and "url(" not in css               # sem fonte/imagem externa
     assert app.handle("GET", "/legal/../accounts.py", BASE, b"").status != 200
+
+
+@pytest.mark.parametrize("path", PAGES)
+def test_texts_never_claim_legal_approval_or_vendor_compliance(app, path):
+    html, _ = parse(app, path)
+    text = re.sub(r"<[^>]+>", " ", html)
+    assert not re.search(r"(aprovad|revisad|validad)[oa]s? (pelo|por) (advogad|jur[ií]dic)", text, re.I)
+    for m in re.finditer(r"em conformidade", text):
+        assert "não afirmamos" in text[max(0, m.start() - 120):m.start()], text[max(0, m.start() - 120):m.end()]
+    assert "Em revisão jurídica" in html and 'name="robots" content="noindex"' in html

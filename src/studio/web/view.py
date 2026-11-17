@@ -10,7 +10,7 @@ import json
 from datetime import datetime, timezone
 from urllib.parse import quote
 
-from .. import fal_contract
+from .. import compliance, fal_contract
 from ..prompts import production as prompts
 from ..agent_config import agents_with_overrides, field_options
 from ..config import Settings
@@ -230,7 +230,10 @@ def snapshot(settings: Settings, db: Database, pid: str | None, *, since: int = 
                     "name": json.loads(r["product_json"]).get("name", ""), "created_at": r["created_at"],
                     "engine": r["engine"] if "engine" in r.keys() else "gemini",
                     "scene": r["scene"] if "scene" in r.keys() else None,
-                    "platform": r["platform"] if "platform" in r.keys() else None}
+                    "platform": r["platform"] if "platform" in r.keys() else None,
+                    # retenção de mídia (60 dias): data prevista de expiração, ou apagada (compliance.media_expires_at)
+                    "media_expires_at": compliance.media_expires_at(r), "media_purged": bool(r["media_purged_at"]),
+                    "media_retention_days": compliance.RETENTION_DAYS}
                    for r in db.productions(workspace_id)]
     if pid is None and productions:
         pid = productions[0]["id"]
@@ -336,6 +339,7 @@ def snapshot(settings: Settings, db: Database, pid: str | None, *, since: int = 
     facts = json.loads(facts_raw)["facts"] if facts_raw else None
     anchor = json.loads(p["anchor_json"]) if "anchor_json" in p.keys() and p["anchor_json"] else None
     data["production"] = {
+        "media_expires_at": compliance.media_expires_at(p), "media_purged": bool(p["media_purged_at"]),
         "go_ahead": go_ahead,
         "autonomy": p["autonomy"] if "autonomy" in p.keys() else "classico",
         "edit": {"style": p["edit_style"] if "edit_style" in p.keys() else "dinamico",

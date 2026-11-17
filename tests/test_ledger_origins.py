@@ -158,12 +158,12 @@ def test_migration_16_turns_the_current_balance_into_a_topup_lot_without_expiry(
     db.conn.execute(ins, ("e3", "ws_b", "reversal", -500, "x3", "2026-11-02"))   # saldo negativo: sem lote
     db.conn.execute("DELETE FROM credit_lots")
     db.conn.execute("PRAGMA user_version = 15")
-    assert migrate(db.conn) == [16]
+    assert migrate(db.conn) == [16, 17]
     lots = db.conn.execute("SELECT workspace_id, origin, amount_cc, remaining_cc, expires_at, source FROM credit_lots").fetchall()
     assert [tuple(r) for r in lots] == [("ws_a", "topup", 48000, 48000, None, "migration:16")]
     assert Ledger(db).balance("ws_a") == 48000
     db.conn.execute("PRAGMA user_version = 15")
-    assert migrate(db.conn) == [16] and db.conn.execute("SELECT COUNT(*) FROM credit_lots").fetchone()[0] == 1  # idempotente
+    assert migrate(db.conn) == [16, 17] and db.conn.execute("SELECT COUNT(*) FROM credit_lots").fetchone()[0] == 1  # idempotente
     db.close()
 
 

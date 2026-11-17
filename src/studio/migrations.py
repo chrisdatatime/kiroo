@@ -691,6 +691,74 @@ def _m016_stripe_ledger_origins(conn: sqlite3.Connection) -> None:
                      " VALUES (?,?,?,?,?,NULL,?,?)", (f"lot_m16_{wid}"[:64], wid, "topup", int(bal), int(bal), "migration:16", stamp))
 
 
+def _m017_compliance(conn: sqlite3.Connection) -> None:
+    """Pacote jurídico/dados: histórico imutável de aceites, registro de acesso, retenção de mídia, lápides de
+    exclusão e encerramento de conta.
+
+    * `terms_acceptances`: uma linha por aceite (versão, data/hora, IP, user-agent). Triggers impedem UPDATE e DELETE
+      (a linha só some junto da conta, que a exclusão de conta registra na lápide antes). `users.terms_*` continuam.
+      Os aceites que já existiam em `users` entram como linhas sem IP.
+    * `access_log`: login/cadastro (usuário, IP, data, user-agent) por 6 meses (Marco Civil, art. 15); nunca CPF/CNPJ.
+    * `productions.retention_notice_at` / `media_purged_at`: aviso de 7 dias e data da limpeza de mídia (60 dias).
+    * `deletion_tombstones`: o que foi apagado de propósito (conta, mídia), para reaplicar depois de uma restauração.
+    * `account_closures`: encerramento definitivo por iniciativa do Kiroo (motivo e créditos avulsos pagos a reembolsar).
+    """
+    conn.execute("""CREATE TABLE IF NOT EXISTS terms_acceptances (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL,
+        version TEXT NOT NULL,
+        accepted_at TEXT NOT NULL,
+        ip TEXT,
+        user_agent TEXT,
+        via TEXT                              -- signup | google | reaccept | migration
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_terms_user ON terms_acceptances(user_id, id)")
+    conn.execute("""CREATE TRIGGER IF NOT EXISTS terms_acceptances_no_update BEFORE UPDATE ON terms_acceptances
+        BEGIN SELECT RAISE(ABORT, 'terms_acceptances é append-only'); END""")
+    conn.execute("""CREATE TRIGGER IF NOT EXISTS terms_acceptances_no_delete BEFORE DELETE ON terms_acceptances
+        WHEN EXISTS (SELECT 1 FROM users WHERE id = OLD.user_id)
+        BEGIN SELECT RAISE(ABORT, 'terms_acceptances é append-only'); END""")
+    conn.execute("""INSERT INTO terms_acceptances(user_id, version, accepted_at, via)
+        SELECT id, terms_version, terms_accepted_at, 'migration' FROM users
+        WHERE terms_version IS NOT NULL AND terms_accepted_at IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM terms_acceptances t WHERE t.user_id = users.id)""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS access_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL,
+        kind TEXT NOT NULL,                   -- signup | login | google
+        ip TEXT,
+        user_agent TEXT,
+        at TEXT NOT NULL
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_access_at ON access_log(at)")
+    conn.execute("CREATE INDEX IF NOT EXISTS ix_access_user ON access_log(user_id, at)")
+    for col in ("retention_notice_at", "media_purged_at"):
+        if col not in _columns(conn, "productions"):
+            conn.execute(f"ALTER TABLE productions ADD COLUMN {col} TEXT")
+    conn.execute("""CREATE TABLE IF NOT EXISTS deletion_tombstones (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        kind TEXT NOT NULL,                   -- user | workspace | production_media
+        ref TEXT NOT NULL,
+        deleted_at TEXT NOT NULL,
+        UNIQUE (kind, ref)
+    )""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS account_closures (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        workspace_id TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        closed_at TEXT NOT NULL,
+        closed_by TEXT,
+        topup_refundable_cc INTEGER NOT NULL DEFAULT 0,   -- avulso pago e não consumido (centésimos), a reembolsar à mão
+        promo_forfeited_cc INTEGER NOT NULL DEFAULT 0,    -- bônus: sem valor de restituição
+        refunded_at TEXT,
+        note TEXT
+    )""")
+    if "closed_at" not in _columns(conn, "workspaces"):
+        conn.execute("ALTER TABLE workspaces ADD COLUMN closed_at TEXT")
+    if "suspended_at" not in _columns(conn, "workspaces"):
+        conn.execute("ALTER TABLE workspaces ADD COLUMN suspended_at TEXT")
+
+
 MIGRATIONS: list[Migration] = [
     Migration(1, "schema completo", _m001_baseline),
     Migration(2, "convites de uso único e consentimento", _m002_invites_consent),
@@ -708,6 +776,7 @@ MIGRATIONS: list[Migration] = [
     Migration(14, "cadastro aberto: sem teto individual, eventos da plataforma e backfill do DEMO padrão", _m014_open_signup),
     Migration(15, "avatar da conta: kiroo sorteado na criação", _m015_avatar_kiroo),
     Migration(16, "Stripe e livro de créditos por origem: lotes, assinaturas, eventos; saldo atual vira avulso", _m016_stripe_ledger_origins),
+    Migration(17, "aceites imutáveis, registro de acesso, retenção de mídia, lápides de exclusão e encerramento de conta", _m017_compliance),
 ]
 LATEST = MIGRATIONS[-1].version
 assert [m.version for m in MIGRATIONS] == list(range(1, LATEST + 1)), "migrações devem ser 1..N em ordem"

@@ -267,6 +267,46 @@ def _fal(settings, args) -> int:
         orch.db.close()
 
 
+def _compliance_cmd(settings, args) -> int:
+    import json as _json
+
+    from . import compliance
+    from .accounts import Accounts
+    from .db import Database
+    if args.cmd == "retention":
+        try:
+            rep = compliance.run_retention_job(settings.db_path, settings.data_dir, dry_run=args.dry_run)
+        except RuntimeError as exc:
+            print(str(exc))
+            return 2
+        print(_json.dumps(rep, ensure_ascii=False, indent=2))
+        return 0
+    db = Database(settings.db_path)
+    try:
+        if args.cmd == "restore":
+            print(_json.dumps(compliance.reapply_deletions(db, settings.data_dir), ensure_ascii=False))
+            return 0
+        u = Accounts(db).user_by_email(args.email)
+        if u is None:
+            print("conta não encontrada")
+            return 1
+        wid = Accounts(db).workspaces_of(u["id"])[0]["id"]
+        if args.account_cmd in ("suspend", "resume"):
+            compliance.suspend_workspace(db, wid, on=args.account_cmd == "suspend")
+            print(f"estúdio {wid}: {'suspenso (saldo preservado)' if args.account_cmd == 'suspend' else 'reativado'}")
+            return 0
+        try:
+            out = compliance.close_workspace(db, wid, reason=args.reason, by="cli")
+        except ValueError as exc:
+            print(str(exc))
+            return 2
+        print(f"estúdio {wid} encerrado. Avulso pago e não consumido a reembolsar à mão na Stripe: {out['topup_refundable_cc'] / 100:.2f} créditos "
+              f"(bônus sem restituição: {out['promo_cc'] / 100:.2f}).")
+        return 0
+    finally:
+        db.close()
+
+
 def _payments(settings, args) -> int:
     """`studio payments list [--email]` e `studio payments reconcile` (compras pela Stripe)."""
     from . import catalog, payments
@@ -409,6 +449,18 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--email", default=None, help="list: só as compras deste e-mail")
     p.add_argument("--limit", type=int, default=50, help="list: quantas (mais recentes)")
 
+    p = sub.add_parser("retention", help="retenção de mídia (60 dias, aviso 7 dias antes) e registro de acesso (6 meses); "
+                                         "--dry-run só relata; sem ele exige STUDIO_RETENTION_ENABLED=true")
+    p.add_argument("--dry-run", action="store_true", help="relata o que enviaria e apagaria, sem enviar nem apagar nada")
+
+    p = sub.add_parser("restore", help="depois de restaurar um backup: reapply-deletions apaga de novo o que já tinha sido excluído")
+    p.add_argument("restore_cmd", choices=["reapply-deletions"])
+
+    p = sub.add_parser("account", help="suspender (preserva saldo), reativar ou encerrar (registra motivo e avulso a reembolsar)")
+    p.add_argument("account_cmd", choices=["suspend", "resume", "close"])
+    p.add_argument("email")
+    p.add_argument("--reason", default="", help="close: motivo do encerramento (obrigatório)")
+
     p = sub.add_parser("final")
     p.add_argument("pid")
     p.add_argument("decision", choices=["approve", "reject"])
@@ -459,6 +511,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "payments":
         return _payments(settings, args)
+
+    if args.cmd in ("retention", "restore", "account"):
+        return _compliance_cmd(settings, args)
 
     if args.cmd == "ui":
         from .web.server import serve

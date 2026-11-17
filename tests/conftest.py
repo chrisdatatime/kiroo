@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from studio.accounts import TERMS_VERSION
 from studio.config import PROJECT_ROOT, load_settings
 from studio.factory import build
 from studio.models import ProductInput
@@ -158,7 +159,7 @@ def login_app(app, host_dict: dict, email: str = "chris@example.com", password: 
         exists = acc.user_by_email(email) is not None
         first = db.conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
         if not exists:
-            acc.create_user(email, password, "", admin=False)
+            acc.create_user(email, password, "", admin=False, terms_version=TERMS_VERSION)   # aceitou a versão vigente
     finally:
         db.close()
     if not exists and first:

@@ -245,23 +245,32 @@ export function FalResult({ m, product }) {
   );
 }
 
+// "Seus arquivos ficam guardados até 15/01/2027." (60 dias; o servidor manda a data prevista em production.media_expires_at)
+export function mediaKeepNote(P) {
+  if (!P || P.media_purged || !P.media_expires_at) return '';
+  const d = new Date(P.media_expires_at);
+  if (Number.isNaN(d.getTime())) return '';
+  return `Guardamos seus arquivos até ${d.toLocaleDateString('pt-BR')}. Baixe o que quiser manter.`;
+}
+
 // Barra de ação fixa no fim da área de conteúdo. Aguardando aprovação: "Aprovar vídeo" é a ação principal (o servidor aceita
 // a aprovação só nesse estado) e "Baixar vídeo" fica ao lado. Aprovado: "Baixar vídeo" é a principal. "Pedir ajuste" não
 // existe no motor fal (não há ajuste de vídeo pronto), então não é oferecido.
 export function ActionBar({ m }) {
   const href = m.gallery.video.download;
   const waiting = m.P.status === 'awaiting_final_review';
+  const keep = mediaKeepNote(m.P);   // retenção de 60 dias: data prevista em que os arquivos são apagados
   const download = (primary) => <a className={'fd-btn ' + (primary ? 'fd-primary' : 'fd-secondary')} href={href} download><Icon name="download" />Baixar vídeo</a>;
   return (
     <div className="fd-bar" role="region" aria-label="Ações do vídeo">
       {waiting ? (<>
-        <p className="fd-bar-txt"><strong>Seu vídeo está pronto para aprovar.</strong><span>Aprove para concluir; você pode baixar antes.</span></p>
+        <p className="fd-bar-txt"><strong>Seu vídeo está pronto para aprovar.</strong><span>Aprove para concluir; você pode baixar antes.</span>{keep && <span>{keep}</span>}</p>
         <div className="fd-bar-btns">
           {download(false)}
           <button type="button" className="fd-btn fd-approve" onClick={m.approve} disabled={m.busy}><Check size={18} sw={2.6} />Aprovar vídeo</button>
         </div>
       </>) : (
-        <div className="fd-bar-btns">{download(true)}</div>
+        <>{keep && <p className="fd-bar-txt"><span>{keep}</span></p>}<div className="fd-bar-btns">{download(true)}</div></>
       )}
     </div>
   );

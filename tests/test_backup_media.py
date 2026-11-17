@@ -5,6 +5,32 @@ from .test_accounts import app  # noqa: F401
 
 
 # ------------------------------------------------------------------ backup_media.sh com rclone falso
+def only_archive_rotation(calls):
+    """O único `delete` permitido é a rotação de versões ANTIGAS do archive/ (nunca de current/): 30 dias por padrão."""
+    dels = [c for c in calls if c.startswith("delete ")]
+    assert len(dels) == 1, dels
+    target = dels[0].split()[1]
+    assert target.endswith("/media/archive") and "/current" not in dels[0] and "--min-age 30d" in dels[0]
+
+
+@needs_bash
+def test_backup_media_archive_rotation_is_configurable_and_skipped_in_dry_run(tmp_path):
+    data = tmp_path / "data"
+    make_data(data)
+    for n in ("a", "b", "c"):
+        (tmp_path / n).mkdir()
+    env, log = backup_env(tmp_path / "a", data, BACKUP_ARCHIVE_DAYS="45")
+    p = run_sh("backup_media.sh", env=env)
+    assert p.returncode == 0, p.stdout + p.stderr
+    assert "--min-age 45d" in log.read_text()
+    env, log = backup_env(tmp_path / "b", data)
+    p = run_sh("backup_media.sh", "--dry-run", env=env)
+    assert p.returncode == 0 and not any(c.startswith("delete ") for c in log.read_text().splitlines())
+    env, log = backup_env(tmp_path / "c", data, BACKUP_ARCHIVE_DAYS="30; rm -rf /")
+    p = run_sh("backup_media.sh", env=env)
+    assert p.returncode == 2 and (not log.exists() or not any(c.startswith("delete ") for c in log.read_text().splitlines()))
+
+
 @needs_bash
 def test_backup_media_never_deletes_without_versioning(tmp_path):
     data = tmp_path / "data"
@@ -21,7 +47,8 @@ def test_backup_media_never_deletes_without_versioning(tmp_path):
         assert "--backup-dir" in c and "/archive/" in c and "/current/" in c            # versiona o que seria sobrescrito/apagado
         assert c.split()[2].startswith("KBK:kiroo-backups/staging/media/current/")
     joined = " ".join(calls)
-    assert not re.search(r"\b(delete|deletefile|purge|cleanup|move|moveto)\b", joined) and "--delete-excluded" not in joined
+    assert not re.search(r"\b(deletefile|purge|cleanup|move|moveto)\b", joined) and "--delete-excluded" not in joined
+    only_archive_rotation(calls)
     assert any(c.startswith("copyto ") and "/manifests/" in c for c in calls)
     assert not any(c.startswith("rcat ") for c in calls)
     assert SECRET not in p.stdout + p.stderr and SECRET not in joined                    # segredo só no ambiente do rclone
@@ -89,7 +116,8 @@ def test_backup_media_manifest_501_fails_with_exit_1(tmp_path):
     assert "manifesto: NÃO GRAVADO" in p.stdout and "501" in p.stderr
     assert "FALHOU" in p.stderr and "manifesto(rc=1)" in p.stderr
     assert "já enviou 1 objeto" in p.stderr and "nada foi apagado" in p.stderr
-    assert not re.search(r"\b(delete|deletefile|purge)\b", log.read_text())
+    assert not re.search(r"(deletefile|purge)", log.read_text())
+    only_archive_rotation(log.read_text().splitlines())
     assert SECRET not in out
 
 

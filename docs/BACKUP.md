@@ -155,6 +155,31 @@ Remove-Item Env:BACKUP_R2_ENDPOINT, Env:BACKUP_R2_ACCESS_KEY_ID, Env:BACKUP_R2_S
 7. Tarefa agendada diária do `backup_media.sh` e regra de ciclo de vida de `archive/` (Fase 7).
 8. Calendário: repetir o restore antes do beta e todo mês.
 
+## 10. Retenção, exclusão e backups (compromisso dos textos legais)
+
+Os Termos e a Política prometem: mídia apagada com 60 dias (aviso 7 dias antes); exclusão de conta em até 30 dias; backups com rotação máxima de 30 dias; dado excluído não reaparece depois de uma restauração. O que sustenta cada promessa:
+
+| Promessa | Como o código/infra cumpre |
+|---|---|
+| Mídia com 60 dias | `python -m studio retention` (e o laço do servidor, a cada 6 h) com `STUDIO_RETENTION_ENABLED=true`. Antes de ligar, rode `python -m studio retention --dry-run` e confira. |
+| Aviso 7 dias antes | A mesma rotina envia um e-mail por dono (Resend) e marca `productions.retention_notice_at`; só apaga 7 dias depois do aviso e nunca produção em andamento. |
+| Exclusão de conta | `privacy.delete_account` apaga na hora (dados e arquivos), anonimiza pagamentos e grava a lápide. O registro de acesso fica 6 meses e some pela mesma rotina de retenção. |
+| Banco: rotação | `litestream.yml` mantém 168 h (7 dias). |
+| Mídia: rotação | `scripts/backup_media.sh` apaga de `archive/` o que tiver mais de `BACKUP_ARCHIVE_DAYS` dias (padrão **30**), só depois de um backup sem falha e nunca em `--dry-run`. Mídia apagada pela retenção sai de `current/` no sync seguinte e de `archive/` em até 30 dias. |
+| Não ressuscitar | Cada exclusão grava uma lápide no banco (`deletion_tombstones`) e num arquivo fora do banco (`STUDIO_DATA_DIR/deletions.jsonl`, só tipo e id). |
+
+### Depois de QUALQUER restauração
+
+```bash
+python -m studio restore reapply-deletions
+```
+
+Reaplica as exclusões de contas e de mídia (idempotente; nunca apaga administradores). Rode antes de reabrir o serviço. O `deletions.jsonl` (só tipo e id, sem dado pessoal) também vai para `media/current/` pelo `backup_media.sh`; `restore.sh` o traz de volta junto com a mídia. Se um volume novo nascer sem ele, a lista vem do banco restaurado, que pode não ter as exclusões mais recentes: nesse caso, reaplique também a partir do registro de pedidos de exclusão do suporte.
+
+### Migração 17 (aceites, acesso, retenção, lápides, encerramento)
+
+Cria `terms_acceptances` (append-only, com triggers), `access_log`, `deletion_tombstones`, `account_closures` e as colunas `productions.retention_notice_at`, `productions.media_purged_at`, `workspaces.closed_at`, `workspaces.suspended_at`. Importa os aceites que já estavam em `users.terms_*`. **Faça backup antes** (`litestream` em dia mais um `cp` do `studio.sqlite3` com o servidor parado); a migração roda sozinha no boot, numa transação, e não é reversível por código.
+
 ## Pendências e decisões
 
 - **Exportador de dados locais** (`scripts/export_local_data.py`): pronto e testado, **opcional**; a decisão de migrar os dados de hoje continua em aberto. Se migrar: `export` na origem (leitura), copiar à mão `data/productions/<id>/` das produções listadas, `import --dry-run` e depois `import` no destino. O bundle contém e-mails e hashes de senha.
