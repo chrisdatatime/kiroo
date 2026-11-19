@@ -43,7 +43,9 @@ Código: implementado em `src/studio/compliance.py` (`run_retention`: aviso 7 di
 | termos:172 | "Guardamos os arquivos por 60 dias e depois os apagamos, com aviso por e-mail antes" | **Não** (idem). |
 | privacidade:111, 171 e termos:114 | Registro de acesso (IP, data, navegador) "por 6 meses" | **Parcial.** O registro é gravado, mas só é apagado aos 6 meses pela mesma rotina (desligada); hoje ficaria guardado por mais tempo. |
 
-### (b) Contabilizei e CPF/CNPJ
+### (b) Contabilizei e CPF/CNPJ — AJUSTADO (texto público corrigido em 2026-11-18)
+
+**Ajuste feito:** a linha da Contabilizei saiu da tabela de fornecedores e os textos agora dizem só que o CPF/CNPJ, quando informado, é guardado para fins fiscais e de emissão de nota fiscal (a afirmação "Emitimos NFS-e…" também saiu de termos). Pendente para o contador/advogado: se a NFS-e é emitida e por quem, e se algum terceiro recebe o dado (hoje fora do sistema). As linhas da tabela abaixo são as de antes do ajuste (privacidade:137 não existe mais; as linhas seguintes subiram uma).
 
 Código: o CPF/CNPJ é validado e guardado em `users.tax_doc` (Minha conta) e entra no export da conta. **Não há nenhuma integração com a Contabilizei nem emissão de NFS-e no código**, e o CPF/CNPJ não é enviado à Stripe nem a ninguém. Se a NFS-e é emitida e se a Contabilizei recebe o dado, isso é processo manual fora do código, que não pude comprovar.
 
@@ -53,7 +55,9 @@ Código: o CPF/CNPJ é validado e guardado em `users.tax_doc` (Minha conta) e en
 | privacidade:110, 120 | "Emitir a nota fiscal (NFS-e)"; "constar como tomador na nota fiscal (NFS-e)… nunca o usamos para outra finalidade" | Emissão **não comprovada** (fora do código). A guarda e a finalidade única o código cumpre. |
 | termos:129 | "Emitimos NFS-e para as cobranças efetivamente realizadas." | **Não comprovado** (idem). |
 
-### (c) Transferência internacional e lista de fornecedores
+### (c) Transferência internacional e lista de fornecedores (Anthropic: ver nota)
+
+**Anthropic — decidido NÃO incluir na lista:** o chat usa o Gemini por padrão e só usa a Anthropic com `STUDIO_CHAT_PROVIDER=anthropic` mais `ANTHROPIC_API_KEY` e o pacote opcional `anthropic`; `docs/ENVS.md` manda não definir essa variável em produção. Não consegui ver o ambiente real de produção. **Se esse provedor for ligado, incluir a Anthropic (assistente de chat, mensagens do chat com o mínimo de contexto) em privacidade, seção 04, e reavaliar a seção 05.**
 
 Código: não há mecanismo de cláusulas-padrão nem registro de contratos; o texto já diz que a verificação documental não foi concluída.
 

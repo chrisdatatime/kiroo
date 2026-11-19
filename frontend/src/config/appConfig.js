@@ -46,7 +46,7 @@ export const PRICING_FAQ = [
   { q: 'De quem são os vídeos?', phone: false, a: ['Seus para usar comercialmente: vender, anunciar e divulgar seus produtos, respeitando direitos de terceiros. Como são gerados por IA, não garantimos exclusividade.'] },
   { q: 'Posso trocar de plano?', phone: false, a: ['Sim. Ao subir de plano, a diferença de créditos entra na hora. Ao descer, a mudança vale no próximo ciclo.'] },
   { q: 'Preciso de nota fiscal?', phone: false, show: false,   // [confirmar com a contabilidade]
-    a: ['Emitimos NFS-e para as cobranças efetivamente realizadas. Informar o CPF ou CNPJ em Minha conta é opcional.'] },
+    a: ['O CPF ou CNPJ é opcional. Quando você o informa em Minha conta, ele é guardado para fins fiscais e de emissão de nota fiscal.'] },
 ];
 
 // Recursos que ainda não têm backend: aparecem desabilitados com "em breve".
