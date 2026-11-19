@@ -13,22 +13,6 @@ from studio.web.server import LEGAL_ASSETS, LEGAL_PAGES, STATIC, App, terms_date
 
 BASE = {"Host": "127.0.0.1:8765"}
 SECTIONS = {"/termos": [f"s{i}" for i in range(1, 14)], "/privacidade": [f"p{i}" for i in range(1, 13)]}
-ADV = "REVISAR COM O ADVOGADO"
-PEND = "PENDENTE DE VERIFICAÇÃO DOCUMENTAL DOS FORNECEDORES"
-# Marcadores que ainda dependem de revisão jurídica ou documental, na ordem em que aparecem (renderizados como
-# <mark class="ph">, com os colchetes). Cada um vira pendência no relatório; nenhum texto afirma aprovação de advogado.
-PLACEHOLDERS = {
-    "/termos": ["CONFIRMAR COM A CONTABILIDADE",
-                f"{ADV} — regra comercial proposta: reembolso integral independentemente do consumo dos créditos; ainda sem revisão jurídica",
-                f"{ADV} — licença, titularidade e limites do conteúdo gerado por IA",
-                f"{ADV} — regras comerciais propostas de suspensão e encerramento (inclusive o ciclo de assinatura já pago e o saldo quando você mesmo encerra a conta); ainda sem revisão jurídica",
-                f"{ADV} — foro da sede e foro do consumidor"],
-    "/privacidade": [f"{ADV} — confirmar os prazos legais de guarda fiscal e contábil",
-                     f"{ADV} — prazo e base legal do registro antifraude",
-                     f"{PEND} — confirmar o país e a região de processamento de cada fornecedor e a política de uso de dados dos contratos",
-                     PEND, f"{ADV} — base legal da transferência internacional",
-                     f"{ADV} — prazos legais de guarda e regras de backup"],
-}
 PAGES = list(SECTIONS)
 
 
@@ -130,10 +114,10 @@ def test_no_external_or_inline_code(app, path):
 
 
 @pytest.mark.parametrize("path", PAGES)
-def test_placeholders_are_marked(app, path):
+def test_no_visible_review_markers(app, path):
     html, d = parse(app, path)
-    assert d.marks == [f"[[{p}]]" for p in PLACEHOLDERS[path]]
-    assert html.count("[[") == len(PLACEHOLDERS[path])          # nenhum "[[" fora de um <mark class="ph">
+    assert d.marks == []                                        # nenhum marcador de revisão visível ao público
+    assert "[[" not in html and "REVISAR" not in html
 
 
 @pytest.mark.parametrize("path", PAGES)
